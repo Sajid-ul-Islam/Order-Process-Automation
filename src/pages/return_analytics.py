@@ -1,5 +1,5 @@
 import streamlit as st
-from src.components.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
+from src.components.ui.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
 import pandas as pd
 
 def render_return_analytics_tab():
@@ -8,14 +8,17 @@ def render_return_analytics_tab():
     # We replace /pubhtml? with /pub?output=csv& for easy parsing by pandas
     sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ4j3i94IWVlVYI5gErxzfmmaYNiirGqnrncRKrDCbHvmLYpzH9l4_etjYmfCoDj_Gv-_mps2gnufXE/pub?output=csv&gid=0&single=true"
     
-    with st.spinner("Fetching return data from Google Sheets..."):
+    with st.status("📥 Fetching return data from Google Sheets...", expanded=True) as fetch_status:
         try:
             from src.utils.http import request_with_backoff
             import io
             
+            fetch_status.update(label="🔗 Connecting to Google Sheets...")
             r = request_with_backoff("GET", sheet_url, timeout=15)
             r.raise_for_status()
+            fetch_status.update(label="📄 Parsing returned data...")
             df = pd.read_csv(io.StringIO(r.text))
+            fetch_status.update(label=f"✅ {len(df)} return records loaded", state="complete")
             
             if "Date" in df.columns:
                 df["Parsed_Date"] = pd.to_datetime(df["Date"], errors="coerce")
@@ -104,15 +107,14 @@ def render_return_analytics_tab():
                             # Clean Order ID for matching
                             df_to_match["Order ID"] = pd.to_numeric(df_to_match["Order ID"], errors="coerce")
                             df_to_match = df_to_match.dropna(subset=["Order ID"])
-                            order_ids_to_fetch = df_to_match["Order ID"].astype(int).unique().tolist()
-                            
-                            with st.spinner("Fetching external data (this runs in the background)..."):
+                            order_ids_to_fetch = df_to_match["Order ID"].astype(int).unique().tolist()                            with st.status("🔗 Enriching return data...", expanded=True) as enrich_status:
                                 from src.services.woocommerce.client import fetch_specific_woocommerce_orders
                                 from src.services.pathao.status import get_pathao_order_status
-                                from concurrent.futures import ThreadPoolExecutor
+                                from concurrent.futures import ThreadPoolExecutor, as_completed
                                 
                                 try:
                                     # 1. Fetch WooCommerce Orders
+                                    enrich_status.update(label="📡 Fetching WooCommerce order details...")
                                     wc_orders = fetch_specific_woocommerce_orders(order_ids_to_fetch)
                                     wc_df = pd.DataFrame(wc_orders)
                                     
@@ -120,6 +122,7 @@ def render_return_analytics_tab():
                                     pathao_statuses = {}
                                     if enable_pathao and "Courier ID" in df_to_match.columns:
                                         courier_ids = df_to_match["Courier ID"].dropna().unique().tolist()
+                                        enrich_status.update(label=f"🔄 Fetching Pathao statuses for {len(courier_ids)} orders...")
                                         
                                         def fetch_p_status(cid):
                                             res = get_pathao_order_status(cid)
@@ -129,7 +132,7 @@ def render_return_analytics_tab():
                                         
                                         with ThreadPoolExecutor(max_workers=3) as executor:
                                             futures = [executor.submit(fetch_p_status, cid) for cid in courier_ids]
-                                            for future in futures:
+                                            for future in as_completed(futures):
                                                 cid, status = future.result()
                                                 pathao_statuses[cid] = status
                                                 
@@ -140,18 +143,20 @@ def render_return_analytics_tab():
                                         df_to_match["Live Pathao Status"] = "N/A (Skipped)" if not enable_pathao else "N/A"
                                     
                                     if not wc_df.empty and "Order Number" in wc_df.columns:
+                                        enrich_status.update(label="🔄 Merging return data with WooCommerce orders...")
                                         wc_df["Order Number_Num"] = pd.to_numeric(wc_df["Order Number"], errors="coerce")
                                         
                                         # Merge Return Data with WooCommerce Data
                                         merged_df = pd.merge(
-                                            df_to_match, 
-                                            wc_df, 
-                                            left_on="Order ID", 
-                                            right_on="Order Number_Num", 
+                                            df_to_match,
+                                            wc_df,
+                                            left_on="Order ID",
+                                            right_on="Order Number_Num",
                                             how="inner"
                                         )
                                         
                                         if merged_df.empty:
+                                            enrich_status.update(label="⚠️ No matching WooCommerce orders found", state="error")
                                             st.warning("No matching WooCommerce orders found for these returns.")
                                         else:
                                             # Select useful columns for overview
@@ -162,10 +167,13 @@ def render_return_analytics_tab():
                                             # Save to session state
                                             st.session_state["enriched_returns"] = merged_df[existing_cols].copy()
                                             st.session_state["full_enriched_returns"] = merged_df.copy()
+                                            enrich_status.update(label=f"✅ Enriched {len(merged_df)} return records", state="complete")
                                     else:
+                                        enrich_status.update(label="⚠️ WooCommerce returned no data", state="error")
                                         st.warning("WooCommerce failed to return data for these order IDs.")
                                         
                                 except Exception as match_err:
+                                    enrich_status.update(label="❌ Enrichment failed", state="error")
                                     st.error(f"Failed to load external data: {match_err}")
                     
                     # Display cached enriched data if it exists
@@ -383,5 +391,3 @@ def render_return_analytics_tab():
         except Exception as e:
             st.error(f"Failed to fetch or parse Return Analytics data from the provided URL. Error: {e}")
 
-
-    st.markdown('</div>', unsafe_allow_html=True)

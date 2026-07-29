@@ -1,12 +1,12 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from src.components.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
+from src.components.ui.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
 from datetime import datetime
 
 from src.state.persistence import clear_state_keys
-from src.components.dataframe_search import render_dataframe_search
-from src.components.widgets import render_action_bar, render_reset_confirm
+from src.components.ui.dataframe_search import render_dataframe_search
+from src.components.ui.widgets import render_action_bar, render_reset_confirm
 from src.processing.delivery_parser import parse_records, parse_data_fuzzy
 from src.utils.file_io import to_excel_bytes
 
@@ -211,16 +211,22 @@ POD"""
             if not fuzzy_raw_text.strip():
                 st.warning("Paste some text before parsing.")
             else:
-                with st.spinner("Processing text..."):
+                with st.status("🧩 Processing text...", expanded=True) as parse_status:
+                    parse_status.update(label="🔍 Trying standard parser...")
                     try:
                         parsed_df = parse_records(fuzzy_raw_text)
                     except Exception:
                         parsed_df = pd.DataFrame()
                     if parsed_df.empty:
+                        parse_status.update(label="🔄 Falling back to fuzzy parser...")
                         try:
                             parsed_df = parse_data_fuzzy(fuzzy_raw_text)
                         except Exception:
                             parsed_df = pd.DataFrame()
+                    else:
+                        parse_status.update(label="✅ Standard parsing succeeded", state="complete")
+                    if not parsed_df.empty:
+                        parse_status.update(label=f"✅ Parsed {len(parsed_df)} records", state="complete")
 
                 if parsed_df.empty:
                     st.error("No valid records found from fuzzy parser input.")

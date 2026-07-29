@@ -1,5 +1,5 @@
 import streamlit as st
-from src.components.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
+from src.components.ui.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
 import pandas as pd
 import asyncio
 import re
@@ -9,7 +9,7 @@ from datetime import datetime
 import plotly.express as px
 from typing import Dict, List
 
-from src.components.empty_state import render_empty_state
+from src.components.ui.empty_state import render_empty_state
 from src.config.constants import DATA_DIR
 from src.config.settings import load_secrets_schema
 # Add direct WooCommerce sync imports

@@ -6,16 +6,16 @@ import streamlit as st
 from datetime import datetime, timedelta, timezone
 
 from src.processing.data_processing import get_dispatch_metrics, generate_executive_briefing
-from src.pages.dashboard_charts import render_category_charts, render_spotlight
-from src.pages.dashboard_filters import render_ingestion_filters
-from src.pages.dashboard_metrics import render_operational_metrics
+from src.components.dashboard.dashboard_charts import render_category_charts, render_spotlight
+from src.components.dashboard.dashboard_filters import render_ingestion_filters
+from src.components.dashboard.dashboard_metrics import render_operational_metrics
 from src.services.woocommerce.client import get_items_sold_label
-from src.pages.excel_exporter import export_to_styled_excel
+from src.services.exports.excel_exporter import export_to_styled_excel
 from src.utils.metric_history import load_snapshot_history
 
 
 
-def _render_operational_cycle_metrics(m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping):
+def _render_operational_cycle_metrics(m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping, render_core_metrics=True):
     """Render operational cycle metrics section (Today/Prev/Backlog mode)."""
     if m_df is None:
         return None, None, None, {}, pd.DataFrame()
@@ -40,10 +40,21 @@ def _render_operational_cycle_metrics(m_df, c_df, nav_mode, dummy_mapping, wc_ra
         if c_df is not None and status_col_c:
             c_df = c_df[c_df[status_col_c].astype(str).str.lower() == "processing"]
 
-    st.subheader("Core Metrics")
-    drill, summ, top, basket, active_df = render_operational_metrics(
-        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping, forecast_val=0, avg_proc_time=0
-    )
+    if render_core_metrics:
+        st.subheader("Core Metrics")
+        drill, summ, top, basket, active_df = render_operational_metrics(
+            m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping, forecast_val=0, avg_proc_time=0
+        )
+    else:
+        # Still compute the values needed downstream without rendering the cards
+        from src.processing.data_processing import prepare_granular_data, aggregate_data
+        m_df_std, _ = prepare_granular_data(m_df, wc_raw_mapping)
+        if not m_df_std.empty:
+            drill, summ, top, basket = aggregate_data(m_df_std, dummy_mapping)
+            active_df = m_df_std
+        else:
+            drill, summ, top, basket, active_df = None, None, None, {}, pd.DataFrame()
+
     return drill, summ, top, basket, active_df
 
 
@@ -309,7 +320,7 @@ def _render_ai_briefing_section(is_operational, summ, top, active_df, today_rev,
         return
 
     with st.expander("📋 View/Copy Executive Briefing", expanded=False):
-        from src.components.clipboard import render_copy_button
+        from src.components.ui.clipboard import render_copy_button
         c1, c2, c3 = st.columns([2, 1, 1])
         with c1:
             st.markdown("##### 🤖 AI Executive Narrative")
@@ -442,7 +453,7 @@ def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, toda
             st.session_state["shift_handover_text"] = handover_text
 
         if st.session_state.get("shift_handover_text"):
-            from src.components.clipboard import render_copy_button
+            from src.components.ui.clipboard import render_copy_button
             render_copy_button(st.session_state["shift_handover_text"], label="📋 Copy Handover")
             st.code(st.session_state["shift_handover_text"], language="text")
 
@@ -541,9 +552,15 @@ def _render_export_buttons(excel_report_bytes, export_date_str, active_df):
 
 
 def render_dashboard_output(
-    drill, summ, top, timeframe, basket, source_name, last_updated="N/A", granular_df=None
+    drill, summ, top, timeframe, basket, source_name, last_updated="N/A", granular_df=None,
+    show_core_metrics=True
 ):
-    """Renders common dashboard widgets/charts/tables/export."""
+    """Renders common dashboard widgets/charts/tables/export.
+    
+    Args:
+        show_core_metrics: When False, skips the Core Metrics KPI card rendering
+            (useful when a separate @st.fragment handles auto-refresh of metrics).
+    """
 
     dummy_mapping = {"name":"Product Name", "cost":"Item Cost", "qty":"Quantity", "date":"Date", "order_id":"Order ID", "phone":"Phone", "sku":"SKU"}
     wc_raw_mapping = {"name":"Item Name", "cost":"Item Cost", "qty":"Quantity", "date":"Order Date", "order_id":"Order ID", "phone":"Phone (Billing)", "sku":"SKU"}
@@ -561,7 +578,7 @@ def render_dashboard_output(
             m_df = st.session_state.get("wc_prev_df")
             
         c_df = st.session_state.get("wc_prev_df" if nav_mode == "Today" else "wc_curr_df") if nav_mode != "Backlog" else None
-        drill, summ, top, basket, active_df = _render_operational_cycle_metrics(m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping)
+        drill, summ, top, basket, active_df = _render_operational_cycle_metrics(m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping, render_core_metrics=show_core_metrics)
     else:
         drill, summ, top, basket, active_df = _render_ingestion_mode_metrics(granular_df, dummy_mapping, last_updated)
 

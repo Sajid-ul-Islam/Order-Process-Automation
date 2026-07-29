@@ -37,7 +37,7 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     if shipped_df.empty:
         return shipped_df
 
-    # ── Operational slot boundaries (if available in session_state) ──
+    # ── Operational slot boundaries (for Today, Prev, or comparison slots) ──
     slot_key = "wc_curr_slot" if nav_mode == "Today" else "wc_prev_slot" if nav_mode == "Prev" else None
     if is_comparison:
         slot_key = "wc_prev_slot" if nav_mode == "Today" else "wc_curr_slot" if nav_mode == "Prev" else None
@@ -50,24 +50,10 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
             (shipped_df["mod_dt_parsed"] >= slot_start) &
             (shipped_df["mod_dt_parsed"] <= slot_end)
         ]
-        if not filtered.empty:
-            return filtered
-
-    # ── Active/Today (non-comparison): fallback to today's date in BD timezone ──
-    if nav_mode == "Today" and not is_comparison and "mod_dt_parsed" in shipped_df.columns:
-        from datetime import datetime as _dt, time as _time
-        tz_bd = timezone(timedelta(hours=6))
-        today_bd = _dt.now(tz_bd).date()
-        today_start = _dt.combine(today_bd, _time.min)
-        today_end = _dt.now(tz_bd).replace(tzinfo=None)
-        filtered = shipped_df[
-            (shipped_df["mod_dt_parsed"] >= today_start) &
-            (shipped_df["mod_dt_parsed"] <= today_end)
-        ]
-        if not filtered.empty:
-            return filtered
+        return filtered
 
     return shipped_df
+
 
 
 def process_data(df, selected_cols):

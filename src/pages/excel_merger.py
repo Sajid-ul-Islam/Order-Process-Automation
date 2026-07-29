@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 from datetime import datetime
-from src.pages.excel_exporter import export_to_styled_excel
+from src.services.exports.excel_exporter import export_to_styled_excel
 
 def render_excel_merger_tab():
     st.subheader("📑 Product Listing")
@@ -19,7 +19,7 @@ def render_excel_merger_tab():
     if source_mode == "WooCommerce Orders":
         c1, c2 = st.columns(2)
         with c1:
-            status_options = ["processing", "on-hold", "pending", "completed", "shipped", "confirmed"]
+            status_options = ["processing", "on-hold", "pending", "completed", "shipped", "confirmed", "cashbacked", "cashback"]
             selected_statuses = st.multiselect("Order Statuses", status_options, default=["processing", "on-hold"])
         with c2:
             st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)

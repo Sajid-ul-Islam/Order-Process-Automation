@@ -122,3 +122,24 @@ Comprehensive dead code sweep across the `src/` tree. All items below have been 
 | `BytesIO` import | `src/processing/delivery_parser.py` | Removed (only consumer was the deleted `df_to_excel_bytes`) |
 
 **Note:** The removed `df_to_excel_bytes` had delivery-specific Excel styling (freeze panes, column widths, number formatting) that the shared utility does not provide. This is a minor visual regression in the downloaded `.xlsx` files.
+
+---
+
+## Component Reorganization & Dead Code Audit — July 2026
+
+### Component Package Restructuring
+Reorganized monolithic `src/components/` and `src/pages/` directories into structured modular packages:
+- `src/components/layout/` (`header.py`, `footer.py`)
+- `src/components/ui/` (`clock.py`, `smart_filters.py`, `widgets.py`, `bike_animation.py`, `clipboard.py`, `empty_state.py`, `status.py`, `styles.py`, `ui_components.py`, `dataframe_search.py`, `calendar_slots.py`, `snapshot.py`)
+- `src/components/dashboard/` (`dashboard_metrics.py`, `dashboard_charts.py`, `dashboard_filters.py`, `dashboard_output.py`)
+- `src/services/exports/` (`excel_exporter.py`)
+
+### Removed Dead Files & Directories
+- `src/2026-06-13.csv`: Removed unreferenced temporary 411-byte CSV file inside `src/`.
+- `src/services/google/`: Removed orphaned directory containing only an empty `__init__.py`.
+- `scratch/*.py`: Removed 16 temporary debug scripts (`fetch_wc.py`, `fix_history.py`, `test_*.py`) created during previous debugging sessions.
+
+### Removed Dead Imports
+- `import plotly.express as px` in `src/components/dashboard/dashboard_output.py` (unused).
+- `from src.services.exports.excel_exporter import export_to_styled_excel` in `src/components/dashboard/dashboard_output.py` (unused).
+

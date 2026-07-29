@@ -1,11 +1,11 @@
 import io
 import pandas as pd
 import streamlit as st
-from src.components.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
+from src.components.ui.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
 
 from src.utils.logging import log_error
 from src.state.persistence import clear_state_keys, save_state
-from src.components.widgets import (
+from src.components.ui.widgets import (
     render_action_bar,
     render_reset_confirm,
 )
@@ -13,7 +13,7 @@ from src.config.ui_config import INVENTORY_LOCATIONS
 from src.config.constants import OFFER_KEYWORDS
 from src.inventory import core as inv_core
 from src.utils.file_io import read_uploaded
-from src.pages.excel_exporter import export_to_styled_excel
+from src.services.exports.excel_exporter import export_to_styled_excel
 from src.processing.stock_categorization import map_to_csv_category
 
 
@@ -51,11 +51,13 @@ def render_distribution_tab(search_q):
         if url_input and st.button("Fetch URL", use_container_width=True, type="secondary", key="dist_url_fetch"):
             try:
                 from src.utils.url_fetch import fetch_dataframe_from_url
-                with st.spinner("Fetching from URL..."):
+                with st.status("📡 Fetching from URL...", expanded=True) as url_status:
+                    url_status.update(label="📥 Downloading data from URL...")
                     df_res = fetch_dataframe_from_url(url_input)
                     st.session_state.inv_master_df_live = df_res
                     st.session_state.inv_auto_analyze = True
                     _clear_analysis_results()
+                    url_status.update(label="✅ URL data fetched", state="complete")
                     st.rerun()
             except Exception as e:
                 st.error(f"URL fetch failed: {e}")
@@ -117,8 +119,10 @@ def render_distribution_tab(search_q):
                 st.info("⚡ Instant Pull: Using Today's Active Shift data (Processing/On-Hold) from Dashboard.")
             else:
                 from src.services.woocommerce.client import load_live_source
-                with st.spinner("Connecting to WooCommerce API..."):
+                with st.status("🔌 Connecting to WooCommerce API...", expanded=True) as wc_status:
+                    wc_status.update(label="📡 Fetching live orders from WooCommerce...")
                     df_live, source_name, _ = load_live_source()
+                    wc_status.update(label="✅ WooCommerce data loaded", state="complete")
                     status_col = "Order Status" if "Order Status" in df_live.columns else "Status" if "Status" in df_live.columns else None
                     if status_col:
                         df_live = df_live[df_live[status_col].astype(str).str.lower().isin(["processing", "on-hold", "pending", "waiting"])]
@@ -167,8 +171,9 @@ def render_distribution_tab(search_q):
         st.write("Generate a consolidated report of current stock levels across all outlets.")
         
         if st.button("Generate Outlet Stock Report", use_container_width=True):
-            with st.spinner("Compiling stock data..."):
+            with st.status("📊 Compiling stock data...", expanded=True) as stock_status:
                 inv_map, warnings, _, sku_to_title_size = inv_core.load_inventory_from_uploads(loc_files)
+                stock_status.update(label="✅ Stock data compiled", state="complete")
                 if warnings:
                     for w in warnings:
                         st.sidebar.warning(w)
@@ -524,7 +529,7 @@ def render_distribution_tab(search_q):
                 for k, locs in inventory_map.items():
                     sim_inventory_map[k] = {loc: max(0, int(round(qty * (1 + (sim_supply_adj / 100.0))))) for loc, qty in locs.items()}
                     
-                with st.spinner("Simulating..."):
+                with st.status("🧪 Running simulation...", expanded=True) as sim_status:
                     df, _ = inv_core.add_stock_columns_from_inventory(
                         sim_master_df,
                         title_col,
@@ -534,6 +539,7 @@ def render_distribution_tab(search_q):
                         sku_map,
                         priority_locations=st.session_state.get("inv_priority_order"),
                     )
+                    sim_status.update(label="✅ Simulation complete", state="complete")
             else:
                 df = st.session_state.inv_res_data.copy()
         else:
@@ -722,9 +728,10 @@ def render_distribution_tab(search_q):
             selected_pathao_loc = st.selectbox("Filter Dispatch Location for Pathao", dispatch_loc_options)
             
             if st.button("Process for Pathao", use_container_width=True):
-                with st.spinner("Processing orders..."):
+                with st.status("📦 Processing orders for Pathao...", expanded=True) as pathao_status:
                     from src.processing.order_processor import process_orders_dataframe
                     try:
+                        pathao_status.update(label="🔍 Filtering dispatch data...")
                         if selected_pathao_loc == "All Fulfillable":
                             valid_dispatch_df = df[df["Dispatch Suggestion"] != "OOS / Unfulfillable"].copy()
                         else:
@@ -737,14 +744,17 @@ def render_distribution_tab(search_q):
                             valid_dispatch_df = valid_dispatch_df.rename(columns={det_cols["phone"]: "Phone (Billing)"})
                             
                         if valid_dispatch_df.empty:
+                            pathao_status.update(label="⚠️ No fulfillable items to process", state="error")
                             st.error("No fulfillable items to process.")
                         else:
+                            pathao_status.update(label="🔄 Generating Pathao bulk sheet...")
                             st.session_state.inv_pathao_df = process_orders_dataframe(valid_dispatch_df)
+                            pathao_status.update(label="✅ Pathao sheet ready", state="complete")
                             st.rerun()
                     except Exception as e:
                         from src.utils.logging import log_error
-
                         log_error(e, context="Inventory Pathao Processor")
+                        pathao_status.update(label="❌ Pathao processing failed", state="error")
                         st.error(f"Pathao processing failed: {e}")
         
         with c_pathao2:

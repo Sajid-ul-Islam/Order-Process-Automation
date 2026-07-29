@@ -240,9 +240,99 @@
           "revenue": 4144.0
         }
       ]
+    },
+    {
+      "ts": "2026-07-28T17:50:29.915070+06:00",
+      "label": "Today",
+      "revenue": 5156.0,
+      "orders": 2,
+      "qty": 5,
+      "aov": 2578.0,
+      "top_products": [
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 32",
+          "revenue": 2072.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 32",
+          "revenue": 1992.0
+        },
+        {
+          "name": "Full Sleeve Neon Stripe T-shirt - L",
+          "revenue": 364.0
+        },
+        {
+          "name": "Full Sleeve Trio-Tone T-shirt - L",
+          "revenue": 364.0
+        },
+        {
+          "name": "Full Sleeve Mustard StripeT-shirt - L",
+          "revenue": 364.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-07-28T17:52:16.037837+06:00",
+      "label": "Today",
+      "revenue": 5156.0,
+      "orders": 2,
+      "qty": 5,
+      "aov": 2578.0,
+      "top_products": [
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 32",
+          "revenue": 2072.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 32",
+          "revenue": 1992.0
+        },
+        {
+          "name": "Full Sleeve Mustard StripeT-shirt - L",
+          "revenue": 364.0
+        },
+        {
+          "name": "Full Sleeve Neon Stripe T-shirt - L",
+          "revenue": 364.0
+        },
+        {
+          "name": "Full Sleeve Trio-Tone T-shirt - L",
+          "revenue": 364.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-07-28T18:00:59.606741+06:00",
+      "label": "Today",
+      "revenue": 5156.0,
+      "orders": 2,
+      "qty": 5,
+      "aov": 2578.0,
+      "top_products": [
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 32",
+          "revenue": 2072.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 32",
+          "revenue": 1992.0
+        },
+        {
+          "name": "Full Sleeve Mustard StripeT-shirt - L",
+          "revenue": 364.0
+        },
+        {
+          "name": "Full Sleeve Neon Stripe T-shirt - L",
+          "revenue": 364.0
+        },
+        {
+          "name": "Full Sleeve Trio-Tone T-shirt - L",
+          "revenue": 364.0
+        }
+      ]
     }
   ],
-  "daily_revenue": 735299.0,
-  "daily_orders": 349,
-  "daily_qty": 612
+  "daily_revenue": 750767.0,
+  "daily_orders": 355,
+  "daily_qty": 627
 }

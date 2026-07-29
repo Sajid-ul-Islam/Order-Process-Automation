@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import re
-from src.pages.excel_exporter import export_to_styled_excel
+from src.services.exports.excel_exporter import export_to_styled_excel
 from requests.auth import HTTPBasicAuth
 
 from src.config.settings import get_woocommerce_config
@@ -41,7 +41,7 @@ def _update_wc_status(order_id, status):
         return False
 
 def _render_live_orders_view():
-    from src.components.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
+    from src.components.ui.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
     render_premium_header("Order Tracking & Logistics Terminal", "Live sync with WooCommerce and Pathao Courier", "🛒")
     
     from datetime import datetime
@@ -71,11 +71,15 @@ def _render_live_orders_view():
             st.session_state["wc_sync_start_time"] = time(0, 0, 0)
             st.session_state["wc_sync_end_time"] = time(23, 59, 59)
             
-            with st.spinner("Fetching orders from WooCommerce API..."):
+            with st.status("📡 Fetching from WooCommerce API...", expanded=True) as wc_status:
+                wc_status.write("🔄 Clearing cache...")
                 load_from_woocommerce.clear()
+                wc_status.write("📥 Downloading order pages...")
                 res = load_from_woocommerce()
+                wc_status.write("✅ Orders fetched successfully")
                 st.session_state["wc_tracking_df"] = res.get("df_to_return")
                 st.session_state["wc_pathao_statuses"] = {} # clear pathao cache for new orders
+                wc_status.update(label="WooCommerce sync complete", state="complete", expanded=False)
                 
     df = st.session_state.get("wc_tracking_df")
     if df is None or df.empty:
@@ -163,7 +167,7 @@ def _render_live_orders_view():
         with c_status:
             if status_col:
                 statuses = display_df[status_col].dropna().unique().tolist()
-                default_statuses = [s for s in statuses if str(s).lower() in ["processing", "shipped", "completed"]]
+                default_statuses = [s for s in statuses if str(s).lower() in ["processing", "shipped", "completed", "confirmed", "cashbacked", "cashback", "wc-cashbacked"]]
                 if not default_statuses:
                     default_statuses = statuses
                 status_filter = st.multiselect("Status:", statuses, default=default_statuses)
@@ -229,7 +233,7 @@ def _render_live_orders_view():
     completed = 0
     if status_col:
         processing = len(display_df[display_df[status_col].astype(str).str.lower().str.contains("processing")])
-        completed = len(display_df[display_df[status_col].astype(str).str.lower().str.contains("completed")])
+        completed = len(display_df[display_df[status_col].astype(str).str.lower().str.contains("completed|shipped|confirmed|cashbacked|cashback")])
         
     metrics_html = (
         '<div class="metric-container">'
@@ -320,7 +324,7 @@ def _render_live_orders_view():
                     
                     if not delivered_df.empty:
                         avg_transit = delivered_df["Transit Days"].mean()
-                        from src.components.ui_components import render_metric_grid
+                        from src.components.ui.ui_components import render_metric_grid
                         render_metric_grid([{"label": "Average Transit Time", "value": f"{avg_transit:.1f} Days", "icon": "🚚"}])
 
                         transit_counts = delivered_df["Transit Days"].value_counts().reset_index()
@@ -361,7 +365,7 @@ def _render_live_orders_view():
     if status_col and status_col in display_df.columns:
         def add_wc_emoji(status):
             s = str(status).lower()
-            if any(x in s for x in ['completed', 'shipped', 'confirmed']): return f"🟢 {status}"
+            if any(x in s for x in ['completed', 'shipped', 'confirmed', 'cashbacked', 'cashback']): return f"🟢 {status}"
             if 'processing' in s: return f"🔵 {status}"
             if any(x in s for x in ['on-hold', 'pending', 'waiting']): return f"🟡 {status}"
             if any(x in s for x in ['cancel', 'fail', 'refund', 'trash']): return f"🔴 {status}"

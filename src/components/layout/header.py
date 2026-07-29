@@ -4,7 +4,7 @@ import streamlit as st
 
 
 from datetime import datetime, timedelta
-from src.components.clock import get_clock_html
+from src.components.ui.clock import get_clock_html
 
 
 def render_header(right_slot_callback=None):

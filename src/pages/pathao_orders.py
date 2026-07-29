@@ -6,12 +6,12 @@ from requests.auth import HTTPBasicAuth
 
 import pandas as pd
 import streamlit as st
-from src.components.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
+from src.components.ui.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
 import plotly.express as px
 
-from src.components.dataframe_search import render_dataframe_search
-from src.components.status import render_status_toggle
-from src.components.widgets import (
+from src.components.ui.dataframe_search import render_dataframe_search
+from src.components.ui.status import render_status_toggle
+from src.components.ui.widgets import (
     render_action_bar,
     render_file_summary,
     render_reset_confirm,
@@ -28,7 +28,7 @@ from src.services.pathao.client import PathaoClient
 from src.state.persistence import clear_state_keys, save_state
 from src.utils.file_io import read_uploaded
 from src.utils.http import request_with_backoff
-from src.pages.excel_exporter import export_to_styled_excel
+from src.services.exports.excel_exporter import export_to_styled_excel
 from src.utils.logging import log_error
 
 REQUIRED_COLUMNS = ["Phone (Billing)"]
@@ -438,7 +438,7 @@ def _render_item_description_tab():
             st.dataframe(display_df, use_container_width=True, hide_index=True)
 
     if manual_desc:
-        from src.components.clipboard import render_copy_button
+        from src.components.ui.clipboard import render_copy_button
 
         c1, c2 = st.columns([4, 1])
         with c1:

@@ -14,9 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = PROJECT_ROOT / "requirements.lock"
 EXCLUDED_PACKAGES = ("pip==", "setuptools==", "wheel==")
 RUNTIME_REQUIREMENTS = [
-    "requirements/base.txt",
-    "requirements/integrations.txt",
-    "requirements/ai.txt",
+    "requirements.txt",
 ]
 
 

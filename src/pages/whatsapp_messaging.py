@@ -1,11 +1,11 @@
 import pandas as pd
 import streamlit as st
-from src.components.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
+from src.components.ui.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
 
 from src.utils.logging import log_error
 from src.state.persistence import clear_state_keys
-from src.components.dataframe_search import render_dataframe_search
-from src.components.widgets import (
+from src.components.ui.dataframe_search import render_dataframe_search
+from src.components.ui.widgets import (
     render_action_bar,
     render_file_summary,
     render_reset_confirm,
@@ -71,10 +71,12 @@ def render_wp_tab():
         if url_input and st.button("Fetch URL", use_container_width=True, type="secondary", key="wp_url_fetch"):
             try:
                 from src.utils.url_fetch import fetch_dataframe_from_url
-                with st.spinner("Fetching from URL..."):
+                with st.status("📡 Fetching from URL...", expanded=True) as url_status:
+                    url_status.update(label="📥 Downloading data from URL...")
                     df_res = fetch_dataframe_from_url(url_input)
                     st.session_state.wp_preview_df = df_res
                     st.session_state.wp_auto_generate = True
+                    url_status.update(label="✅ URL data fetched", state="complete")
                     st.rerun()
             except Exception as e:
                 st.error(f"URL fetch failed: {e}")
@@ -91,8 +93,10 @@ def render_wp_tab():
                 st.info("⚡ Instant Pull: Using Today's Active Shift data from Dashboard.")
             else:
                 from src.services.woocommerce.client import load_live_source
-                with st.spinner("Connecting to WooCommerce API..."):
+                with st.status("🔌 Connecting to WooCommerce API...", expanded=True) as wc_status:
+                    wc_status.update(label="📡 Fetching live orders from WooCommerce...")
                     df_live, source_name, _ = load_live_source()
+                    wc_status.update(label="✅ WooCommerce data loaded", state="complete")
 
             preview_df = df_live
             st.session_state.wp_preview_df = preview_df

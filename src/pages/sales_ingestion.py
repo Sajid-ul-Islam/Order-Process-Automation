@@ -1,16 +1,16 @@
 import streamlit as st
-from src.components.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
+from src.components.ui.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
 from io import BytesIO
 
 from src.config.constants import SHIPPED_STATUSES
-from src.components.dataframe_search import render_dataframe_search
-from src.components.widgets import render_action_bar, render_reset_confirm, section_card
+from src.components.ui.dataframe_search import render_dataframe_search
+from src.components.ui.widgets import render_action_bar, render_reset_confirm, section_card
 from src.processing.column_detection import find_columns
 from src.processing.data_processing import prepare_granular_data, aggregate_data
-from src.pages.dashboard_output import render_dashboard_output
+from src.components.dashboard.dashboard_output import render_dashboard_output
 from src.services.woocommerce.client import load_from_woocommerce
 from src.utils.file_io import read_sales_file
 from src.utils.logging import log_system_event
@@ -174,7 +174,8 @@ def render_manual_tab():
             st.info("💡 Data source recognized. Column mapping will be handled automatically.")
             generate_clicked, _ = render_action_bar("Generate Dashboard", "auto_generate")
             if generate_clicked:
-                with st.spinner("Processing data..."):
+                with st.status("🔄 Processing data...", expanded=True) as proc_status:
+                    proc_status.update(label="📊 Standardizing column mapping...")
                     # v11.4 Fix: WooCommerce fetch produces 'Order Date', ensure mapping aligns
                     final_mapping = {
                         "name": "Item Name",
@@ -187,9 +188,13 @@ def render_manual_tab():
                     }
                     df_standard, timeframe = prepare_granular_data(df, final_mapping)
                     if not df_standard.empty:
+                        proc_status.update(label="📈 Aggregating sales data...")
                         drill, summ, top, basket = aggregate_data(df_standard, final_mapping)
+                        proc_status.update(label="✅ Data processed, rendering dashboard...", state="complete")
                         # v10.9 Fix: Pass df_standard as granular_df to enable filters and rendering
                         render_dashboard_output(drill, summ, top, str(timeframe) if timeframe is not None else None, basket, str(source_name) if source_name is not None else None, granular_df=df_standard)
+                    else:
+                        proc_status.update(label="⚠️ No data after processing", state="error")
             return
 
         st.caption(f"Active Data Source: {source_name}")
@@ -270,10 +275,13 @@ def render_manual_tab():
 
         generate_clicked, _ = render_action_bar("Generate dashboard", "manual_generate")
         if generate_clicked:
-            with st.spinner("Processing data..."):
+            with st.status("🔄 Processing data...", expanded=True) as proc_status:
+                proc_status.update(label="📊 Standardizing column mapping...")
                 df_standard, timeframe = prepare_granular_data(df, final_mapping)
                 if not df_standard.empty:
+                    proc_status.update(label="📈 Aggregating sales data...")
                     drill, summ, top, basket = aggregate_data(df_standard, final_mapping)
+                    proc_status.update(label="✅ Data processed, rendering dashboard...", state="complete")
                     manual_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     render_dashboard_output(
                         drill,
@@ -285,6 +293,8 @@ def render_manual_tab():
                         manual_updated,
                         granular_df=df_standard
                     )
+                else:
+                    proc_status.update(label="⚠️ No data after processing", state="error")
 
 
     except Exception as e:

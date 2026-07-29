@@ -31,6 +31,10 @@ def _flatten_order(order: dict) -> list[dict]:
             ptc_consignment_id = meta.get("value", "")
             break
 
+    if ptc_consignment_id and str(ptc_consignment_id).strip():
+        status = "shipped"
+
+
     return [
         {
             "Order ID": oid,
@@ -45,7 +49,13 @@ def _flatten_order(order: dict) -> list[dict]:
             "State Name (Billing)": bill.get("state", ""),
             "Item Name": item.get("name"),
             "SKU": item.get("sku", ""),
-            "Item Cost": item.get("price"),
+            # Use line item total / qty to get effective unit price AFTER all discounts/cashback
+            # This fixes revenue being overstated when discounts or cashback are applied
+            "Item Cost": (
+                float(item.get("total", 0)) / float(item.get("quantity", 1))
+                if item.get("quantity") is not None and float(str(item.get("quantity", "0")).replace(",", "")) > 0
+                else item.get("price")
+            ),
             "Quantity": item.get("quantity"),
             "Order Total Amount": order.get("total"),
             "Payment Method Title": pmt,
@@ -76,8 +86,9 @@ def _fetch_wc_page(url: str, params: dict, auth: HTTPBasicAuth, page: int):
 
 def _fetch_wc_batch(url: str, params: dict, auth: HTTPBasicAuth) -> list:
     """Fetch all pages of WooCommerce orders concurrently and return flattened rows."""
-    fields = "id,number,date_created,date_modified,status,billing,shipping,payment_method_title,line_items,total"
+    fields = "id,number,date_created,date_modified,status,billing,shipping,payment_method_title,line_items,total,meta_data"
     params["_fields"] = fields
+
 
     try:
         rows, total_pages = _fetch_wc_page(url, params, auth, page=1)
@@ -116,7 +127,7 @@ def get_woocommerce_shipped_orders_count(after_iso: str, before_iso: str) -> int
         "per_page": 1,
         "after": after_iso,
         "before": before_iso,
-        "status": "shipped,completed",
+        "status": "shipped,completed,confirmed",
         "_fields": "id"
     }
     
@@ -134,17 +145,17 @@ def get_woocommerce_shipped_orders_count(after_iso: str, before_iso: str) -> int
 
 
 def _get_operational_sync_params() -> dict:
-    """Build API params for the Operational Cycle sync mode (5-day rolling window)."""
+    """Build API params for the Operational Cycle sync mode (3-day rolling window)."""
     tz_bd = timezone(timedelta(hours=6))
     now_bd = datetime.now(tz_bd)
     shift_h = st.session_state.get("shift_cutoff_hour", 18)
     shift_m = st.session_state.get("shift_cutoff_minute", 0)
-    anchor = now_bd.replace(hour=shift_h, minute=shift_m, second=0, microsecond=0) - timedelta(days=5)
+    anchor = now_bd.replace(hour=shift_h, minute=shift_m, second=0, microsecond=0) - timedelta(days=3)
 
     return {
         "per_page": 100,
-        "after": anchor.isoformat(),
-        "before": now_bd.replace(hour=23, minute=59, second=59).isoformat(),
+        "after": anchor.strftime("%Y-%m-%dT%H:%M:%S"),
+        "before": now_bd.replace(hour=23, minute=59, second=59, microsecond=0).strftime("%Y-%m-%dT%H:%M:%S"),
         "status": "processing,completed,shipped,on-hold,pending,waiting,confirmed",
         "orderby": "date",
         "order": "desc",
@@ -152,22 +163,25 @@ def _get_operational_sync_params() -> dict:
 
 
 def _get_today_modified_shipped_params() -> dict:
-    """Build API params to fetch orders modified today (any creation date) with shipped status.
+    """Build API params to fetch orders modified during today's operational shift with shipped status.
 
-    This catches old orders (placed before the 5-day window) that were shipped today.
+    This catches old orders (placed before the 3-day window) that were shipped in current shift.
     WooCommerce supports `modified_after` to filter by date_modified regardless of order date.
+    Note: Subtract 6 hours from prev_cutoff (BD Time UTC+6) so WooCommerce API receives UTC ISO time.
     """
     tz_bd = timezone(timedelta(hours=6))
-    today_bd = datetime.now(tz_bd).date()
-    # Midnight BD today as ISO — naive datetime, WC interprets as site timezone
-    today_start_iso = f"{today_bd}T00:00:00"
+    _, prev_cutoff, _, _ = _compute_cutoff_times(tz_bd)
+    prev_cutoff_utc = prev_cutoff - timedelta(hours=6)
     return {
         "per_page": 100,
-        "modified_after": today_start_iso,
-        "status": "shipped,completed,confirmed",
+        "modified_after": prev_cutoff_utc.strftime("%Y-%m-%dT%H:%M:%S"),
+        "status": "shipped",
         "orderby": "modified",
         "order": "desc",
     }
+
+
+
 
 
 
@@ -202,15 +216,32 @@ def _get_custom_range_params() -> dict:
 
 
 def _merge_deduplicated_orders(main_rows: list, extra_rows: list) -> list:
-    """Merge two order lists, deduplicating by (Order ID, Item Name)."""
-    seen = set()
-    merged = []
+    """Merge two order lists, deduplicating by (Order ID, Item Name), preferring shipped status and latest date_modified."""
+    order_map = {}
     for r in main_rows + extra_rows:
         key = (r["Order ID"], r["Item Name"])
-        if key not in seen:
-            seen.add(key)
-            merged.append(r)
-    return merged
+        if key not in order_map:
+            order_map[key] = r
+        else:
+            existing = order_map[key]
+            new_st = str(r.get("Order Status")).lower()
+            old_st = str(existing.get("Order Status")).lower()
+            
+            new_is_sh = new_st in SHIPPED_STATUSES
+            old_is_sh = old_st in SHIPPED_STATUSES
+            
+            new_ptc = str(r.get("Pathao Consignment ID", "")).strip()
+            old_ptc = str(existing.get("Pathao Consignment ID", "")).strip()
+
+            new_mod = str(r.get("Order Date Modified", ""))
+            old_mod = str(existing.get("Order Date Modified", ""))
+
+            # Prefer shipped status over non-shipped status, or non-empty consignment ID, or later date_modified
+            if (new_is_sh and not old_is_sh) or (new_ptc and not old_ptc) or (new_is_sh == old_is_sh and new_mod >= old_mod):
+                order_map[key] = r
+
+    return list(order_map.values())
+
 
 
 # ── Operational partitioning ─────────────────────────────────────────────────
@@ -242,7 +273,7 @@ def _compute_cutoff_times(tz_bd):
     if st.session_state.get("override_merge_previous") or (_is_holiday(day_ending_prev) and not st.session_state.get("override_24h_previous")):
         day_before_prev = prev_cutoff - timedelta(days=2)
 
-    shipped_limit = cutoff_today
+    shipped_limit = max(cutoff_today, ref_now + timedelta(hours=12))
     return cutoff_today, prev_cutoff, day_before_prev, shipped_limit
 
 
@@ -268,7 +299,7 @@ def _apply_shipped_history(df_full):
             pass
 
     history_updated = False
-    is_shipped_mask = df_full["Order Status"].isin(SHIPPED_STATUSES)
+    is_shipped_mask = df_full["Order Status"].astype(str).str.lower().isin(SHIPPED_STATUSES)
     
     for idx, row in df_full[is_shipped_mask].iterrows():
         oid = str(row["Order ID"])
@@ -305,15 +336,21 @@ def _partition_operational_data(df_full):
     tz_bd = timezone(timedelta(hours=6))
     cutoff_today, prev_cutoff, day_before_prev, shipped_limit = _compute_cutoff_times(tz_bd)
 
-    is_shipped = df_full["Order Status"].isin(SHIPPED_STATUSES)
-    is_confirmed = df_full["Order Status"] == "confirmed"
-    is_processing = df_full["Order Status"] == "processing"
-    is_hold = df_full["Order Status"] == "on-hold"
-    is_waiting = df_full["Order Status"].isin(["pending", "waiting"])
+    is_shipped = df_full["Order Status"].astype(str).str.lower().isin(SHIPPED_STATUSES)
+    is_confirmed = df_full["Order Status"].astype(str).str.lower() == "confirmed"
+    is_processing = df_full["Order Status"].astype(str).str.lower() == "processing"
+    is_hold = df_full["Order Status"].astype(str).str.lower() == "on-hold"
+    is_waiting = df_full["Order Status"].astype(str).str.lower().isin(["pending", "waiting"])
+
+    shipped_recent = is_shipped & (
+        df_full["mod_dt_parsed"].isna()
+        | (df_full["mod_dt_parsed"] >= prev_cutoff)
+        | (df_full["dt_parsed"] >= prev_cutoff)
+    )
 
     df_live = df_full[
-        ((~is_shipped) & (df_full["dt_parsed"] >= prev_cutoff) & (df_full["dt_parsed"] <= shipped_limit))
-        | (is_shipped & (df_full["mod_dt_parsed"] >= prev_cutoff) & (df_full["mod_dt_parsed"] <= shipped_limit))
+        ((~is_shipped) & (df_full["dt_parsed"] >= prev_cutoff))
+        | shipped_recent
         | is_confirmed | is_processing
     ].copy()
 
@@ -326,12 +363,15 @@ def _partition_operational_data(df_full):
     df_backlog = df_full[is_hold | is_waiting].copy()
 
     now_bd = datetime.now(tz_bd)
-    slot_label = "Backlog" if 0 <= now_bd.hour < 6 else "Today"
+    slot_label = "Today"
+
+    # Today's slot extends until 6 AM next morning
+    next_day_6am = (now_bd.replace(hour=6, minute=0, second=0, microsecond=0) + timedelta(days=1)) if now_bd.hour >= 6 else now_bd.replace(hour=6, minute=0, second=0, microsecond=0)
 
     slot_boundaries = {
-        "wc_curr_slot": (prev_cutoff, cutoff_today),
+        "wc_curr_slot": (prev_cutoff, next_day_6am.replace(tzinfo=None)),
         "wc_prev_slot": (day_before_prev, prev_cutoff),
-        "wc_backlog_slot": (cutoff_today, cutoff_today + timedelta(days=1)),
+        "wc_backlog_slot": (next_day_6am.replace(tzinfo=None), next_day_6am.replace(tzinfo=None) + timedelta(days=1)),
     }
 
     return df_live, df_prev, df_backlog, slot_label, slot_boundaries
@@ -351,7 +391,7 @@ def _build_result_payload(df_to_return, slot_label, modified_at, partitions, slo
 # ── Main public functions ────────────────────────────────────────────────────
 
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(show_spinner=False)
 def load_from_woocommerce():
     """Loads live data from WooCommerce REST API orders."""
     wc_info = get_woocommerce_config(required=False)
@@ -373,12 +413,19 @@ def load_from_woocommerce():
 
         if sync_mode == "Operational Cycle":
             params = _get_operational_sync_params()
-            rows = _fetch_wc_batch(endpoint, params, auth)
             global_params = _get_global_open_params()
-            global_rows = _fetch_wc_batch(endpoint, global_params, auth)
-            # ── Supplemental: old orders shipped today (outside the 5-day window) ──
             today_shipped_params = _get_today_modified_shipped_params()
-            today_shipped_rows = _fetch_wc_batch(endpoint, today_shipped_params, auth)
+
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                f_op = executor.submit(_fetch_wc_batch, endpoint, params, auth)
+                f_global = executor.submit(_fetch_wc_batch, endpoint, global_params, auth)
+                f_shipped = executor.submit(_fetch_wc_batch, endpoint, today_shipped_params, auth)
+
+                rows = f_op.result()
+                global_rows = f_global.result()
+                today_shipped_rows = f_shipped.result()
+
             rows = _merge_deduplicated_orders(rows, global_rows)
             rows = _merge_deduplicated_orders(rows, today_shipped_rows)
         else:
@@ -448,7 +495,8 @@ def fetch_specific_woocommerce_orders(order_ids: list):
 
         def _fetch_batch(batch_ids):
             include_str = ",".join(map(str, batch_ids))
-            params = {"include": include_str, "_fields": "id,number,date_created,date_modified,status,billing,shipping,payment_method_title,line_items,total", "per_page": 100}
+            params = {"include": include_str, "_fields": "id,number,date_created,date_modified,status,billing,shipping,payment_method_title,line_items,total,meta_data", "per_page": 100}
+
             res = request_with_backoff("GET", endpoint, params=params, auth=auth, timeout=15)
             if res.status_code != 200:
                 return []
@@ -470,9 +518,24 @@ def fetch_specific_woocommerce_orders(order_ids: list):
     return all_processed
 
 
-def load_live_source():
+def _should_autorefresh() -> bool:
+    """Check if the refresh interval has elapsed since last sync."""
+    interval = st.session_state.get("wc_refresh_interval", 60)
+    if interval <= 0:
+        return False  # Manual mode
+    last_sync = st.session_state.get("live_sync_time")
+    if last_sync is None:
+        return True
+    elapsed = (datetime.now() - last_sync).total_seconds()
+    return elapsed >= interval
+
+
+def load_live_source(force_refresh=False):
     """Stateless fetch with stateful session update."""
+    if force_refresh or _should_autorefresh():
+        load_from_woocommerce.clear()
     results = load_from_woocommerce()
+
     if results and isinstance(results, dict):
         # 1. Update Partitioned State
         partitions = results.get("partitions", {})

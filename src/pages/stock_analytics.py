@@ -1,5 +1,5 @@
 import streamlit as st
-from src.components.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
+from src.components.ui.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
@@ -11,7 +11,7 @@ import io
 from src.inventory import core as inv_core
 from src.processing.categorization import get_category_for_sales, get_sub_category_for_sales
 from src.processing.stock_categorization import map_to_csv_category
-from src.pages.excel_exporter import export_to_styled_excel
+from src.services.exports.excel_exporter import export_to_styled_excel
 from src.services.woocommerce.stock import fetch_woocommerce_stock
 from src.utils.product import get_base_product_name, get_size_from_name
 from src.utils.snapshots import load_stock_snapshot
@@ -763,5 +763,3 @@ def render_stock_analytics_tab():
 
     with tab_outlet:
         render_outlet_stock_analysis_tab()
-        
-    st.markdown('</div>', unsafe_allow_html=True)

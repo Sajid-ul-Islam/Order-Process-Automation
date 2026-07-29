@@ -1,0 +1,424 @@
+"""Application bootstrap module — extracted from app.py for maintainability.
+
+Handles authentication, sidebar rendering, navigation routing,
+log rotation, and tool registration.
+"""
+
+from __future__ import annotations
+
+import os
+from datetime import datetime
+
+import streamlit as st
+
+from src.config.constants import ERROR_LOG_FILE
+from src.config.settings import (
+    is_auth_configured as auth_is_configured,
+    validate_runtime_configuration,
+)
+from src.config.ui_config import PRIMARY_NAV, CLOUD_APP_URL
+from src.state.persistence import init_state, save_state, STATE_FILE
+from src.utils.logging import get_logs
+from src.utils.safe_ops import safe_render
+
+# ── Log rotation helper (non-critical, fails silently) ──────────────────────
+
+
+def _rotate_error_logs() -> None:
+    """Auto-truncate error_logs.json if it exceeds 1MB."""
+    try:
+        import json
+
+        LOG_MAX_SIZE_BYTES = 1 * 1024 * 1024  # 1 MB
+        LOGS_TO_KEEP = 200
+
+        if os.path.exists(ERROR_LOG_FILE) and os.path.getsize(ERROR_LOG_FILE) > LOG_MAX_SIZE_BYTES:
+            with open(ERROR_LOG_FILE, "r+", encoding="utf-8") as f:
+                logs = json.load(f)
+                if len(logs) > LOGS_TO_KEEP:
+                    truncated_logs = logs[-LOGS_TO_KEEP:]
+                    rotation_log_entry = {
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "context": "LOG_ROTATION",
+                        "error": f"Log file exceeded {LOG_MAX_SIZE_BYTES / 1024 / 1024:.1f}MB; truncated to last {LOGS_TO_KEEP} entries.",
+                    }
+                    final_logs = truncated_logs + [rotation_log_entry]
+                    f.seek(0)
+                    json.dump(final_logs, f, indent=4)
+                    f.truncate()
+    except Exception:
+        pass  # Non-critical maintenance task, fail silently.
+
+
+# ── Authentication guard ────────────────────────────────────────────────────
+
+
+def _render_auth_gate() -> None:
+    """Show the Google login screen when auth is enabled but user is not logged in."""
+    from src.components.ui.styles import inject_base_styles
+
+    inject_base_styles()
+    st.markdown("<div style='margin-top:100px;'></div>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image("assets/deen_logo.jpg", width=120)
+        st.title("\U0001f6e1\ufe0f DEEN OPS Terminal")
+        st.markdown("### Secure Operational Access")
+        st.info("Identity verification required for Business Intelligence access.")
+        if st.button("Log in with Google", use_container_width=True, type="primary"):
+            st.login()
+    st.stop()
+
+
+# ── Navigation helpers ──────────────────────────────────────────────────────
+
+
+def _format_nav_item(item: str) -> str:
+    """Map a nav key to a Material-icon-labelled display string."""
+    nav_icons = {
+        "\U0001f4c8 Live Dashboard": ":material/dashboard: Live Dashboard",
+        "\U0001f4e6 Pathao Processor": ":material/local_shipping: Pathao Processor",
+        "\U0001f4e6 Bulk Order Processor": ":material/local_shipping: Pathao Processor",
+        "\U0001f4ac WhatsApp Messaging": ":material/chat: WhatsApp Messaging",
+        "\U0001f4ca Inventory Distribution": ":material/inventory_2: Inventory Distribution",
+        "\U0001f4e6 Current Stock Analytics": ":material/analytics: Stock Analytics",
+        "\U0001f9e9 Delivery Data Parser": ":material/data_object: Delivery Parser",
+        "\U0001f4e5 Sales Data Ingestion": ":material/cloud_download: Sales Ingestion",
+        "\U0001f4c9 Return Analytics": ":material/keyboard_return: Return Analytics",
+        "\U0001f680 Data Pilot": ":material/smart_toy: Data Pilot",
+        "\U0001f6d2 Order tracking": ":material/shopping_cart: Order Tracking",
+    }
+    return nav_icons.get(item, item)
+
+
+def _render_nav_pills(nav_items: list[str], default: str) -> str:
+    """Render sidebar navigation pills (or radio fallback)."""
+    if hasattr(st, "pills"):
+        selected = st.sidebar.pills(
+            "Select Workspace",
+            options=nav_items,
+            default=default,
+            selection_mode="single",
+            format_func=_format_nav_item,
+            label_visibility="collapsed",
+        )
+        return selected or default
+    return st.sidebar.radio(
+        "Select Workspace",
+        nav_items,
+        label_visibility="collapsed",
+        format_func=_format_nav_item,
+        index=nav_items.index(default),
+    )
+
+
+# ── Sidebar sections ────────────────────────────────────────────────────────
+
+
+def _render_sidebar_branding() -> None:
+    """Render the DEEN-OPS logo, title, and version badge in the sidebar."""
+    st.markdown(
+        """
+        <div class="sidebar-logo-container">
+            <div style="font-size: 28px; line-height: 1; filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.5));">\U0001f6e1\ufe0f</div>
+            <div style="flex: 1; min-width: 0;">
+                <div class="sidebar-logo-text">DEEN-OPS</div>
+                <div class="sidebar-logo-sub">Command Terminal</div>
+                <div class="sidebar-version-badge">v10.0</div>
+            </div>
+            <div class="sidebar-status-dot" title="System Online"></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_sidebar_user_context(is_auth_on: bool) -> None:
+    """Show the logged-in user expander when auth is enabled."""
+    if is_auth_on and st.user.is_logged_in:
+        with st.sidebar.expander(f"\U0001f464 {st.user.name}", expanded=False):
+            st.caption(f"\U0001f4e7 {st.user.email}")
+            if st.button("Logout", use_container_width=True, type="secondary"):
+                st.logout()
+        st.divider()
+
+
+def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> None:
+    """Render the Maintenance & Settings expander in the sidebar."""
+    with st.sidebar.expander(":material/build: Maintenance & Settings", expanded=False):
+        st.caption("Configuration Health")
+        if config_issues:
+            st.warning("Some integrations are partially configured.")
+            for issue in config_issues:
+                st.caption(f"- {issue}")
+            st.caption("Schema reference: src/config/secrets_schema.json")
+        else:
+            st.success("Configuration validation passed.")
+
+        st.divider()
+        st.session_state.show_animation = st.toggle(
+            "Show motion effects",
+            value=st.session_state.get("show_animation", True),
+        )
+
+        # ── Auto-refresh interval ──────────────────────────────────────────
+        st.caption("Data Sync")
+        refresh_opts = {
+            "15s": 15, "30s": 30, "60s": 60,
+            "2m": 120, "5m": 300, "Manual": 0,
+        }
+        current_val = st.session_state.get("wc_refresh_interval", 60)
+        current_label = next((k for k, v in refresh_opts.items() if v == current_val), "60s")
+        chosen_label = st.selectbox(
+            "Auto-refresh interval",
+            options=list(refresh_opts.keys()),
+            index=list(refresh_opts.keys()).index(current_label),
+            help="How often to fetch fresh data from WooCommerce. 'Manual' requires clicking Refresh.",
+            key="refresh_interval_selector",
+        )
+        new_interval = refresh_opts[chosen_label]
+        if new_interval != current_val:
+            st.session_state["wc_refresh_interval"] = new_interval
+            # Clear cache immediately so new interval takes effect
+            from src.services.woocommerce.client import load_from_woocommerce
+            load_from_woocommerce.clear()
+            st.rerun()
+
+        # ── Force refresh button ───────────────────────────────────────────
+        last_sync = st.session_state.get("live_sync_time")
+        if last_sync:
+            elapsed_m = int((datetime.now() - last_sync).total_seconds() / 60)
+            sync_label = f"Last sync: {elapsed_m}m ago" if elapsed_m > 0 else "Last sync: Just now"
+        else:
+            sync_label = "Not synced yet"
+        st.caption(sync_label)
+
+        if st.button("🔄 Refresh Now", use_container_width=True, type="primary"):
+            from src.services.woocommerce.client import load_from_woocommerce
+            load_from_woocommerce.clear()
+            st.session_state.live_sync_time = datetime.now()
+            st.rerun()
+
+        if st.button("Save session state", use_container_width=True):
+            save_state()
+            st.success("Session state saved.")
+
+        st.divider()
+        st.caption("Workspace Control")
+        registered = st.session_state.get("registered_resets", {})
+        if not registered:
+            st.info("No active tool data found.")
+        else:
+            tool_to_wipe = st.selectbox("Select tool", list(registered.keys()))
+            if st.button("Reset Tool Now", use_container_width=True, type="primary"):
+                registered[tool_to_wipe]["fn"]()
+                st.session_state.confirm_tool_reset = False
+                st.success("Cleaned!")
+                st.rerun()
+
+        if st.button("Full System Reset", use_container_width=True, type="secondary"):
+            st.session_state.confirm_app_reset = True
+
+        if st.session_state.get("confirm_app_reset"):
+            st.warning("\u26a0\ufe0f Wipe EVERYTHING?")
+            c1, c2 = st.columns(2)
+            if c1.button("Yes", type="primary", use_container_width=True):
+                if os.path.exists(STATE_FILE):
+                    os.remove(STATE_FILE)
+                st.session_state.clear()
+                st.rerun()
+            if c2.button("No", use_container_width=True):
+                st.session_state.confirm_app_reset = False
+                st.rerun()
+
+        st.divider()
+        st.caption("System Logs")
+        logs = get_logs()
+        if not logs:
+            st.info("No system events logged.")
+        else:
+            for log in reversed(logs[-10:]):
+                st.caption(f"**{log.get('timestamp')}** | {log.get('context')}")
+                st.text(log.get("error"))
+            if st.button("Clear logs", use_container_width=True):
+                if os.path.exists(ERROR_LOG_FILE):
+                    os.remove(ERROR_LOG_FILE)
+                st.rerun()
+
+
+def _render_sidebar(is_auth_on: bool, config_issues: list[str], nav_items: list[str], default_nav: str) -> str:
+    """Render the full sidebar and return the selected navigation item."""
+    _render_sidebar_branding()
+    _render_sidebar_user_context(is_auth_on)
+
+    st.link_button("\U0001f310 Launch DEEN BI", CLOUD_APP_URL, use_container_width=True, type="primary")
+    st.divider()
+    st.markdown(
+        '<div class="command-nav-header"><span style="opacity:0.5;">\u2261</span> Navigation</div>',
+        unsafe_allow_html=True,
+    )
+
+    selected_nav = _render_nav_pills(nav_items, default_nav)
+
+    with st.sidebar.expander(":material/event: Operational Slots", expanded=False):
+        from src.components.ui.calendar_slots import render_operational_slots_calendar
+
+        render_operational_slots_calendar()
+
+    st.divider()
+    _render_sidebar_maintenance(is_auth_on, config_issues)
+    return selected_nav
+
+
+# ── Header rendering ────────────────────────────────────────────────────────
+
+
+def _render_header(selected_nav: str) -> None:
+    """Render the top header with clock and status banners."""
+    from src.components.ui.clock import render_dynamic_clock
+
+    # Show dynamic clock only on pages without the app banner
+    if selected_nav != "\U0001f4c8 Live Dashboard":
+        render_dynamic_clock(st.session_state.get("live_sync_time"))
+
+    banner = st.session_state.get("header_status_banner", "")
+    if banner:
+        st.markdown(f'<div style="margin-top:8px;">{banner}</div>', unsafe_allow_html=True)
+
+
+# ── Page routing ────────────────────────────────────────────────────────────
+
+
+def _route_page(selected_nav: str) -> None:
+    """Route to the correct page renderer based on sidebar selection."""
+    # Lazy imports keep bootstrap resilient on cloud
+    # when a module has runtime incompatibilities.
+    if selected_nav == "\U0001f4c8 Live Dashboard":
+        from src.components.layout.header import render_banner_mode_controls, render_app_banner
+        from src.pages.live_dashboard import render_live_tab
+
+        safe_render(render_app_banner, fallback_msg="App banner unavailable.")
+        safe_render(render_banner_mode_controls, fallback_msg="Mode controls unavailable.")
+        safe_render(render_live_tab, fallback_msg="Live Dashboard unavailable.")
+    elif selected_nav in ["\U0001f4e6 Bulk Order Processer", "\U0001f4e6 Bulk Order Processor", "\U0001f4e6 Pathao Processor"]:
+        from src.pages.pathao_orders import render_pathao_tab
+
+        safe_render(render_pathao_tab, fallback_msg="Pathao Processor unavailable.")
+    elif selected_nav == "\U0001f4ac WhatsApp Messaging":
+        from src.pages.whatsapp_messaging import render_wp_tab
+
+        safe_render(render_wp_tab, fallback_msg="WhatsApp Messaging unavailable.")
+    elif selected_nav == "\U0001f4ca Inventory Distribution":
+        from src.pages.excel_merger import render_excel_merger_tab
+        from src.pages.inventory_distribution import render_distribution_tab
+
+        dist_tab, merge_tab = st.tabs([
+            ":material/inventory_2: Distribution Matrix",
+            ":material/list_alt: Product Listing",
+        ])
+        with dist_tab:
+            safe_render(
+                lambda: render_distribution_tab(
+                    search_q=st.session_state.get("inv_matrix_search", "")
+                ),
+                fallback_msg="Inventory Distribution unavailable.",
+            )
+        with merge_tab:
+            safe_render(render_excel_merger_tab, fallback_msg="Product Listing unavailable.")
+    elif selected_nav == "\U0001f4e6 Current Stock Analytics":
+        from src.pages.stock_analytics import render_stock_analytics_tab
+
+        safe_render(render_stock_analytics_tab, fallback_msg="Stock Analytics unavailable.")
+    elif selected_nav == "\U0001f9e9 Delivery Data Parser":
+        from src.pages.delivery_parser import render_fuzzy_parser_tab
+
+        safe_render(render_fuzzy_parser_tab, fallback_msg="Delivery Data Parser unavailable.")
+    elif selected_nav == "\U0001f4e5 Sales Data Ingestion":
+        from src.pages.sales_ingestion import render_manual_tab
+
+        safe_render(render_manual_tab, fallback_msg="Sales Data Ingestion unavailable.")
+    elif selected_nav == "\U0001f4c9 Return Analytics":
+        from src.pages.return_analytics import render_return_analytics_tab
+
+        safe_render(render_return_analytics_tab, fallback_msg="Return Analytics unavailable.")
+    elif selected_nav == "\U0001f680 Data Pilot":
+        from src.pages.data_pilot import render_ai_pilot_page
+
+        safe_render(render_ai_pilot_page, fallback_msg="Data Pilot unavailable.")
+    elif selected_nav == "\U0001f6d2 Order tracking":
+        from src.pages.woocommerce_orders import render_woocommerce_orders_tab
+
+        safe_render(render_woocommerce_orders_tab, fallback_msg="WooCommerce Orders unavailable.")
+
+
+# ── Public entry point ──────────────────────────────────────────────────────
+
+
+def run_app() -> None:
+    """Main application bootstrap — orchestrates auth, sidebar, routing, and footer."""
+    # ── Authentication ──────────────────────────────────────────────────────
+    is_auth_on = auth_is_configured()
+    config_issues = validate_runtime_configuration()
+
+    if is_auth_on and not st.user.is_logged_in:
+        _render_auth_gate()
+
+    # ── Lazy imports (kept inside function for cloud resilience) ────────────
+    from src.components.ui.bike_animation import render_bike_animation
+    from src.components.ui.styles import inject_base_styles
+    from src.components.layout.header import render_header
+    from src.components.layout.footer import render_footer
+
+    # Ensure Pathao Processor is in the nav
+    if not any("Pathao Processor" in item for item in PRIMARY_NAV):
+        PRIMARY_NAV.append("\U0001f4e6 Pathao Processor")
+
+    # Remove hidden items from nav list (mutate in-place)
+    PRIMARY_NAV[:] = [
+        item for item in PRIMARY_NAV
+        if "Excel Merger" not in item and "Product Listing" not in item
+    ]
+
+    # ── State & styles ──────────────────────────────────────────────────────
+    init_state()
+    inject_base_styles()
+    _rotate_error_logs()
+
+    # Clear previous header banner to ensure tool-specific display
+    if "header_status_banner" not in st.session_state:
+        st.session_state.header_status_banner = ""
+
+    # ── Sidebar ─────────────────────────────────────────────────────────────
+    default_nav = (
+        "\U0001f4c8 Live Dashboard"
+        if "\U0001f4c8 Live Dashboard" in PRIMARY_NAV
+        else PRIMARY_NAV[0]
+    )
+    selected_nav = _render_sidebar(is_auth_on, config_issues, PRIMARY_NAV, default_nav)
+
+    # ── Header placeholder ──────────────────────────────────────────────────
+    header_container = st.empty()
+
+    # Handle nav override from sidebar shortcut buttons
+    if st.session_state.get("_nav_override"):
+        selected_nav = st.session_state.pop("_nav_override")
+
+    if st.session_state.get("show_animation"):
+        render_bike_animation()
+
+    # ── Page routing ────────────────────────────────────────────────────────
+    _route_page(selected_nav)
+
+    # ── Re-render header with any injected content ─────────────────────────
+    with header_container:
+        # On Live Dashboard the banner already contains the title — skip full header
+        if selected_nav != "\U0001f4c8 Live Dashboard":
+            render_header(lambda: _render_header(selected_nav))
+        else:
+            _render_header(selected_nav)
+
+    # Reset banner for next run to avoid bleeding into other pages
+    st.session_state.header_status_banner = ""
+
+    # ── Footer ──────────────────────────────────────────────────────────────
+    render_footer()
