@@ -107,7 +107,8 @@ def render_return_analytics_tab():
                             # Clean Order ID for matching
                             df_to_match["Order ID"] = pd.to_numeric(df_to_match["Order ID"], errors="coerce")
                             df_to_match = df_to_match.dropna(subset=["Order ID"])
-                            order_ids_to_fetch = df_to_match["Order ID"].astype(int).unique().tolist()                            with st.status("🔗 Enriching return data...", expanded=True) as enrich_status:
+                            order_ids_to_fetch = df_to_match["Order ID"].astype(int).unique().tolist()
+                            with st.status("🔗 Enriching return data...", expanded=True) as enrich_status:
                                 from src.services.woocommerce.client import fetch_specific_woocommerce_orders
                                 from src.services.pathao.status import get_pathao_order_status
                                 from concurrent.futures import ThreadPoolExecutor, as_completed

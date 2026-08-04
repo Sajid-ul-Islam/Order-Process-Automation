@@ -7,22 +7,25 @@
     --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
-/* --- GLOBAL FADE-IN ANIMATION --- */
-@keyframes fadeInScale {
+/* --- GLOBAL FADE-IN & PAGE TRANSITION ANIMATIONS --- */
+@keyframes pageSlideFadeIn {
     0% {
         opacity: 0;
-        transform: translateY(10px) scale(0.995);
+        transform: translateY(12px);
+        filter: blur(2px);
     }
-
     100% {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        transform: translateY(0);
+        filter: blur(0);
     }
 }
 
+.page-view-wrapper,
 div[role="tabpanel"],
 .main .block-container {
-    animation: fadeInScale 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation: pageSlideFadeIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    will-change: transform, opacity, filter;
 }
 
 /* Modern Scrollbar */

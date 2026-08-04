@@ -437,8 +437,10 @@ def run_app() -> None:
     if st.session_state.get("show_animation"):
         render_bike_animation()
 
-    # ── Page routing ────────────────────────────────────────────────────────
+    # ── Page routing with smooth transition wrapper ──────────────────────
+    st.markdown(f'<div class="page-view-wrapper page-nav-{abs(hash(selected_nav))}">', unsafe_allow_html=True)
     _route_page(selected_nav)
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # ── Re-render header with any injected content ─────────────────────────
     with header_container:

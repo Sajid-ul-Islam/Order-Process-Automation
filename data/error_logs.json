@@ -1,14 +1,5 @@
 [
     {
-        "timestamp": "2026-06-13 10:43:55",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
         "timestamp": "2026-06-14 11:55:07",
         "context": "safe_render",
         "error": "division by zero",
@@ -879,6 +870,13 @@
         "context": "App Bootstrap",
         "error": "invalid syntax (return_analytics.py, line 110)",
         "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\app.py\", line 13, in <module>\n    run_app()\n    ~~~~~~~^^\n  File \"H:\\Repo\\DEEN-OPS\\src\\app_bootstrap.py\", line 410, in run_app\n    _route_page(selected_nav)\n    ~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"H:\\Repo\\DEEN-OPS\\src\\app_bootstrap.py\", line 341, in _route_page\n    from src.pages.return_analytics import render_return_analytics_tab\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\return_analytics.py\", line 110\n    order_ids_to_fetch = df_to_match[\"Order ID\"].astype(int).unique().tolist()                            with st.status(\"\ud83d\udd17 Enriching return data...\", expanded=True) as enrich_status:\n                                                                                                          ^^^^\nSyntaxError: invalid syntax\n",
+        "details": {}
+    },
+    {
+        "timestamp": "2026-08-04 15:27:35",
+        "context": "App Bootstrap",
+        "error": "invalid syntax (return_analytics.py, line 110)",
+        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\app.py\", line 13, in <module>\n    run_app()\n    ~~~~~~~^^\n  File \"H:\\Repo\\DEEN-OPS\\src\\app_bootstrap.py\", line 441, in run_app\n    _route_page(selected_nav)\n    ~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"H:\\Repo\\DEEN-OPS\\src\\app_bootstrap.py\", line 372, in _route_page\n    from src.pages.return_analytics import render_return_analytics_tab\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\return_analytics.py\", line 110\n    order_ids_to_fetch = df_to_match[\"Order ID\"].astype(int).unique().tolist()                            with st.status(\"\ud83d\udd17 Enriching return data...\", expanded=True) as enrich_status:\n                                                                                                          ^^^^\nSyntaxError: invalid syntax\n",
         "details": {}
     }
 ]
