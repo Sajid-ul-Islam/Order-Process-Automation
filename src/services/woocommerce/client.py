@@ -31,8 +31,9 @@ def _flatten_order(order: dict) -> list[dict]:
             ptc_consignment_id = meta.get("value", "")
             break
 
-    if ptc_consignment_id and str(ptc_consignment_id).strip():
-        status = "shipped"
+    # Use the actual order status directly from WooCommerce
+    if not status or not str(status).strip():
+        status = "processing"
 
     # Extract order level discounts, fee lines, & coupons
     ord_discount_total = float(order.get("discount_total", 0) or 0)
@@ -219,7 +220,7 @@ def _get_today_modified_shipped_params() -> dict:
     return {
         "per_page": 100,
         "modified_after": prev_cutoff_utc.strftime("%Y-%m-%dT%H:%M:%S"),
-        "status": "shipped",
+        "status": "shipped,completed,confirmed,processing",
         "orderby": "modified",
         "order": "desc",
     }
@@ -260,7 +261,7 @@ def _get_custom_range_params() -> dict:
 
 
 def _merge_deduplicated_orders(main_rows: list, extra_rows: list) -> list:
-    """Merge two order lists, deduplicating by (Order ID, Item Name), preferring shipped status and latest date_modified."""
+    """Merge two order lists, deduplicating by (Order ID, Item Name), preferring the latest date_modified / latest status."""
     order_map = {}
     for r in main_rows + extra_rows:
         key = (r["Order ID"], r["Item Name"])
@@ -268,20 +269,9 @@ def _merge_deduplicated_orders(main_rows: list, extra_rows: list) -> list:
             order_map[key] = r
         else:
             existing = order_map[key]
-            new_st = str(r.get("Order Status")).lower()
-            old_st = str(existing.get("Order Status")).lower()
-            
-            new_is_sh = new_st in SHIPPED_STATUSES
-            old_is_sh = old_st in SHIPPED_STATUSES
-            
-            new_ptc = str(r.get("Pathao Consignment ID", "")).strip()
-            old_ptc = str(existing.get("Pathao Consignment ID", "")).strip()
-
             new_mod = str(r.get("Order Date Modified", ""))
             old_mod = str(existing.get("Order Date Modified", ""))
-
-            # Prefer shipped status over non-shipped status, or non-empty consignment ID, or later date_modified
-            if (new_is_sh and not old_is_sh) or (new_ptc and not old_ptc) or (new_is_sh == old_is_sh and new_mod >= old_mod):
+            if new_mod >= old_mod:
                 order_map[key] = r
 
     return list(order_map.values())
@@ -325,8 +315,9 @@ def _apply_shipped_history(df_full):
     if df_full.empty:
         return df_full
     df_full = df_full.copy()
-    df_full["dt_parsed"] = pd.to_datetime(df_full["Order Date"], errors="coerce").dt.tz_localize(None)
-    df_full["mod_dt_parsed"] = pd.to_datetime(df_full["Order Date Modified"], errors="coerce").dt.tz_localize(None)
+    from src.processing.data_processing import safe_coerce_datetime_naive
+    df_full["dt_parsed"] = safe_coerce_datetime_naive(df_full["Order Date"])
+    df_full["mod_dt_parsed"] = safe_coerce_datetime_naive(df_full["Order Date Modified"])
 
     import os
     import json
@@ -347,18 +338,20 @@ def _apply_shipped_history(df_full):
     
     for idx, row in df_full[is_shipped_mask].iterrows():
         oid = str(row["Order ID"])
-        if oid in shipped_history:
-            stored_dt = pd.to_datetime(shipped_history[oid], errors="coerce")
-            actual_mod_dt = row["mod_dt_parsed"]
-            if pd.notnull(actual_mod_dt) and (pd.isnull(stored_dt) or actual_mod_dt > stored_dt):
+        actual_mod_dt = row["mod_dt_parsed"]
+        if pd.notnull(actual_mod_dt):
+            if oid in shipped_history:
+                stored_dt = pd.to_datetime(shipped_history[oid], errors="coerce")
+                if pd.isnull(stored_dt) or actual_mod_dt > stored_dt:
+                    shipped_history[oid] = str(actual_mod_dt)
+                    history_updated = True
+            else:
                 shipped_history[oid] = str(actual_mod_dt)
                 history_updated = True
-            else:
+        elif oid in shipped_history:
+            stored_dt = pd.to_datetime(shipped_history[oid], errors="coerce")
+            if pd.notnull(stored_dt):
                 df_full.at[idx, "mod_dt_parsed"] = stored_dt
-        else:
-            if pd.notnull(row["mod_dt_parsed"]):
-                shipped_history[oid] = str(row["mod_dt_parsed"])
-                history_updated = True
 
     if history_updated:
         try:

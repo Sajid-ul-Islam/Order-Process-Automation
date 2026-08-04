@@ -1,32 +1,5 @@
 [
     {
-        "timestamp": "2026-06-10 10:24:41",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-10 11:51:39",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-10 12:48:40",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
         "timestamp": "2026-06-13 10:40:48",
         "context": "safe_render",
         "error": "division by zero",
@@ -881,6 +854,33 @@
         "traceback": "OSError: [Errno 28] No space left on device\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 387, in close\n    self._store_workbook()\n    ~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 803, in _store_workbook\n    xml_files = packager._create_package()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\packager.py\", line 138, in _create_package\n    self._write_content_types_file()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\packager.py\", line 500, in _write_content_types_file\n    content._assemble_xml_file()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\contenttypes.py\", line 77, in _assemble_xml_file\n    self._xml_close()\n    ~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\xmlwriter.py\", line 52, in _xml_close\n    self.fh.close()\n    ~~~~~~~~~~~~~^^\nOSError: [Errno 28] No space left on device\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 310, in <lambda>\n    lambda: render_dashboard_output(\n            ~~~~~~~~~~~~~~~~~~~~~~~^\n        drill,\n        ^^^^^^\n    ...<7 lines>...\n        show_core_metrics=False\n        ^^^^^^^^^^^^^^^^^^^^^^^\n    ),\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_output.py\", line 636, in render_dashboard_output\n    excel_report_bytes = export_to_styled_excel(export_data)\n  File \"H:\\Repo\\DEEN-OPS\\src\\services\\exports\\excel_exporter.py\", line 116, in export_to_styled_excel\n    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:\n         ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_base.py\", line 1353, in __exit__\n    self.close()\n    ~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_base.py\", line 1357, in close\n    self._save()\n    ~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_xlsxwriter.py\", line 239, in _save\n    self.book.close()\n    ~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 389, in close\n    raise FileCreateError(e)\nxlsxwriter.exceptions.FileCreateError: [Errno 28] No space left on device\n",
         "details": {
             "fallback_msg": "Dashboard rendering encountered an error."
+        }
+    },
+    {
+        "timestamp": "2026-08-04 14:04:05",
+        "context": "safe_render",
+        "error": "cannot access local variable 'filler_orders_cnt' where it is not associated with a value",
+        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 260, in render_live_tab\n    render_revenue_cashback_comparison_section(df_standard, raw_df=df_live)\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 511, in render_revenue_cashback_comparison_section\n    filler_orders_cnt += 1\n    ^^^^^^^^^^^^^^^^^\nUnboundLocalError: cannot access local variable 'filler_orders_cnt' where it is not associated with a value\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-04 14:37:44",
+        "context": "safe_render",
+        "error": "name 'SHIPPED_STATUSES' is not defined",
+        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 264, in render_live_tab\n    _render_dispatch_export()\n    ~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 290, in _render_dispatch_export\n    is_shipped = raw_df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES)\n                                                                 ^^^^^^^^^^^^^^^^\nNameError: name 'SHIPPED_STATUSES' is not defined\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-04 14:39:35",
+        "context": "safe_render",
+        "error": "name 'SHIPPED_STATUSES' is not defined",
+        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 264, in render_live_tab\n    _render_dispatch_export()\n    ~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 290, in _render_dispatch_export\n    is_shipped = raw_df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES)\n                                                                 ^^^^^^^^^^^^^^^^\nNameError: name 'SHIPPED_STATUSES' is not defined\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
         }
     }
 ]

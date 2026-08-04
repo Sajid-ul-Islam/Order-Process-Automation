@@ -42,7 +42,16 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
         mod_col = "Order Date Modified"
 
     if nav_mode == "Today" and not is_comparison:
-        # Strictly filter to orders modified/shipped TODAY (BD Time UTC+6)
+        # 1. First try filtering by operational shift slot boundaries if defined
+        slot = st.session_state.get("wc_curr_slot")
+        if slot and mod_col:
+            slot_start, slot_end = pd.to_datetime(slot[0]), pd.to_datetime(slot[1])
+            dt_series = pd.to_datetime(shipped_df[mod_col], errors="coerce")
+            shipped_in_slot = shipped_df[(dt_series >= slot_start) & (dt_series <= slot_end)]
+            if not shipped_in_slot.empty:
+                return shipped_in_slot
+
+        # 2. Fallback to calendar date matching (BD Time UTC+6)
         tz_bd = timezone(timedelta(hours=6))
         today_bd = datetime.now(tz_bd).date()
 
@@ -52,7 +61,7 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
             if not shipped_today.empty:
                 return shipped_today
 
-        # Fallback to order date column if mod_dt_parsed is missing or empty
+        # 3. Fallback to order creation date column
         date_col = "dt_parsed" if "dt_parsed" in shipped_df.columns else "Order Date" if "Order Date" in shipped_df.columns else None
         if date_col:
             dt_create = pd.to_datetime(shipped_df[date_col], errors="coerce")

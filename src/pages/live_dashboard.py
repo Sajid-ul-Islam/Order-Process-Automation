@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import datetime, timedelta, timezone
 
 from src.components.ui.widgets import render_reset_confirm
+from src.config.constants import SHIPPED_STATUSES
 from src.processing.column_detection import find_columns
 from src.processing.data_processing import prepare_granular_data, aggregate_data, filter_shipped_by_slot
 from src.components.dashboard.dashboard_output import render_dashboard_output
@@ -287,10 +288,16 @@ def _render_dispatch_export():
     if status_col is None:
         return
 
-    from src.config.constants import SHIPPED_STATUSES
-
     is_shipped = raw_df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES)
-    shipped_today = raw_df[is_shipped & (raw_df["mod_dt_parsed"].dt.date == today_bd)]
+    curr_slot = st.session_state.get("wc_curr_slot")
+    if curr_slot and "mod_dt_parsed" in raw_df.columns:
+        s_start, s_end = pd.to_datetime(curr_slot[0]), pd.to_datetime(curr_slot[1])
+        shipped_today = raw_df[is_shipped & (raw_df["mod_dt_parsed"] >= s_start) & (raw_df["mod_dt_parsed"] <= s_end)]
+        if shipped_today.empty:
+            shipped_today = raw_df[is_shipped & (raw_df["mod_dt_parsed"].dt.date == today_bd)]
+    else:
+        shipped_today = raw_df[is_shipped & (raw_df["mod_dt_parsed"].dt.date == today_bd)]
+
     confirmed_df = raw_df[raw_df[status_col].astype(str).str.lower() == "confirmed"]
     waiting_df = raw_df[
         (raw_df[status_col].astype(str).str.lower() == "waiting") &

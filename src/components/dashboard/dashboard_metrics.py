@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime
 
 import pandas as pd
@@ -468,6 +469,8 @@ def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.Da
     high_rep_cnt = 0
     mid_rep_cnt = 0
     low_rep_cnt = 0
+    filler_orders_cnt = 0
+    filler_dict = defaultdict(lambda: {"count": 0, "costs": [], "cat_type": ""})
 
     if id_col and cb_orders_cnt > 0:
         cb_df_all = m_df[cb_orders_mask] if cb_orders_mask.any() else m_df.copy()
