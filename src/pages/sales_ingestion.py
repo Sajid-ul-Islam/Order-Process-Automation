@@ -26,52 +26,100 @@ def render_manual_tab():
     st.session_state["manual_tab_active"] = True
     st.session_state["wc_sync_mode"] = "Custom Range"
 
-    # Initialize default 7-day range if not present
-    if "ingest_range" not in st.session_state:
-        st.session_state.ingest_range = ((datetime.now() - timedelta(days=30)).date(), datetime.now().date())
+    # ── Timeframe & Date Range Preset Controls (Default: Last 7 Days) ───────────
+    today_date = datetime.now().date()
+    if "ingest_preset" not in st.session_state:
+        st.session_state["ingest_preset"] = "Last 7 Days"
+        st.session_state["wc_sync_start_date"] = today_date - timedelta(days=7)
+        st.session_state["wc_sync_end_date"] = today_date
+
+    col_d1, col_d2 = st.columns([2, 3])
+    with col_d1:
+        preset_opts = ["Last 7 Days", "Last 14 Days", "Last 30 Days (1 Month)", "Last 90 Days", "Custom Range"]
+        curr_preset = st.session_state.get("ingest_preset", "Last 7 Days")
+        chosen_preset = st.selectbox(
+            "📅 Ingestion Timeframe",
+            preset_opts,
+            index=preset_opts.index(curr_preset) if curr_preset in preset_opts else 0,
+            key="ingest_preset_selector",
+            help="Default timeframe is 7 days. Select presets or pick a custom range below."
+        )
+
+    with col_d2:
+        if chosen_preset == "Last 7 Days":
+            req_start = today_date - timedelta(days=7)
+            req_end = today_date
+        elif chosen_preset == "Last 14 Days":
+            req_start = today_date - timedelta(days=14)
+            req_end = today_date
+        elif chosen_preset == "Last 30 Days (1 Month)":
+            req_start = today_date - timedelta(days=30)
+            req_end = today_date
+        elif chosen_preset == "Last 90 Days":
+            req_start = today_date - timedelta(days=90)
+            req_end = today_date
+        else:
+            req_start = st.session_state.get("wc_sync_start_date", today_date - timedelta(days=7))
+            req_end = st.session_state.get("wc_sync_end_date", today_date)
+
+        chosen_dates = st.date_input(
+            "📅 Active Date Range",
+            value=(req_start, req_end),
+            key="ingest_date_picker"
+        )
+        if isinstance(chosen_dates, (list, tuple)) and len(chosen_dates) == 2:
+            start_d, end_d = chosen_dates[0], chosen_dates[1]
+        else:
+            start_d, end_d = req_start, req_end
+
+    if (
+        st.session_state.get("wc_sync_start_date") != start_d or
+        st.session_state.get("wc_sync_end_date") != end_d or
+        st.session_state.get("ingest_preset") != chosen_preset
+    ):
+        st.session_state["ingest_preset"] = chosen_preset
+        st.session_state["wc_sync_start_date"] = start_d
+        st.session_state["wc_sync_end_date"] = end_d
+        st.session_state["wc_sync_mode"] = "Custom Range"
+        st.session_state["wc_sync_start_time"] = datetime.strptime("00:00", "%H:%M").time()
+        st.session_state["wc_sync_end_time"] = datetime.strptime("23:59", "%H:%M").time()
+        st.session_state.manual_df = None
+        st.session_state.manual_autoload_attempted = False
+        load_from_woocommerce.clear()
+        st.rerun()
 
     render_reset_confirm("Sales Data Ingestion", "manual", _reset_manual_state)
 
-    st.info("📊 Consolidate and analyze sales data. WooCommerce pull is active by default.")
+    st.info(f"📊 Analyzing Sales Data for **{chosen_preset}** ({st.session_state.get('wc_sync_start_date')} to {st.session_state.get('wc_sync_end_date')}).")
 
-    # v10.7 Auto-Load Intelligence with Snapshot Fallback
+    # Auto-Load Intelligence with API / Snapshot Fallback
     if st.session_state.get("manual_df") is None and not st.session_state.get("manual_autoload_attempted", False):
         st.session_state["manual_autoload_attempted"] = True
+        s_d = st.session_state.get("wc_sync_start_date", today_date - timedelta(days=7))
+        e_d = st.session_state.get("wc_sync_end_date", today_date)
 
-        snap_df = load_sales_snapshot()
-        if snap_df is not None:
-            st.session_state.manual_df = snap_df
-            st.session_state.manual_source_name = "Last_Synced_Snapshot (30 Days)"
-            st.session_state["wc_sync_mode"] = "Custom Range"
-            st.toast("⚡ Loaded Sales from Snapshot")
-            st.rerun()
-        else:
-            # 2. If no snapshot, run API load
-            with st.status("🚀 Connecting to WooCommerce (Last 30 Days)...", expanded=True) as status:
-                try:
-                    st.write("Initializing synchronization protocol...")
-                    e_d = datetime.now().date()
-                    s_d = e_d - timedelta(days=30)
-                    st.session_state["wc_sync_mode"] = "Custom Range"
-                    st.session_state["wc_sync_start_date"] = s_d
-                    st.session_state["wc_sync_start_time"] = datetime.strptime("00:00", "%H:%M").time()
-                    st.session_state["wc_sync_end_date"] = e_d
-                    st.session_state["wc_sync_end_time"] = datetime.strptime("23:59", "%H:%M").time()
+        days_span = (e_d - s_d).days
+        with st.status(f"🚀 Fetching WooCommerce Sales ({s_d} to {e_d})...", expanded=True) as status:
+            try:
+                st.write("Initializing synchronization protocol...")
+                st.session_state["wc_sync_mode"] = "Custom Range"
+                st.session_state["wc_sync_start_time"] = datetime.strptime("00:00", "%H:%M").time()
+                st.session_state["wc_sync_end_time"] = datetime.strptime("23:59", "%H:%M").time()
 
-                    st.write("Fetching transaction payloads...")
-                    wc_res = load_from_woocommerce()
-                    df_res = wc_res["df_to_return"]
-                    src_res = wc_res["sync_desc"]
-                    if not df_res.empty:
-                        st.write("Data structured. Saving snapshot...")
-                        st.session_state.manual_df = df_res
-                        st.session_state.manual_source_name = src_res
-                        save_sales_snapshot(df_res)
-                        status.update(label="API Sync Complete", state="complete", expanded=False)
-                        st.toast("✅ API Sync Complete!")
-                        st.rerun()
-                except Exception:
-                    status.update(label="API Sync Failed", state="error", expanded=False)
+                st.write("Fetching transaction payloads from WooCommerce...")
+                wc_res = load_from_woocommerce()
+                df_res = wc_res["df_to_return"]
+                src_res = wc_res["sync_desc"]
+                if not df_res.empty:
+                    st.write("Data structured. Saving snapshot...")
+                    st.session_state.manual_df = df_res
+                    st.session_state.manual_source_name = f"WooCommerce_{days_span}d ({s_d} to {e_d})"
+                    save_sales_snapshot(df_res)
+                    status.update(label="API Sync Complete", state="complete", expanded=False)
+                    st.toast(f"✅ Ingested {len(df_res)} orders for {chosen_preset}!")
+                    st.rerun()
+            except Exception as e:
+                status.update(label=f"API Sync Failed: {e}", state="error", expanded=False)
 
 
     # v11.3 Sync State
@@ -171,30 +219,29 @@ def render_manual_tab():
     try:
         # v10.7+ Direct Intelligence (Bypass mapping for WooCommerce and Snapshots)
         if "WooCommerce" in str(source_name) or "Snapshot" in str(source_name):
-            st.info("💡 Data source recognized. Column mapping will be handled automatically.")
-            generate_clicked, _ = render_action_bar("Generate Dashboard", "auto_generate")
-            if generate_clicked:
-                with st.status("🔄 Processing data...", expanded=True) as proc_status:
-                    proc_status.update(label="📊 Standardizing column mapping...")
-                    # v11.4 Fix: WooCommerce fetch produces 'Order Date', ensure mapping aligns
-                    final_mapping = {
-                        "name": "Item Name",
-                        "cost": "Item Cost",
-                        "qty": "Quantity",
-                        "date": "Order Date" if "Date" not in df.columns else "Date",
-                        "order_id": "Order Number",
-                        "phone": "Phone (Billing)",
-                        "sku": "SKU"
-                    }
-                    df_standard, timeframe = prepare_granular_data(df, final_mapping)
-                    if not df_standard.empty:
-                        proc_status.update(label="📈 Aggregating sales data...")
-                        drill, summ, top, basket = aggregate_data(df_standard, final_mapping)
-                        proc_status.update(label="✅ Data processed, rendering dashboard...", state="complete")
-                        # v10.9 Fix: Pass df_standard as granular_df to enable filters and rendering
-                        render_dashboard_output(drill, summ, top, str(timeframe) if timeframe is not None else None, basket, str(source_name) if source_name is not None else None, granular_df=df_standard)
-                    else:
-                        proc_status.update(label="⚠️ No data after processing", state="error")
+            final_mapping = {
+                "name": "Item Name",
+                "cost": "Item Cost",
+                "qty": "Quantity",
+                "date": "Order Date" if "Date" not in df.columns else "Date",
+                "order_id": "Order Number",
+                "phone": "Phone (Billing)",
+                "sku": "SKU"
+            }
+            df_standard, timeframe = prepare_granular_data(df, final_mapping)
+            if not df_standard.empty:
+                drill, summ, top, basket = aggregate_data(df_standard, final_mapping)
+                render_dashboard_output(
+                    drill,
+                    summ,
+                    top,
+                    str(timeframe) if timeframe is not None else None,
+                    basket,
+                    str(source_name) if source_name is not None else None,
+                    granular_df=df_standard
+                )
+            else:
+                st.warning("⚠️ No records found after data processing.")
             return
 
         st.caption(f"Active Data Source: {source_name}")

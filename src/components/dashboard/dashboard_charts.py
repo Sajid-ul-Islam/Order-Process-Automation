@@ -318,6 +318,9 @@ def render_revenue_cashback_comparison_chart(m_df: pd.DataFrame) -> None:
     net_rev = m_df["Total Amount"].sum() if "Total Amount" in m_df.columns else 0
     cashback_disc = m_df["Cashback Discount"].sum() if "Cashback Discount" in m_df.columns else max(0.0, gross_rev - net_rev)
     
+    from src.config.ui_config import get_active_theme_config
+    theme_cfg = get_active_theme_config()
+
     # 1. Overview Bar Chart
     comp_df = pd.DataFrame([
         {"Metric": "Gross Revenue (Pre-Discount)", "Amount (TK)": gross_rev, "Category": "Gross Revenue"},
@@ -332,9 +335,9 @@ def render_revenue_cashback_comparison_chart(m_df: pd.DataFrame) -> None:
         color="Category",
         text="Amount (TK)",
         color_discrete_map={
-            "Gross Revenue": "#3b82f6",
-            "Net Revenue": "#10b981",
-            "Discount / Cashback": "#f59e0b",
+            "Gross Revenue": theme_cfg.get("primary", "#10b981"),
+            "Net Revenue": theme_cfg.get("secondary", "#06b6d4"),
+            "Discount / Cashback": theme_cfg.get("spark_bv", "#f59e0b"),
         },
         title="Overall Revenue Stream Comparison",
     )

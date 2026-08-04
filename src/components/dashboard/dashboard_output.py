@@ -117,11 +117,12 @@ def _render_charts(summ):
             chart_summ = chart_summ.groupby("Category", as_index=False).agg({"Total Qty": "sum", "Total Amount": "sum"})
 
     sorted_cats = chart_summ.sort_values("Total Amount", ascending=False)[display_col].tolist() if not chart_summ.empty else []
+    from src.config.ui_config import CHART_THEMES
+    theme_name = st.session_state.get("chart_theme", "✨ Emerald Cyberpunk")
+    theme_cfg = CHART_THEMES.get(theme_name, CHART_THEMES["✨ Emerald Cyberpunk"])
+    palette = theme_cfg["colors"]
     color_map = {
-        cat: px.colors.sample_colorscale(
-            "Plasma",
-            [(i / max(1, len(sorted_cats) - 1)) * 0.85 if len(sorted_cats) > 1 else 0],
-        )[0]
+        cat: palette[i % len(palette)]
         for i, cat in enumerate(sorted_cats)
     }
 
@@ -610,30 +611,10 @@ def render_dashboard_output(
     else:
         drill, summ, top, basket, active_df = _render_ingestion_mode_metrics(granular_df, dummy_mapping, last_updated)
 
-    # ── Charts ──
+    # ── Charts (Performance Outlook) ──
     color_map = _render_charts(summ)
 
-    # ── Products Spotlight & SKU-Wise Report ──
-    _render_spotlight_and_sku_report(top, color_map, wc_raw_mapping)
-
-    # ── Revenue & Cashback Impact Analysis (Ingestion mode) ──────────────────
-    if not is_operational and active_df is not None and not active_df.empty:
-        has_cashback = "Cashback Discount" in active_df.columns and (active_df["Cashback Discount"] > 0).any()
-        if has_cashback:
-            st.divider()
-            compare_cb = st.toggle(
-                "⚖️ Compare Revenue vs Cashback/Fee",
-                value=st.session_state.get("ingest_compare_cashback", False),
-                key="ingest_compare_cashback",
-            )
-            if compare_cb:
-                from src.components.dashboard.dashboard_metrics import render_revenue_cashback_comparison_section
-                render_revenue_cashback_comparison_section(active_df, raw_df=None)
-
-    # ── Executive Briefing ──
-    if is_operational:
-        st.subheader("📱 Executive Briefing")
-
+    # ── Executive Briefing (Placed right after Performance Outlook) ──
     today_qty = summ['Total Qty'].sum() if summ is not None else 0
     today_orders = basket.get('total_orders', 0) if basket else 0
     today_aov = basket.get('avg_customer_value', basket.get('avg_basket_value', 0)) if basket else 0
@@ -642,6 +623,7 @@ def render_dashboard_output(
     final_report_text = ""
     today_rev = float(summ['Total Amount'].sum()) if summ is not None else 0.0  # default; overridden below for operational mode
     if is_operational:
+        st.subheader("📱 Executive Briefing")
         dm = get_dispatch_metrics(active_df, today_orders)
         gross_rev = float(active_df["Gross Amount"].sum()) if (active_df is not None and "Gross Amount" in active_df.columns) else (
             float(active_df["Total Amount"].sum()) if (active_df is not None and "Total Amount" in active_df.columns) else
@@ -665,6 +647,23 @@ def render_dashboard_output(
             today_rev, today_qty, today_orders, today_aov,
             dm, current_data_fingerprint, final_report_text
         )
+
+    # ── Products Spotlight & SKU-Wise Report ──
+    _render_spotlight_and_sku_report(top, color_map, wc_raw_mapping)
+
+    # ── Revenue & Cashback Impact Analysis (Ingestion mode) ──────────────────
+    if not is_operational and active_df is not None and not active_df.empty:
+        has_cashback = "Cashback Discount" in active_df.columns and (active_df["Cashback Discount"] > 0).any()
+        if has_cashback:
+            st.divider()
+            compare_cb = st.toggle(
+                "⚖️ Compare Revenue vs Cashback/Fee",
+                value=st.session_state.get("ingest_compare_cashback", False),
+                key="ingest_compare_cashback",
+            )
+            if compare_cb:
+                from src.components.dashboard.dashboard_metrics import render_revenue_cashback_comparison_section
+                render_revenue_cashback_comparison_section(active_df, raw_df=None)
 
     # ── Export Preparation ──
     export_data = _build_export_data(is_operational, summ, top, active_df, today_rev, today_qty, today_orders, today_aov, dm, final_report_text)

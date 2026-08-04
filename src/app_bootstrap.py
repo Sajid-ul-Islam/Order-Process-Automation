@@ -117,10 +117,23 @@ def _render_nav_pills(nav_items: list[str], default: str) -> str:
 
 def _render_sidebar_branding() -> None:
     """Render the DEEN-OPS logo, title, and version badge in the sidebar."""
+    import os
+    import base64
+
+    logo_jpg = os.path.join("assets", "deen_logo.jpg")
+    logo_img_html = '<div style="font-size: 28px; line-height: 1; filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.5));">🛡️</div>'
+    if os.path.exists(logo_jpg):
+        try:
+            with open(logo_jpg, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+                logo_img_html = f'<img src="data:image/jpeg;base64,{b64}" style="width: 36px; height: 36px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">'
+        except Exception:
+            pass
+
     st.markdown(
-        """
+        f"""
         <div class="sidebar-logo-container">
-            <div style="font-size: 28px; line-height: 1; filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.5));">\U0001f6e1\ufe0f</div>
+            {logo_img_html}
             <div style="flex: 1; min-width: 0;">
                 <div class="sidebar-logo-text">DEEN-OPS</div>
                 <div class="sidebar-logo-sub">Command Terminal</div>
@@ -160,6 +173,8 @@ def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> N
             "Show motion effects",
             value=st.session_state.get("show_animation", True),
         )
+
+
 
         # ── Auto-refresh interval ──────────────────────────────────────────
         st.caption("Data Sync")
@@ -247,27 +262,43 @@ def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> N
 
 
 def _render_sidebar(is_auth_on: bool, config_issues: list[str], nav_items: list[str], default_nav: str) -> str:
-    """Render the full sidebar and return the selected navigation item."""
-    _render_sidebar_branding()
-    _render_sidebar_user_context(is_auth_on)
+    """Render a clean, streamlined, and intuitive sidebar."""
+    with st.sidebar:
+        _render_sidebar_branding()
+        _render_sidebar_user_context(is_auth_on)
 
-    st.link_button("\U0001f310 Launch DEEN BI", CLOUD_APP_URL, use_container_width=True, type="primary")
-    st.divider()
-    st.markdown(
-        '<div class="command-nav-header"><span style="opacity:0.5;">\u2261</span> Navigation</div>',
-        unsafe_allow_html=True,
-    )
+        st.link_button("🌐 Launch DEEN BI", CLOUD_APP_URL, use_container_width=True, type="primary")
 
-    selected_nav = _render_nav_pills(nav_items, default_nav)
+        # ── Chart Color Theme Selector (Placed right after Launch DEEN BI) ──
+        from src.config.ui_config import CHART_THEMES
+        theme_names = list(CHART_THEMES.keys())
+        current_theme = st.session_state.get("chart_theme", "✨ Emerald Cyberpunk")
+        chosen_theme = st.selectbox(
+            "🎨 Chart Theme",
+            options=theme_names,
+            index=theme_names.index(current_theme) if current_theme in theme_names else 0,
+            help="Select color palette theme for charts and metrics across the app.",
+            key="sidebar_theme_selector",
+        )
+        if chosen_theme != current_theme:
+            st.session_state["chart_theme"] = chosen_theme
+            st.rerun()
 
-    with st.sidebar.expander(":material/event: Operational Slots", expanded=False):
-        from src.components.ui.calendar_slots import render_operational_slots_calendar
+        st.divider()
 
-        render_operational_slots_calendar()
+        st.caption("🧭 WORKSPACE NAVIGATION")
 
-    st.divider()
-    _render_sidebar_maintenance(is_auth_on, config_issues)
-    return selected_nav
+        selected_nav = _render_nav_pills(nav_items, default_nav)
+
+        st.divider()
+
+        with st.expander("📅 Operational Shift Slots", expanded=False):
+            from src.components.ui.calendar_slots import render_operational_slots_calendar
+
+            render_operational_slots_calendar()
+
+        _render_sidebar_maintenance(is_auth_on, config_issues)
+        return selected_nav
 
 
 # ── Header rendering ────────────────────────────────────────────────────────

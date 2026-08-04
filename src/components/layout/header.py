@@ -59,28 +59,62 @@ def render_app_banner():
                     </div>
                 """
 
-    if os.path.exists(banner_path):
-        with open(banner_path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode()
+    from src.config.ui_config import get_active_theme_config
+    theme_cfg = get_active_theme_config()
+    p_color = theme_cfg.get("primary", "#10b981")
+    s_color = theme_cfg.get("secondary", "#06b6d4")
 
-        st.markdown(
-            f"""
-<div class="app-banner-wrapper">
-<img src="data:image/png;base64,{b64}" class="app-banner-img" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1;">
-{holiday_banner_html}
-<div class="app-banner-overlay">
-<div class="app-banner-title-area">
-<div class="app-banner-title">DEEN OPS Terminal</div>
-<div class="app-banner-subtitle">Advanced Operational Analytics & Strategic Data Pilot</div>
-</div>
-<div class="app-banner-clock-area">
-{clock_html}
-<div style="margin-top: 6px; color: rgba(255,255,255,0.6); font-size: 0.75rem; font-family: sans-serif; letter-spacing: 0.05em; font-weight: 600;">🔄 {sync_label.upper()}</div>
-</div>
-</div>
-</div>""",
-            unsafe_allow_html=True
-        )
+    img_html = ""
+    if os.path.exists(banner_path):
+        try:
+            with open(banner_path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode()
+                img_html = f'<img src="data:image/png;base64,{b64}" class="app-banner-img" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; opacity: 0.35;">'
+        except Exception:
+            pass
+
+    st.markdown(
+        f"""
+        <div class="app-banner-wrapper" style="
+            position: relative;
+            width: 100%;
+            height: 110px;
+            border-radius: 16px;
+            overflow: hidden;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.9) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+            margin-bottom: 16px;
+        ">
+            {img_html}
+            <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, {p_color}, {s_color}); z-index: 5;"></div>
+            {holiday_banner_html}
+            <div class="app-banner-overlay" style="
+                position: relative;
+                z-index: 3;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                height: 100%;
+                padding: 0 28px;
+                background: radial-gradient(circle at 10% 50%, rgba(16, 185, 129, 0.08) 0%, transparent 60%);
+            ">
+                <div class="app-banner-title-area">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 1.55rem; font-weight: 900; letter-spacing: 0.08em; background: linear-gradient(90deg, #ffffff 0%, {p_color} 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">DEEN-OPS Terminal</span>
+                        <span style="background: rgba(16, 185, 129, 0.15); color: {p_color}; font-size: 0.65rem; font-weight: 800; padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.3); text-transform: uppercase; letter-spacing: 0.05em;">v10.0 LIVE</span>
+                    </div>
+                    <div style="color: rgba(226, 232, 240, 0.75); font-size: 0.85rem; font-weight: 500; margin-top: 4px; letter-spacing: 0.02em;">Advanced Operational Command & Strategic Business Intelligence</div>
+                </div>
+                <div class="app-banner-clock-area" style="text-align: right;">
+                    {clock_html}
+                    <div style="margin-top: 4px; color: {p_color}; font-size: 0.72rem; font-family: monospace; letter-spacing: 0.08em; font-weight: 700;">🟢 {sync_label.upper()}</div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
 def render_banner_mode_controls():

@@ -213,21 +213,39 @@ def render_operational_metrics(
                 ord_series = t_df.groupby("_hr")[order_id_col].nunique().reindex(all_hours, fill_value=0)
                 t_ord_vals = ord_series.tolist()
                 
-                s_qty = _generate_sparkline_svg(t_qty_vals, "#3b82f6")
-                s_rev = _generate_sparkline_svg(t_rev_vals, "#10b981")
-                s_ord = _generate_sparkline_svg(t_ord_vals, "#6366f1")
+                from src.config.ui_config import CHART_THEMES
+                theme_name = st.session_state.get("chart_theme", "✨ Emerald Cyberpunk")
+                theme_cfg = CHART_THEMES.get(theme_name, CHART_THEMES["✨ Emerald Cyberpunk"])
+
+                s_qty = _generate_sparkline_svg(t_qty_vals, theme_cfg.get("spark_qty", "#06b6d4"))
+                s_rev = _generate_sparkline_svg(t_rev_vals, theme_cfg.get("spark_rev", "#10b981"))
+                s_ord = _generate_sparkline_svg(t_ord_vals, theme_cfg.get("spark_ord", "#3b82f6"))
                 
                 # For Basket Size trend (Average Basket Value per hour)
                 t_bv_vals = [ (r / o if o > 0 else 0) for r, o in zip(t_rev_vals, t_ord_vals)]
-                s_bv = _generate_sparkline_svg(t_bv_vals, "#f59e0b")
+                s_bv = _generate_sparkline_svg(t_bv_vals, theme_cfg.get("spark_bv", "#f59e0b"))
         except Exception as e:
             log_system_event("SPARKLINE_ERROR", f"Failed to generate sparklines: {e}")
 
-    m_gross_rev = m_df["Gross Amount"].sum() if "Gross Amount" in m_df.columns else (
-        m_df["Total Amount"].sum() if "Total Amount" in m_df.columns else m_rev
-    )
-    m_cashback_disc = m_df["Cashback Discount"].sum() if "Cashback Discount" in m_df.columns else 0.0
-    # Actual Net Revenue = Gross Revenue − Cashback/Discount fees
+    # ── Robust Gross Revenue, Cashback, and Net Revenue Calculation ──
+    if "Cashback Discount" in m_df.columns and (m_df["Cashback Discount"] > 0).any():
+        m_cashback_disc = float(m_df["Cashback Discount"].sum())
+    else:
+        cb_cols = [c for c in ["Order Discount Total", "Fee Discount Total", "Item Discount"] if c in m_df.columns]
+        if cb_cols:
+            m_cashback_disc = float(m_df[cb_cols].sum().sum())
+        elif "Subtotal Cost" in m_df.columns and "Item Cost" in m_df.columns and "Quantity" in m_df.columns:
+            m_cashback_disc = float(((m_df["Subtotal Cost"] - m_df["Item Cost"]).clip(lower=0) * m_df["Quantity"]).sum())
+        else:
+            m_cashback_disc = 0.0
+
+    if "Gross Amount" in m_df.columns:
+        m_gross_rev = float(m_df["Gross Amount"].sum())
+    elif "Subtotal Cost" in m_df.columns and "Quantity" in m_df.columns:
+        m_gross_rev = float((m_df["Subtotal Cost"] * m_df["Quantity"]).sum())
+    else:
+        m_gross_rev = m_rev + m_cashback_disc
+
     m_net_rev = m_gross_rev - m_cashback_disc
     m_loss_pct = (m_cashback_disc / m_gross_rev * 100) if m_gross_rev > 0 else 0.0
     m_gross_bv = (m_gross_rev / m_ord) if m_ord > 0 else 0.0
