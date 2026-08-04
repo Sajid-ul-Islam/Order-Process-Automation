@@ -540,9 +540,159 @@
           "revenue": 4662.0
         }
       ]
+    },
+    {
+      "ts": "2026-08-04T14:50:29.226869+06:00",
+      "label": "Today",
+      "revenue": 95147.0,
+      "orders": 34,
+      "qty": 70,
+      "aov": 2798.44,
+      "top_products": [
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 30",
+          "revenue": 7470.0
+        },
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 34",
+          "revenue": 7470.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 34",
+          "revenue": 4980.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 32",
+          "revenue": 4662.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 34",
+          "revenue": 4662.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-04T14:50:33.896636+06:00",
+      "label": "Today",
+      "revenue": 76482.0,
+      "orders": 27,
+      "qty": 53,
+      "aov": 2832.67,
+      "top_products": [
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 34",
+          "revenue": 7470.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 30",
+          "revenue": 7470.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 34",
+          "revenue": 4980.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 34",
+          "revenue": 4662.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 32",
+          "revenue": 4662.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-04T14:54:11.189854+06:00",
+      "label": "Today",
+      "revenue": 95147.0,
+      "orders": 34,
+      "qty": 70,
+      "aov": 2798.44,
+      "top_products": [
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 34",
+          "revenue": 7470.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 30",
+          "revenue": 7470.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 34",
+          "revenue": 4980.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 32",
+          "revenue": 4662.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 34",
+          "revenue": 4662.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-04T14:54:39.768137+06:00",
+      "label": "Today",
+      "revenue": 76482.0,
+      "orders": 27,
+      "qty": 53,
+      "aov": 2832.67,
+      "top_products": [
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 30",
+          "revenue": 7470.0
+        },
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 34",
+          "revenue": 7470.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 34",
+          "revenue": 4980.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 34",
+          "revenue": 4662.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 32",
+          "revenue": 4662.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-04T14:59:51.442944+06:00",
+      "label": "Today",
+      "revenue": 84436.0,
+      "orders": 29,
+      "qty": 59,
+      "aov": 2911.59,
+      "top_products": [
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 34",
+          "revenue": 7470.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 30",
+          "revenue": 7470.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 34",
+          "revenue": 4980.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 34",
+          "revenue": 4662.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 32",
+          "revenue": 4662.0
+        }
+      ]
     }
   ],
-  "daily_revenue": 1251827.0,
-  "daily_orders": 469,
-  "daily_qty": 961
+  "daily_revenue": 1679521.0,
+  "daily_orders": 620,
+  "daily_qty": 1266
 }

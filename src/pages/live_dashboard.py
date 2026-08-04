@@ -345,6 +345,11 @@ def _render_dispatch_export():
 
     export_df = pd.concat(parts, ignore_index=True)
 
+    # Sort chronologically by modification date (most recent dispatches first)
+    sort_cols = [c for c in ["mod_dt_parsed", "dt_parsed"] if c in export_df.columns]
+    if sort_cols:
+        export_df = export_df.sort_values(by=sort_cols, ascending=False, na_position="last").reset_index(drop=True)
+
     rename_map = {
         "Full Name (Billing)": "Customer",
         "Phone (Billing)": "Phone",

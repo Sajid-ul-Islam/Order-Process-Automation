@@ -181,40 +181,29 @@ def prepare_granular_data(df, selected_cols):
             df.loc[df["Quantity"] < 0, "Quantity"] = 0
 
         # Optimized Categorization & Extraction (Vectorized Maps)
+        from src.utils.product import is_bundle_or_combo
+
         unique_names = df["Product Name"].unique()
-        total_names = len(unique_names)
-        
         name_cat_map = {}
         name_subcat_map = {}
         name_size_map = {}
         name_clean_map = {}
-        
-        progress_text = "Analyzing product intelligence..."
-        progress_bar = st.progress(0, text=progress_text) if total_names > 0 else None
-        
-        for i, name in enumerate(unique_names):
+        name_bundle_map = {}
+
+        for name in unique_names:
             cat = get_category_for_sales(name)
             name_cat_map[name] = cat
             name_subcat_map[name] = get_sub_category_for_sales(name, cat)
             name_size_map[name] = get_size_from_name(name)
             name_clean_map[name] = get_base_product_name(name)
-            
-            if progress_bar and (i % max(1, total_names // 20) == 0 or i == total_names - 1):
-                progress_bar.progress((i + 1) / total_names, text=f"{progress_text} ({i + 1}/{total_names})")
-                
-        if progress_bar:
-            progress_bar.empty()
-            
+            name_bundle_map[name] = is_bundle_or_combo(name, "", cat)
+
         df["Category"] = df["Product Name"].map(name_cat_map)
         df["Sub-Category"] = df["Product Name"].map(name_subcat_map)
         df["Size"] = df["Product Name"].map(name_size_map)
         df["Clean_Product"] = df["Product Name"].map(name_clean_map)
         df["Filter_Identity"] = df["Clean_Product"].astype(str) + " [" + df["SKU"].astype(str) + "]"
-
-        from src.utils.product import is_bundle_or_combo
-        df["Is_Bundle_Combo"] = df.apply(
-            lambda r: is_bundle_or_combo(r.get("Product Name"), r.get("SKU"), r.get("Category")), axis=1
-        )
+        df["Is_Bundle_Combo"] = df["Product Name"].map(name_bundle_map)
 
         if "Subtotal Cost" in df.columns:
             df["Subtotal Cost"] = pd.to_numeric(df["Subtotal Cost"].astype(str).str.replace(r"[^\d.]", "", regex=True), errors="coerce").fillna(df["Item Cost"])

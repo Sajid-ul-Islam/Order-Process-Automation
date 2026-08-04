@@ -220,7 +220,7 @@ def _get_today_modified_shipped_params() -> dict:
     return {
         "per_page": 100,
         "modified_after": prev_cutoff_utc.strftime("%Y-%m-%dT%H:%M:%S"),
-        "status": "shipped,completed,confirmed,processing",
+        "status": "any",
         "orderby": "modified",
         "order": "desc",
     }
@@ -231,10 +231,10 @@ def _get_today_modified_shipped_params() -> dict:
 
 
 def _get_global_open_params() -> dict:
-    """Build API params for fetching all open/hold orders."""
+    """Build API params for fetching all open/hold/processing orders."""
     return {
         "per_page": 100,
-        "status": "on-hold,pending,waiting,confirmed",
+        "status": "on-hold,pending,waiting,confirmed,processing",
         "orderby": "date",
         "order": "desc",
     }
@@ -387,7 +387,7 @@ def _partition_operational_data(df_full):
 
     df_live = df_full[
         ((~is_shipped) & (df_full["dt_parsed"] >= prev_cutoff))
-        | shipped_recent
+        | is_shipped
         | is_confirmed | is_processing
     ].copy()
 
@@ -428,7 +428,7 @@ def _build_result_payload(df_to_return, slot_label, modified_at, partitions, slo
 # ── Main public functions ────────────────────────────────────────────────────
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=60)
 def load_from_woocommerce():
     """Loads live data from WooCommerce REST API orders."""
     wc_info = get_woocommerce_config(required=False)
@@ -479,6 +479,7 @@ def load_from_woocommerce():
             df_full = _apply_shipped_history(df_full)
 
         now_str = datetime.now(tz_bd).strftime("%Y-%m-%d %H:%M:%S")
+        st.session_state["live_sync_time"] = datetime.now()
 
         if sync_mode == "Operational Cycle":
             df_live, df_prev, df_backlog, slot_label, slots = _partition_operational_data(df_full)
