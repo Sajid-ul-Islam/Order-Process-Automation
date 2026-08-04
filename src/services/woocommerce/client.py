@@ -34,9 +34,50 @@ def _flatten_order(order: dict) -> list[dict]:
     if ptc_consignment_id and str(ptc_consignment_id).strip():
         status = "shipped"
 
+    # Extract order level discounts, fee lines, & coupons
+    ord_discount_total = float(order.get("discount_total", 0) or 0)
+    coupons = [c.get("code") for c in order.get("coupon_lines", []) if isinstance(c, dict) and c.get("code")]
+    coupon_str = ", ".join(coupons) if coupons else ""
+    
+    # Process fee_lines: Negative fees = discount/cashback, Positive fees = extra fee
+    fee_lines = order.get("fee_lines", [])
+    fee_discount_total = 0.0
+    extra_fee_total = 0.0
+    fee_notes = []
+    
+    for fee in fee_lines:
+        if isinstance(fee, dict):
+            f_val = float(fee.get("total", 0) or 0)
+            f_name = fee.get("name", "Fee")
+            if f_val < 0:
+                fee_discount_total += abs(f_val)
+                fee_notes.append(f"{f_name}: -TK {abs(f_val):,.0f}")
+            elif f_val > 0:
+                extra_fee_total += f_val
+                fee_notes.append(f"{f_name}: +TK {f_val:,.0f}")
 
-    return [
-        {
+    line_items = order.get("line_items", [])
+    num_items = len(line_items) if line_items else 1
+    split_ord_discount = ord_discount_total / num_items if num_items > 0 else 0.0
+    split_fee_discount = fee_discount_total / num_items if num_items > 0 else 0.0
+    split_extra_fee = extra_fee_total / num_items if num_items > 0 else 0.0
+    fee_notes_str = ", ".join(fee_notes) if fee_notes else ""
+
+    flattened = []
+    for item in line_items:
+        qty_raw = item.get("quantity", 1)
+        qty_num = float(str(qty_raw if qty_raw is not None else "1").replace(",", "")) if float(str(qty_raw if qty_raw is not None else "1").replace(",", "")) > 0 else 1.0
+        
+        tot_val = float(item.get("total", 0) or 0)
+        sub_val = float(item.get("subtotal", tot_val) or tot_val)
+        
+        eff_unit_cost = tot_val / qty_num if tot_val > 0 else float(item.get("price", 0) or 0)
+        std_unit_cost = sub_val / qty_num if sub_val > 0 else eff_unit_cost
+        
+        item_disc = max(0.0, sub_val - tot_val)
+        total_cashback_disc = item_disc + split_ord_discount + split_fee_discount
+
+        flattened.append({
             "Order ID": oid,
             "Order Number": onum,
             "Order Date": d_val,
@@ -49,20 +90,23 @@ def _flatten_order(order: dict) -> list[dict]:
             "State Name (Billing)": bill.get("state", ""),
             "Item Name": item.get("name"),
             "SKU": item.get("sku", ""),
-            # Use line item total / qty to get effective unit price AFTER all discounts/cashback
-            # This fixes revenue being overstated when discounts or cashback are applied
-            "Item Cost": (
-                float(item.get("total", 0)) / float(item.get("quantity", 1))
-                if item.get("quantity") is not None and float(str(item.get("quantity", "0")).replace(",", "")) > 0
-                else item.get("price")
-            ),
-            "Quantity": item.get("quantity"),
+            # Effective Unit Price (Net after line item discounts/cashback)
+            "Item Cost": eff_unit_cost,
+            # Standard Unit Price (Gross before line item discounts/cashback)
+            "Subtotal Cost": std_unit_cost,
+            "Item Discount": item_disc,
+            "Order Discount Total": ord_discount_total,
+            "Fee Discount Total": split_fee_discount,
+            "Extra Fee": split_extra_fee,
+            "Cashback Discount": total_cashback_disc,
+            "Fee Notes": fee_notes_str,
+            "Coupons": coupon_str,
+            "Quantity": qty_num,
             "Order Total Amount": order.get("total"),
             "Payment Method Title": pmt,
             "Pathao Consignment ID": ptc_consignment_id,
-        }
-        for item in order.get("line_items", [])
-    ]
+        })
+    return flattened
 
 
 # ── API fetch helpers ────────────────────────────────────────────────────────
@@ -86,7 +130,7 @@ def _fetch_wc_page(url: str, params: dict, auth: HTTPBasicAuth, page: int):
 
 def _fetch_wc_batch(url: str, params: dict, auth: HTTPBasicAuth) -> list:
     """Fetch all pages of WooCommerce orders concurrently and return flattened rows."""
-    fields = "id,number,date_created,date_modified,status,billing,shipping,payment_method_title,line_items,total,meta_data"
+    fields = "id,number,date_created,date_modified,status,billing,shipping,payment_method_title,line_items,total,discount_total,shipping_total,fee_lines,coupon_lines,meta_data"
     params["_fields"] = fields
 
 

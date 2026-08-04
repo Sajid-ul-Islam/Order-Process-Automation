@@ -68,19 +68,34 @@ def _render_ingestion_mode_metrics(granular_df, dummy_mapping, last_updated):
         with st.container():
             st.subheader("Core Metrics")
             m_qty = summ['Total Qty'].sum()
-            m_rev = summ['Total Amount'].sum()
             m_ord = basket.get("total_orders", 0) if basket else 0
             m_bv = basket.get('avg_customer_value', basket.get('avg_basket_value', 0)) if basket else 0
             if pd.isna(m_bv):
                 m_bv = 0
 
+            # ── Cashback-adjusted revenue (same logic as live dashboard KPIs) ──
+            _df = active_df if (active_df is not None and not active_df.empty) else granular_df
+            m_gross_rev = float(_df["Gross Amount"].sum()) if (_df is not None and "Gross Amount" in _df.columns) else (
+                float(_df["Total Amount"].sum()) if (_df is not None and "Total Amount" in _df.columns) else
+                float(summ['Total Amount'].sum())
+            )
+            m_cashback_disc = float(_df["Cashback Discount"].sum()) if (_df is not None and "Cashback Discount" in _df.columns) else 0.0
+            m_net_rev = m_gross_rev - m_cashback_disc
+            m_loss_pct = (m_cashback_disc / m_gross_rev * 100) if m_gross_rev > 0 else 0.0
+            m_net_bv = (m_net_rev / m_ord) if m_ord > 0 else float(m_bv)
+            m_gross_bv = (m_gross_rev / m_ord) if m_ord > 0 else float(m_bv)
+
+            _badge_style = 'font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;'
+            rev_badge = f'<div style="{_badge_style}">Gross ৳{int(m_gross_rev):,} || Cashback ৳{int(m_cashback_disc):,}</div>' if m_cashback_disc > 0 else ''
+            bv_badge = f'<div style="{_badge_style}">Gross ৳{int(m_gross_bv):,} || Lost Revenue -{m_loss_pct:.0f}%</div>' if m_cashback_disc > 0 else ''
+
             label1 = get_items_sold_label(last_updated).upper()
             ingestion_html = (
                 '<div class="metric-container">'
                 f'<div class="metric-card"><div><div class="metric-label">{label1}</div><div class="metric-value">{m_qty:,.0f}</div></div><div class="metric-icon">📦</div></div>'
-                f'<div class="metric-card"><div><div class="metric-label">REVENUE</div><div class="metric-value">TK {m_rev:,.0f}</div></div><div class="metric-icon">৳</div></div>'
+                f'<div class="metric-card"><div><div class="metric-label">ACTUAL NET REVENUE</div><div class="metric-value">TK {int(m_net_rev):,}</div>{rev_badge}</div><div class="metric-icon">৳</div></div>'
                 f'<div class="metric-card"><div><div class="metric-label">NUMBER OF ORDERS</div><div class="metric-value">{m_ord:,.0f}</div></div><div class="metric-icon">🛒</div></div>'
-                f'<div class="metric-card"><div><div class="metric-label">BASKET SIZE</div><div class="metric-value">TK {m_bv:,.0f}</div></div><div class="metric-icon">🛍️</div></div>'
+                f'<div class="metric-card"><div><div class="metric-label">BASKET SIZE</div><div class="metric-value">TK {int(m_net_bv):,}</div>{bv_badge}</div><div class="metric-icon">🛍️</div></div>'
                 '</div>'
             )
             st.markdown(ingestion_html, unsafe_allow_html=True)
@@ -228,19 +243,32 @@ def _stream_ai_briefing(summ, top, active_df, today_rev, today_qty, today_orders
         top_list = [f"{row.get('Product Name', 'Unknown')} ({row.get('Total Qty', 0)} units, ৳{row.get('Total Amount', 0):,.0f})" for _, row in top_5.iterrows()]
         top_spotlight_str = "\nProduct Spotlight (Top 5 Revenue Generators):\n" + "\n".join([f"- {item}" for item in top_list])
 
+    gross_rev = active_df["Gross Amount"].sum() if (active_df is not None and "Gross Amount" in active_df.columns) else today_rev
+    cashback_disc = active_df["Cashback Discount"].sum() if (active_df is not None and "Cashback Discount" in active_df.columns) else max(0.0, gross_rev - today_rev)
+    loss_pct = (cashback_disc / gross_rev * 100) if gross_rev > 0 else 0.0
+
+    gross_aov = (gross_rev / today_orders) if today_orders > 0 else today_aov
+    net_aov = (today_rev / today_orders) if today_orders > 0 else today_aov
+    cb_per_basket = (cashback_disc / today_orders) if today_orders > 0 else 0.0
+    pct_basket_lost = (cb_per_basket / gross_aov * 100) if gross_aov > 0 else 0.0
+
     prompt = (
         f"Generate an executive briefing for today's e-commerce operations.\n"
         f"Today's key metrics:\n"
-        f"- Revenue: ৳{today_rev:,.0f}\n"
+        f"- Net Realized Revenue (After Cashback): ৳{today_rev:,.0f}\n"
+        f"- Gross Revenue (Pre-Discount): ৳{gross_rev:,.0f}\n"
+        f"- Total Cashback / Discount Fee Given: ৳{cashback_disc:,.0f} ({loss_pct:.1f}% revenue lost)\n"
+        f"- Net Basket Size: ৳{net_aov:,.0f}\n"
+        f"- Gross Basket Size: ৳{gross_aov:,.0f}\n"
+        f"- Basket Cashback Impact: -৳{cb_per_basket:,.0f} per basket ({pct_basket_lost:.1f}% lost/basket)\n"
         f"- Orders: {today_orders}\n"
-        f"- Items Sold: {today_qty}\n"
-        f"- Basket Size: ৳{today_aov:,.0f}\n\n"
+        f"- Items Sold: {today_qty}\n\n"
         f"Dispatch Metrics:\n"
         f"- Shipped via Pathao: {dm.get('pathao_count', 0)}\n"
         f"- Shipped via Other: {dm.get('other_count', 0)}\n"
         f"{top_spotlight_str}\n\n"
         f"Based on the provided context data (sales_summary, top_products), write a concise, professional, and insightful narrative.\n"
-        f"Highlight key trends, explicitly analyze and summarize the \"Product Spotlight\" to point out what is driving revenue, and provide a concluding remark on the day's performance.\n"
+        f"Highlight Net Realized Revenue as the primary headline figure, explicitly analyze cashback/fee discount impact on overall revenue & basket size, summarize the \"Product Spotlight\" to point out what is driving revenue, and provide a concluding remark on the day's performance.\n"
         f"The entire response should be a single block of text formatted for WhatsApp (using markdown like *bold* and _italic_)."
     )
 
@@ -588,20 +616,42 @@ def render_dashboard_output(
     # ── Products Spotlight & SKU-Wise Report ──
     _render_spotlight_and_sku_report(top, color_map, wc_raw_mapping)
 
+    # ── Revenue & Cashback Impact Analysis (Ingestion mode) ──────────────────
+    if not is_operational and active_df is not None and not active_df.empty:
+        has_cashback = "Cashback Discount" in active_df.columns and (active_df["Cashback Discount"] > 0).any()
+        if has_cashback:
+            st.divider()
+            compare_cb = st.toggle(
+                "⚖️ Compare Revenue vs Cashback/Fee",
+                value=st.session_state.get("ingest_compare_cashback", False),
+                key="ingest_compare_cashback",
+            )
+            if compare_cb:
+                from src.components.dashboard.dashboard_metrics import render_revenue_cashback_comparison_section
+                render_revenue_cashback_comparison_section(active_df, raw_df=None)
+
     # ── Executive Briefing ──
     if is_operational:
         st.subheader("📱 Executive Briefing")
 
-    today_rev = summ['Total Amount'].sum() if summ is not None else 0
     today_qty = summ['Total Qty'].sum() if summ is not None else 0
     today_orders = basket.get('total_orders', 0) if basket else 0
     today_aov = basket.get('avg_customer_value', basket.get('avg_basket_value', 0)) if basket else 0
 
     dm = None
     final_report_text = ""
+    today_rev = float(summ['Total Amount'].sum()) if summ is not None else 0.0  # default; overridden below for operational mode
     if is_operational:
         dm = get_dispatch_metrics(active_df, today_orders)
-        report_text = generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, dm, top)
+        gross_rev = float(active_df["Gross Amount"].sum()) if (active_df is not None and "Gross Amount" in active_df.columns) else (
+            float(active_df["Total Amount"].sum()) if (active_df is not None and "Total Amount" in active_df.columns) else
+            float(summ['Total Amount'].sum() if summ is not None else 0)
+        )
+        cashback_disc = float(active_df["Cashback Discount"].sum()) if (active_df is not None and "Cashback Discount" in active_df.columns) else 0.0
+        # Net revenue = Gross − Cashback (consistent with KPI cards)
+        today_rev = gross_rev - cashback_disc
+        net_aov = (today_rev / today_orders) if today_orders > 0 else float(today_aov)
+        report_text = generate_executive_briefing(today_rev, today_qty, today_orders, net_aov, dm, top, gross_rev=gross_rev, cashback_disc=cashback_disc)
 
         current_data_fingerprint = f"{today_rev}_{today_orders}_{dm.get('pathao_count', 0)}_{dm.get('other_count', 0)}"
 

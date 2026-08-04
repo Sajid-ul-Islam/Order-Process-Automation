@@ -8,27 +8,25 @@ from src.utils.logging import log_system_event
 
 
 def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
-    """Filters a DataFrame to shipped statuses, optionally narrowing by slot boundaries.
-
-    For Active/Today mode (non-comparison), uses today's calendar date in BD timezone
-    (midnight → now) so that ALL orders shipped today are captured, not just those
-    within the operational slot window.
+    """Filters a DataFrame to shipped statuses, narrowing strictly to orders shipped today for Today mode.
 
     Args:
         df: The order DataFrame to filter.
         nav_mode: Current navigation mode ('Today', 'Prev', 'Backlog').
-        is_comparison: If True, applies the comparison slot (opposite of main slot).
+        is_comparison: If True, applies the comparison slot.
 
     Returns:
         Filtered DataFrame containing only shipped orders within the relevant window.
     """
     import streamlit as st
-    from datetime import timedelta, timezone
+    from datetime import datetime, timedelta, timezone
     from src.config.constants import SHIPPED_STATUSES
 
-    status_col = "Order Status" if "Order Status" in df.columns else "Status" if "Status" in df.columns else None
+    if df is None or df.empty:
+        return df
 
-    if status_col is None or df.empty:
+    status_col = "Order Status" if "Order Status" in df.columns else "Status" if "Status" in df.columns else None
+    if status_col is None:
         return df
 
     shipped_mask = df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES)
@@ -37,18 +35,46 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     if shipped_df.empty:
         return shipped_df
 
-    # ── Operational slot boundaries (for Today, Prev, or comparison slots) ──
+    mod_col = None
+    if "mod_dt_parsed" in shipped_df.columns:
+        mod_col = "mod_dt_parsed"
+    elif "Order Date Modified" in shipped_df.columns:
+        mod_col = "Order Date Modified"
+
+    if nav_mode == "Today" and not is_comparison:
+        # Strictly filter to orders modified/shipped TODAY (BD Time UTC+6)
+        tz_bd = timezone(timedelta(hours=6))
+        today_bd = datetime.now(tz_bd).date()
+
+        if mod_col:
+            dt_series = pd.to_datetime(shipped_df[mod_col], errors="coerce")
+            shipped_today = shipped_df[dt_series.dt.date == today_bd]
+            if not shipped_today.empty:
+                return shipped_today
+
+        # Fallback to order date column if mod_dt_parsed is missing or empty
+        date_col = "dt_parsed" if "dt_parsed" in shipped_df.columns else "Order Date" if "Order Date" in shipped_df.columns else None
+        if date_col:
+            dt_create = pd.to_datetime(shipped_df[date_col], errors="coerce")
+            shipped_today = shipped_df[dt_create.dt.date == today_bd]
+            if not shipped_today.empty:
+                return shipped_today
+
+        return shipped_df
+
+    # ── Operational slot boundaries for Prev mode or comparison slots ──
     slot_key = "wc_curr_slot" if nav_mode == "Today" else "wc_prev_slot" if nav_mode == "Prev" else None
     if is_comparison:
         slot_key = "wc_prev_slot" if nav_mode == "Today" else "wc_curr_slot" if nav_mode == "Prev" else None
 
     slot = st.session_state.get(slot_key) if slot_key else None
 
-    if slot and "mod_dt_parsed" in shipped_df.columns:
-        slot_start, slot_end = slot
+    if slot and mod_col:
+        slot_start, slot_end = pd.to_datetime(slot[0]), pd.to_datetime(slot[1])
+        dt_series = pd.to_datetime(shipped_df[mod_col], errors="coerce")
         filtered = shipped_df[
-            (shipped_df["mod_dt_parsed"] >= slot_start) &
-            (shipped_df["mod_dt_parsed"] <= slot_end)
+            (dt_series >= slot_start) &
+            (dt_series <= slot_end)
         ]
         return filtered
 
@@ -181,7 +207,26 @@ def prepare_granular_data(df, selected_cols):
             lambda r: is_bundle_or_combo(r.get("Product Name"), r.get("SKU"), r.get("Category")), axis=1
         )
 
+        if "Subtotal Cost" in df.columns:
+            df["Subtotal Cost"] = pd.to_numeric(df["Subtotal Cost"].astype(str).str.replace(r"[^\d.]", "", regex=True), errors="coerce").fillna(df["Item Cost"])
+        else:
+            df["Subtotal Cost"] = df["Item Cost"]
+
+        df["Gross Amount"] = df["Subtotal Cost"] * df["Quantity"]
         df["Total Amount"] = df["Item Cost"] * df["Quantity"]
+
+        if "Cashback Discount" in df.columns:
+            df["Cashback Discount"] = pd.to_numeric(df["Cashback Discount"].astype(str).str.replace(r"[^\d.]", "", regex=True), errors="coerce").fillna(0)
+        else:
+            df["Cashback Discount"] = (df["Gross Amount"] - df["Total Amount"]).clip(lower=0)
+
+        # Handle negative fee lines (if negative sign '-' is present, it is a fee discount/cashback)
+        fee_cols = [c for c in df.columns if c.lower() in ["extra fee", "fee", "fees", "fee discount total"]]
+        for f_c in fee_cols:
+            raw_fees = pd.to_numeric(df[f_c].astype(str).str.replace(r"[^\d.-]", "", regex=True), errors="coerce").fillna(0)
+            neg_fees = raw_fees < 0
+            if neg_fees.any():
+                df.loc[neg_fees, "Cashback Discount"] = df.loc[neg_fees, "Cashback Discount"] + raw_fees[neg_fees].abs()
 
 
         # Ensure Order Status and other operational columns are present
@@ -331,12 +376,12 @@ def aggregate_data(df, selected_cols):
                 .collect()
                 .to_pandas()
             )
-            avg_cust_val = customer_groups["Total Amount"].mean()
-            basket_metrics["avg_customer_value"] = float(avg_cust_val) if pd.notna(avg_cust_val) else 0
-            basket_metrics["unique_customers"] = len(customer_groups)
         else:
             basket_metrics["avg_customer_value"] = basket_metrics["avg_basket_value"]
             basket_metrics["unique_customers"] = basket_metrics["total_orders"]
+            
+        basket_metrics["total_gross_revenue"] = float(df["Gross Amount"].sum()) if "Gross Amount" in df.columns else float(df["Total Amount"].sum())
+        basket_metrics["total_cashback_discount"] = float(df["Cashback Discount"].sum()) if "Cashback Discount" in df.columns else 0.0
 
         return drilldown, summary, top_items, basket_metrics
     except Exception as e:
@@ -379,7 +424,7 @@ def get_dispatch_metrics(active_df, total_orders=0):
     return metrics
 
 
-def generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, dm, top, prev_rev=None, prev_orders=None, forecast_str=""):
+def generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, dm, top, prev_rev=None, prev_orders=None, forecast_str="", gross_rev=None, cashback_disc=None):
     """Generates the single source of truth narrative for the Executive Briefing."""
     from datetime import datetime, timedelta, timezone
     
@@ -387,15 +432,44 @@ def generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, d
     if prev_rev is not None:
         rev_trend = " 📈" if today_rev >= prev_rev else " 📉"
         
-    rev_line = f"💰 *Shipped Revenue:* ৳{today_rev:,.0f}{rev_trend}" if prev_rev is not None else f"💰 *Shipped Revenue:* ৳{today_rev:,.0f}"
+    net_rev = today_rev
+    g_rev = gross_rev if gross_rev is not None else net_rev
+    cb_disc = cashback_disc if cashback_disc is not None else max(0.0, g_rev - net_rev)
+    loss_pct = (cb_disc / g_rev * 100) if g_rev > 0 else 0.0
+
+    gross_aov = (g_rev / today_orders) if today_orders > 0 else today_aov
+    net_aov = (net_rev / today_orders) if today_orders > 0 else today_aov
+    cb_per_basket = (cb_disc / today_orders) if today_orders > 0 else 0.0
+    pct_basket_lost = (cb_per_basket / gross_aov * 100) if gross_aov > 0 else 0.0
+
+    rev_line = f"💵 *NET REALIZED REVENUE (After Cashback):* ৳{net_rev:,.0f}{rev_trend}" if prev_rev is not None else f"💵 *NET REALIZED REVENUE (After Cashback):* ৳{net_rev:,.0f}"
 
     report_lines = [
         f"📊 *DEEN-OPS Executive Briefing*",
         f"📅 {datetime.now(timezone(timedelta(hours=6))).strftime('%A, %d %B %Y')}",
         "",
         rev_line,
+        f"🏷️ *Gross Revenue (Pre-Discount):* ৳{g_rev:,.0f}",
+    ]
+
+    if cb_disc > 0:
+        report_lines.extend([
+            f"💸 *Total Cashback & Fee Discounts:* -৳{cb_disc:,.0f} ({loss_pct:.1f}% revenue lost)",
+        ])
+
+    report_lines.extend([
+        "",
         f"📦 *Shipped Items:* {today_qty:,.0f}",
-        f"🛍️ *Avg per Customer:* ৳{today_aov:,.0f}",
+        f"🛍️ *Net Basket Value (Post-Cashback):* ৳{net_aov:,.0f}",
+    ])
+
+    if cb_disc > 0:
+        report_lines.extend([
+            f"🛒 *Gross Basket Value (Pre-Discount):* ৳{gross_aov:,.0f}",
+            f"📉 *Cashback Lost per Basket:* -৳{cb_per_basket:,.0f} ({pct_basket_lost:.1f}% lost/basket)",
+        ])
+
+    report_lines.extend([
         "",
         f"🚚 *Last Shipped Order:* {dm.get('last_shipped_order', 'N/A')}",
         f"🖨️ *Last Pathao Print:* {dm.get('last_pathao_print', 'N/A')}",
@@ -404,10 +478,10 @@ def generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, d
         f"🔄 *Exchange:* {dm.get('exchange_dispatch', 0):,.0f}",
         f"🚀 *Ecom Dispatch:* {dm.get('ecom_dispatch', 0):,.0f}",
         f"🏪 *Outlet Dispatch:* {dm.get('outlet_dispatch', 0):,.0f}",
-    ]
+    ])
 
     if prev_rev is not None:
-        report_lines.extend(["", f"📉 *Yesterday's Shipped Revenue:* ৳{prev_rev:,.0f} ({prev_orders} orders)"])
+        report_lines.extend(["", f"📉 *Yesterday's Net Shipped Revenue:* ৳{prev_rev:,.0f} ({prev_orders} orders)"])
         
     if forecast_str:
         report_lines.append(forecast_str)

@@ -136,13 +136,19 @@ def generate_report_data():
         "raw_sales_data": df_live,
     }
     
+    gross_rev = df_live["Gross Amount"].sum() if (df_live is not None and "Gross Amount" in df_live.columns) else today_rev
+    cashback_disc = df_live["Cashback Discount"].sum() if (df_live is not None and "Cashback Discount" in df_live.columns) else max(0.0, gross_rev - today_rev)
+    loss_pct = (cashback_disc / gross_rev * 100) if gross_rev > 0 else 0.0
+
     prompt = f"""
     Generate a high-impact executive briefing for today's e-commerce operations.
     
     *Core Metrics:*
-    - Today: ৳{today_rev:,.0f} revenue, {today_orders} orders ({today_qty} items).
-    - Avg Basket: ৳{today_aov:,.0f}.
-    - Yesterday: ৳{prev_rev:,.0f} revenue, {prev_orders} orders.
+    - Today Net Realized Revenue (After Cashback): ৳{today_rev:,.0f} ({today_orders} orders, {today_qty} items).
+    - Gross Revenue (Pre-Discount): ৳{gross_rev:,.0f}.
+    - Total Cashback & Fee Discounts: ৳{cashback_disc:,.0f} ({loss_pct:.1f}% revenue lost).
+    - Net Basket Size: ৳{today_aov:,.0f}.
+    - Yesterday Net Revenue: ৳{prev_rev:,.0f} revenue, {prev_orders} orders.
     - Logistics: {dm.get('pathao_count', 0)} Pathao, {dm.get('other_count', 0)} other.
     - Prediction: {forecast_str}
 
@@ -151,7 +157,7 @@ def generate_report_data():
 
     *Instructions:*
     Write a structured, professional narrative optimized for WhatsApp.
-    1. 📊 *Performance Snapshot*: Trend analysis vs yesterday.
+    1. 📊 *Performance Snapshot*: Highlight Net Realized Revenue as the key headline figure and analyze cashback discount impact.
     2. 🏆 *Top Movers*: Highlight categories or SKUs driving today's volume.
     3. 🚚 *Logistics Status*: Efficiency of current dispatch operations.
     4. 💡 *Strategic Outlook*: A concise, actionable tactical note for tomorrow based on metrics and forecasts.
@@ -174,7 +180,8 @@ def generate_report_data():
         from src.processing.data_processing import generate_executive_briefing
         report_text = generate_executive_briefing(
             today_rev, today_qty, today_orders, today_aov, dm, top,
-            prev_rev=prev_rev, prev_orders=prev_orders, forecast_str=forecast_str
+            prev_rev=prev_rev, prev_orders=prev_orders, forecast_str=forecast_str,
+            gross_rev=gross_rev, cashback_disc=cashback_disc
         )
     
     return report_text, df_live, summ, top

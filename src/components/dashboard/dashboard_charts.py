@@ -303,3 +303,175 @@ def render_spotlight(
     fig_top.update_yaxes(automargin=True)
     fig_top.update_xaxes(automargin=True)
     st.plotly_chart(fig_top, use_container_width=True, config={"displayModeBar": False})
+
+
+def render_revenue_cashback_comparison_chart(m_df: pd.DataFrame) -> None:
+    """Render a visual side-by-side comparison chart for Gross Revenue vs Net Revenue vs Cashback Fee."""
+    if m_df is None or m_df.empty:
+        st.info("No data available for revenue comparison.")
+        return
+
+    status_col = "Order Status" if "Order Status" in m_df.columns else "Status" if "Status" in m_df.columns else None
+    
+    # Calculate overall metrics
+    gross_rev = m_df["Gross Amount"].sum() if "Gross Amount" in m_df.columns else m_df["Total Amount"].sum()
+    net_rev = m_df["Total Amount"].sum() if "Total Amount" in m_df.columns else 0
+    cashback_disc = m_df["Cashback Discount"].sum() if "Cashback Discount" in m_df.columns else max(0.0, gross_rev - net_rev)
+    
+    # 1. Overview Bar Chart
+    comp_df = pd.DataFrame([
+        {"Metric": "Gross Revenue (Pre-Discount)", "Amount (TK)": gross_rev, "Category": "Gross Revenue"},
+        {"Metric": "Net Revenue (Post-Cashback)", "Amount (TK)": net_rev, "Category": "Net Revenue"},
+        {"Metric": "Cashback / Discount Fee", "Amount (TK)": cashback_disc, "Category": "Discount / Cashback"},
+    ])
+
+    fig_overview = px.bar(
+        comp_df,
+        x="Metric",
+        y="Amount (TK)",
+        color="Category",
+        text="Amount (TK)",
+        color_discrete_map={
+            "Gross Revenue": "#3b82f6",
+            "Net Revenue": "#10b981",
+            "Discount / Cashback": "#f59e0b",
+        },
+        title="Overall Revenue Stream Comparison",
+    )
+    fig_overview.update_traces(texttemplate='TK %{text:,.0f}', textposition='outside')
+    fig_overview.update_layout(
+        margin=dict(t=40, b=20, l=10, r=10),
+        showlegend=False,
+        yaxis_title="Amount (TK)",
+        xaxis_title="",
+    )
+
+    # 2. Status Breakdown if status_col exists
+    if status_col:
+        status_grp = m_df.groupby(status_col).agg({
+            "Gross Amount": "sum" if "Gross Amount" in m_df.columns else "count",
+            "Total Amount": "sum" if "Total Amount" in m_df.columns else "count",
+            "Cashback Discount": "sum" if "Cashback Discount" in m_df.columns else "count",
+        }).reset_index()
+        
+        status_melt = status_grp.melt(
+            id_vars=[status_col],
+            value_vars=["Gross Amount", "Total Amount", "Cashback Discount"],
+            var_name="Revenue Type",
+            value_name="Amount (TK)"
+        )
+        status_melt["Revenue Type"] = status_melt["Revenue Type"].map({
+            "Gross Amount": "Gross Revenue",
+            "Total Amount": "Net Revenue",
+            "Cashback Discount": "Cashback / Fee"
+        })
+
+        fig_status = px.bar(
+            status_melt,
+            x=status_col,
+            y="Amount (TK)",
+            color="Revenue Type",
+            barmode="group",
+            title="Revenue & Cashback Breakdown by Status",
+            color_discrete_map={
+                "Gross Revenue": "#3b82f6",
+                "Net Revenue": "#10b981",
+                "Cashback / Fee": "#f59e0b",
+            }
+        )
+        fig_status.update_layout(margin=dict(t=40, b=20, l=10, r=10), xaxis_title="Order Status", yaxis_title="TK")
+        
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            st.plotly_chart(fig_overview, use_container_width=True)
+        with col_c2:
+            st.plotly_chart(fig_status, use_container_width=True)
+    else:
+        st.plotly_chart(fig_overview, use_container_width=True)
+
+    # ── Pie Charts: Order Share & Revenue Impact ──────────────────────────────
+    id_col = "Order ID" if "Order ID" in m_df.columns else "Order Number" if "Order Number" in m_df.columns else None
+    cb_mask = (m_df["Cashback Discount"] > 0) if "Cashback Discount" in m_df.columns else pd.Series(False, index=m_df.index)
+
+    if cb_mask.any():
+        st.markdown("##### 🥧 Cashback Order Share & Revenue Contribution")
+        pie_c1, pie_c2 = st.columns(2)
+
+        # — Pie 1: % of orders with vs without cashback —
+        if id_col:
+            unique_df = m_df.drop_duplicates(subset=[id_col])
+            cb_ord_ids = m_df.loc[cb_mask, id_col].unique()
+            cb_orders = unique_df[id_col].isin(cb_ord_ids).sum()
+            clean_orders = len(unique_df) - cb_orders
+        else:
+            cb_orders = int(cb_mask.sum())
+            clean_orders = len(m_df) - cb_orders
+
+        pie_orders_df = pd.DataFrame({
+            "Segment": ["With Cashback", "No Cashback"],
+            "Orders": [cb_orders, clean_orders],
+        })
+
+        fig_pie_orders = px.pie(
+            pie_orders_df,
+            names="Segment",
+            values="Orders",
+            title="Orders: Cashback vs No-Cashback",
+            color="Segment",
+            color_discrete_map={
+                "With Cashback": "#f59e0b",
+                "No Cashback": "#10b981",
+            },
+            hole=0.45,
+        )
+        fig_pie_orders.update_traces(
+            textinfo="percent+label",
+            hovertemplate="%{label}<br>%{value:,} orders (%{percent})<extra></extra>",
+        )
+        fig_pie_orders.update_layout(
+            margin=dict(t=50, b=20, l=10, r=10),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=-0.25),
+        )
+
+        # — Pie 2: Gross revenue of cashback'd orders vs clean orders —
+        gross_col = "Gross Amount" if "Gross Amount" in m_df.columns else "Total Amount" if "Total Amount" in m_df.columns else None
+        if gross_col:
+            cb_gross = float(m_df.loc[cb_mask, gross_col].sum())
+            clean_gross = float(m_df.loc[~cb_mask, gross_col].sum())
+        else:
+            cb_gross = float((m_df.loc[cb_mask, "Quantity"] * m_df.loc[cb_mask, "Item Cost"]).sum()) if "Quantity" in m_df.columns else 0.0
+            clean_gross = float(gross_rev) - cb_gross
+
+        pie_rev_df = pd.DataFrame({
+            "Segment": ["Cashback Orders Revenue", "Non-Cashback Orders Revenue"],
+            "Revenue (TK)": [cb_gross, max(0.0, clean_gross)],
+        })
+
+        fig_pie_rev = px.pie(
+            pie_rev_df,
+            names="Segment",
+            values="Revenue (TK)",
+            title="Gross Revenue: Cashback'd vs Clean Orders",
+            color="Segment",
+            color_discrete_map={
+                "Cashback Orders Revenue": "#f59e0b",
+                "Non-Cashback Orders Revenue": "#3b82f6",
+            },
+            hole=0.45,
+        )
+        fig_pie_rev.update_traces(
+            textinfo="percent+label",
+            hovertemplate="%{label}<br>TK %{value:,.0f} (%{percent})<extra></extra>",
+        )
+        fig_pie_rev.update_layout(
+            margin=dict(t=50, b=20, l=10, r=10),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=-0.25),
+        )
+
+        with pie_c1:
+            st.plotly_chart(fig_pie_orders, use_container_width=True)
+        with pie_c2:
+            st.plotly_chart(fig_pie_rev, use_container_width=True)
+

@@ -1,68 +1,5 @@
 [
     {
-        "timestamp": "2026-06-09 10:33:21",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-09 10:33:43",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-09 10:54:16",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-09 10:54:32",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-09 16:17:26",
-        "context": "safe_render",
-        "error": "",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\header.py\", line 64, in render_app_banner\n    b64 = base64.b64encode(f.read()).decode()\nMemoryError\n",
-        "details": {
-            "fallback_msg": "App banner unavailable."
-        }
-    },
-    {
-        "timestamp": "2026-06-10 09:49:04",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-10 10:01:06",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
         "timestamp": "2026-06-10 10:24:41",
         "context": "safe_render",
         "error": "division by zero",
@@ -879,6 +816,69 @@
         "context": "safe_render",
         "error": "render_dashboard_output() got an unexpected keyword argument 'show_core_metrics'",
         "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 292, in <lambda>\n    lambda: render_dashboard_output(\n            ~~~~~~~~~~~~~~~~~~~~~~~^\n        drill,\n        ^^^^^^\n    ...<7 lines>...\n        show_core_metrics=False\n        ^^^^^^^^^^^^^^^^^^^^^^^\n    ),\n    ^\nTypeError: render_dashboard_output() got an unexpected keyword argument 'show_core_metrics'\n",
+        "details": {
+            "fallback_msg": "Dashboard rendering encountered an error."
+        }
+    },
+    {
+        "timestamp": "2026-08-03 17:40:06",
+        "context": "safe_render",
+        "error": "cannot access local variable 'c_df' where it is not associated with a value",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 71, in _refresh_core_metrics\n    if c_df is not None:\n       ^^^^\nUnboundLocalError: cannot access local variable 'c_df' where it is not associated with a value\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 304, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: cannot access local variable 'c_df' where it is not associated with a value\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-03 17:53:48",
+        "context": "safe_render",
+        "error": "name 'm_cb_per_basket' is not defined",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 93, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 241, in render_operational_metrics\n    cb_basket_badge = f'<div style=\"font-size:0.72rem;color:#f59e0b;font-weight:600;margin-top:2px;\">(Gross \u09f3{m_gross_bv:,.0f} - \u09f3{m_cb_per_basket:,.0f} cashback = -{m_loss_pct:.1f}%)</div>' if (m_cashback_disc > 0 and extra_metric_label == \"Basket Size\") else ''\n                                                                                                                                   ^^^^^^^^^^^^^^^\nNameError: name 'm_cb_per_basket' is not defined\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 307, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: name 'm_cb_per_basket' is not defined\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-03 17:54:54",
+        "context": "safe_render",
+        "error": "[Errno 28] No space left on device",
+        "traceback": "OSError: [Errno 28] No space left on device\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 387, in close\n    self._store_workbook()\n    ~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 803, in _store_workbook\n    xml_files = packager._create_package()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\packager.py\", line 138, in _create_package\n    self._write_content_types_file()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\packager.py\", line 500, in _write_content_types_file\n    content._assemble_xml_file()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\contenttypes.py\", line 77, in _assemble_xml_file\n    self._xml_close()\n    ~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\xmlwriter.py\", line 52, in _xml_close\n    self.fh.close()\n    ~~~~~~~~~~~~~^^\nOSError: [Errno 28] No space left on device\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 310, in <lambda>\n    lambda: render_dashboard_output(\n            ~~~~~~~~~~~~~~~~~~~~~~~^\n        drill,\n        ^^^^^^\n    ...<7 lines>...\n        show_core_metrics=False\n        ^^^^^^^^^^^^^^^^^^^^^^^\n    ),\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_output.py\", line 636, in render_dashboard_output\n    excel_report_bytes = export_to_styled_excel(export_data)\n  File \"H:\\Repo\\DEEN-OPS\\src\\services\\exports\\excel_exporter.py\", line 116, in export_to_styled_excel\n    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:\n         ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_base.py\", line 1353, in __exit__\n    self.close()\n    ~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_base.py\", line 1357, in close\n    self._save()\n    ~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_xlsxwriter.py\", line 239, in _save\n    self.book.close()\n    ~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 389, in close\n    raise FileCreateError(e)\nxlsxwriter.exceptions.FileCreateError: [Errno 28] No space left on device\n",
+        "details": {
+            "fallback_msg": "Dashboard rendering encountered an error."
+        }
+    },
+    {
+        "timestamp": "2026-08-03 17:55:01",
+        "context": "safe_render",
+        "error": "[Errno 28] No space left on device",
+        "traceback": "OSError: [Errno 28] No space left on device\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 387, in close\n    self._store_workbook()\n    ~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 803, in _store_workbook\n    xml_files = packager._create_package()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\packager.py\", line 141, in _create_package\n    self._write_worksheet_files()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\packager.py\", line 203, in _write_worksheet_files\n    worksheet._assemble_xml_file()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\worksheet.py\", line 4971, in _assemble_xml_file\n    self._xml_close()\n    ~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\xmlwriter.py\", line 52, in _xml_close\n    self.fh.close()\n    ~~~~~~~~~~~~~^^\nOSError: [Errno 28] No space left on device\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 310, in <lambda>\n    lambda: render_dashboard_output(\n            ~~~~~~~~~~~~~~~~~~~~~~~^\n        drill,\n        ^^^^^^\n    ...<7 lines>...\n        show_core_metrics=False\n        ^^^^^^^^^^^^^^^^^^^^^^^\n    ),\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_output.py\", line 636, in render_dashboard_output\n    excel_report_bytes = export_to_styled_excel(export_data)\n  File \"H:\\Repo\\DEEN-OPS\\src\\services\\exports\\excel_exporter.py\", line 116, in export_to_styled_excel\n    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:\n         ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_base.py\", line 1353, in __exit__\n    self.close()\n    ~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_base.py\", line 1357, in close\n    self._save()\n    ~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_xlsxwriter.py\", line 239, in _save\n    self.book.close()\n    ~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 389, in close\n    raise FileCreateError(e)\nxlsxwriter.exceptions.FileCreateError: [Errno 28] No space left on device\n",
+        "details": {
+            "fallback_msg": "Dashboard rendering encountered an error."
+        }
+    },
+    {
+        "timestamp": "2026-08-03 18:00:12",
+        "context": "safe_render",
+        "error": "[Errno 28] No space left on device",
+        "traceback": "OSError: [Errno 28] No space left on device\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 387, in close\n    self._store_workbook()\n    ~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 803, in _store_workbook\n    xml_files = packager._create_package()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\packager.py\", line 138, in _create_package\n    self._write_content_types_file()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\packager.py\", line 500, in _write_content_types_file\n    content._assemble_xml_file()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\contenttypes.py\", line 77, in _assemble_xml_file\n    self._xml_close()\n    ~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\xmlwriter.py\", line 52, in _xml_close\n    self.fh.close()\n    ~~~~~~~~~~~~~^^\nOSError: [Errno 28] No space left on device\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 310, in <lambda>\n    lambda: render_dashboard_output(\n            ~~~~~~~~~~~~~~~~~~~~~~~^\n        drill,\n        ^^^^^^\n    ...<7 lines>...\n        show_core_metrics=False\n        ^^^^^^^^^^^^^^^^^^^^^^^\n    ),\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_output.py\", line 636, in render_dashboard_output\n    excel_report_bytes = export_to_styled_excel(export_data)\n  File \"H:\\Repo\\DEEN-OPS\\src\\services\\exports\\excel_exporter.py\", line 116, in export_to_styled_excel\n    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:\n         ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_base.py\", line 1353, in __exit__\n    self.close()\n    ~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_base.py\", line 1357, in close\n    self._save()\n    ~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_xlsxwriter.py\", line 239, in _save\n    self.book.close()\n    ~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 389, in close\n    raise FileCreateError(e)\nxlsxwriter.exceptions.FileCreateError: [Errno 28] No space left on device\n",
+        "details": {
+            "fallback_msg": "Dashboard rendering encountered an error."
+        }
+    },
+    {
+        "timestamp": "2026-08-03 18:00:17",
+        "context": "safe_render",
+        "error": "[Errno 28] No space left on device",
+        "traceback": "OSError: [Errno 28] No space left on device\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 387, in close\n    self._store_workbook()\n    ~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 803, in _store_workbook\n    xml_files = packager._create_package()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\packager.py\", line 138, in _create_package\n    self._write_content_types_file()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\packager.py\", line 500, in _write_content_types_file\n    content._assemble_xml_file()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\contenttypes.py\", line 77, in _assemble_xml_file\n    self._xml_close()\n    ~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\xmlwriter.py\", line 52, in _xml_close\n    self.fh.close()\n    ~~~~~~~~~~~~~^^\nOSError: [Errno 28] No space left on device\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 310, in <lambda>\n    lambda: render_dashboard_output(\n            ~~~~~~~~~~~~~~~~~~~~~~~^\n        drill,\n        ^^^^^^\n    ...<7 lines>...\n        show_core_metrics=False\n        ^^^^^^^^^^^^^^^^^^^^^^^\n    ),\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_output.py\", line 636, in render_dashboard_output\n    excel_report_bytes = export_to_styled_excel(export_data)\n  File \"H:\\Repo\\DEEN-OPS\\src\\services\\exports\\excel_exporter.py\", line 116, in export_to_styled_excel\n    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:\n         ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_base.py\", line 1353, in __exit__\n    self.close()\n    ~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_base.py\", line 1357, in close\n    self._save()\n    ~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_xlsxwriter.py\", line 239, in _save\n    self.book.close()\n    ~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 389, in close\n    raise FileCreateError(e)\nxlsxwriter.exceptions.FileCreateError: [Errno 28] No space left on device\n",
+        "details": {
+            "fallback_msg": "Dashboard rendering encountered an error."
+        }
+    },
+    {
+        "timestamp": "2026-08-03 18:00:22",
+        "context": "safe_render",
+        "error": "[Errno 28] No space left on device",
+        "traceback": "OSError: [Errno 28] No space left on device\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 387, in close\n    self._store_workbook()\n    ~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 803, in _store_workbook\n    xml_files = packager._create_package()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\packager.py\", line 138, in _create_package\n    self._write_content_types_file()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\packager.py\", line 500, in _write_content_types_file\n    content._assemble_xml_file()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\contenttypes.py\", line 77, in _assemble_xml_file\n    self._xml_close()\n    ~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\xmlwriter.py\", line 52, in _xml_close\n    self.fh.close()\n    ~~~~~~~~~~~~~^^\nOSError: [Errno 28] No space left on device\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 310, in <lambda>\n    lambda: render_dashboard_output(\n            ~~~~~~~~~~~~~~~~~~~~~~~^\n        drill,\n        ^^^^^^\n    ...<7 lines>...\n        show_core_metrics=False\n        ^^^^^^^^^^^^^^^^^^^^^^^\n    ),\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_output.py\", line 636, in render_dashboard_output\n    excel_report_bytes = export_to_styled_excel(export_data)\n  File \"H:\\Repo\\DEEN-OPS\\src\\services\\exports\\excel_exporter.py\", line 116, in export_to_styled_excel\n    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:\n         ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_base.py\", line 1353, in __exit__\n    self.close()\n    ~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_base.py\", line 1357, in close\n    self._save()\n    ~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\pandas\\io\\excel\\_xlsxwriter.py\", line 239, in _save\n    self.book.close()\n    ~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\xlsxwriter\\workbook.py\", line 389, in close\n    raise FileCreateError(e)\nxlsxwriter.exceptions.FileCreateError: [Errno 28] No space left on device\n",
         "details": {
             "fallback_msg": "Dashboard rendering encountered an error."
         }

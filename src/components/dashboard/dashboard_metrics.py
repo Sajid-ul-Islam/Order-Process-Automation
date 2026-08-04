@@ -130,7 +130,7 @@ def render_operational_metrics(
     v_qty = f"{m_qty:,.0f}"
     v_rev = f"TK {m_rev:,.0f}"
     v_ord = f"{m_ord:,.0f}"
-    v_bv = f"TK {m_bv:,.0f}"
+    v_bv = f"TK {int(m_bv):,}"
 
     html_dq = format_delta(dq_str)
     html_dr = format_delta(dr_str)
@@ -138,7 +138,7 @@ def render_operational_metrics(
     html_db = format_delta(db_str)
 
     extra_metric_label = "Basket Size"
-    extra_metric_value = v_bv
+    extra_metric_value = v_bv  # will be overridden below once net values are computed
     extra_metric_delta = html_db
     extra_metric_icon = "🛍️"
 
@@ -222,8 +222,32 @@ def render_operational_metrics(
         except Exception as e:
             log_system_event("SPARKLINE_ERROR", f"Failed to generate sparklines: {e}")
 
+    m_gross_rev = m_df["Gross Amount"].sum() if "Gross Amount" in m_df.columns else (
+        m_df["Total Amount"].sum() if "Total Amount" in m_df.columns else m_rev
+    )
+    m_cashback_disc = m_df["Cashback Discount"].sum() if "Cashback Discount" in m_df.columns else 0.0
+    # Actual Net Revenue = Gross Revenue − Cashback/Discount fees
+    m_net_rev = m_gross_rev - m_cashback_disc
+    m_loss_pct = (m_cashback_disc / m_gross_rev * 100) if m_gross_rev > 0 else 0.0
+    m_gross_bv = (m_gross_rev / m_ord) if m_ord > 0 else 0.0
+    m_net_bv = (m_net_rev / m_ord) if m_ord > 0 else 0.0
+    m_cb_per_basket = (m_cashback_disc / m_ord) if m_ord > 0 else 0.0
+
+    # % of unique orders with cashback
+    _ord_id_col = next((c for c in ["Order ID", "Order Number"] if c in m_df.columns), None)
+    if _ord_id_col and m_cashback_disc > 0 and "Cashback Discount" in m_df.columns:
+        _uniq = m_df.drop_duplicates(subset=[_ord_id_col])
+        _cb_ord_cnt = int((_uniq["Cashback Discount"] > 0).sum())
+        _total_ord = max(1, len(_uniq))
+    else:
+        _cb_ord_cnt = 0
+        _total_ord = max(1, int(m_ord))
+    m_cb_orders_pct = (_cb_ord_cnt / _total_ord * 100) if _cb_ord_cnt > 0 else 0.0
+
+    v_rev = f"TK {m_net_rev:,.0f}"
+
     l1 = "Backlog Items" if nav_mode == "Backlog" else "Gross Items"
-    l2 = "Backlog Rev" if nav_mode == "Backlog" else "Revenue"
+    l2 = "Backlog Rev" if nav_mode == "Backlog" else "Actual Net Revenue"
     l3 = "Backlog Orders" if nav_mode == "Backlog" else "Orders"
 
     gross_items_card = (
@@ -232,15 +256,23 @@ def render_operational_metrics(
         '<div class="metric-icon">📦</div></div>'
     )
 
+    # Override Basket Size card value with net basket value
+    if extra_metric_label == "Basket Size" and m_cashback_disc > 0:
+        extra_metric_value = f"TK {int(m_net_bv):,}"
+
+    cb_badge = f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">Gross ৳{int(m_gross_rev):,} || Cashback ৳{int(m_cashback_disc):,}</div>' if m_cashback_disc > 0 else ''
+    cb_basket_badge = f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">Gross ৳{int(m_gross_bv):,} || Lost Revenue -{m_loss_pct:.0f}%</div>' if (m_cashback_disc > 0 and extra_metric_label == "Basket Size") else ''
+    cb_orders_badge = f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">{m_cb_orders_pct:.0f}% cashbacked</div>' if m_cb_orders_pct > 0 else ''
+
     card_html = (
         '<div class="metric-container metric-container-4">'
         f"{gross_items_card}"
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{l2}</div>'
-        f'<div class="metric-value">{v_rev}</div>{html_dr}{s_rev}</div><div class="metric-icon">৳</div></div>'
+        f'<div class="metric-value">{v_rev}</div>{cb_badge}{html_dr}{s_rev}</div><div class="metric-icon">৳</div></div>'
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{l3}</div>'
-        f'<div class="metric-value">{v_ord}</div>{html_do}{s_ord}</div><div class="metric-icon">🛒</div></div>'
+        f'<div class="metric-value">{v_ord}</div>{cb_orders_badge}{html_do}{s_ord}</div><div class="metric-icon">🛒</div></div>'
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{extra_metric_label}</div>'
-        f'<div class="metric-value">{extra_metric_value}</div>{extra_metric_delta}'
+        f'<div class="metric-value">{extra_metric_value}</div>{cb_basket_badge}{extra_metric_delta}'
         f'{s_bv if nav_mode != "Backlog" else ""}</div>'
         f'<div class="metric-icon">{extra_metric_icon}</div></div>'
         "</div>"
@@ -307,3 +339,244 @@ def render_operational_metrics(
         st.session_state["_last_snap_key"] = snap_key
 
     return drill, summ, top, basket, active_df
+
+
+EXCLUDED_STATUSES = ["pending", "pending payment", "cancelled", "failed", "refunded", "trash"]
+
+
+def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.DataFrame | None = None) -> None:
+    """Render a dedicated metric & breakdown section comparing Total Revenue & Basket Size with Cashback / Discounted Fee.
+
+    Args:
+        m_df:   The analytics-ready (filtered) DataFrame.
+        raw_df: The raw pre-filter DataFrame (before excluded statuses are dropped).
+                When provided, excluded order counts and revenue are shown in the comparison.
+    """
+    if m_df is None or m_df.empty:
+        st.info("No active order data for cashback/fee comparison.")
+        return
+
+    # Compute calculations
+    gross_rev = m_df["Gross Amount"].sum() if "Gross Amount" in m_df.columns else (m_df["Quantity"] * m_df["Item Cost"]).sum()
+    net_rev = m_df["Total Amount"].sum() if "Total Amount" in m_df.columns else (m_df["Quantity"] * m_df["Item Cost"]).sum()
+    total_cashback = m_df["Cashback Discount"].sum() if "Cashback Discount" in m_df.columns else max(0.0, gross_rev - net_rev)
+    
+    cb_orders_mask = (m_df["Cashback Discount"] > 0) if "Cashback Discount" in m_df.columns else pd.Series(False, index=m_df.index)
+    id_col = "Order ID" if "Order ID" in m_df.columns else "Order Number" if "Order Number" in m_df.columns else None
+    
+    if id_col:
+        unique_df = m_df.drop_duplicates(subset=[id_col])
+        tot_orders = len(unique_df)
+        cb_orders_cnt = unique_df[unique_df[id_col].isin(m_df[cb_orders_mask][id_col])][id_col].nunique() if cb_orders_mask.any() else 0
+    else:
+        tot_orders = len(m_df)
+        cb_orders_cnt = int(cb_orders_mask.sum())
+
+    pct_rev_lost = (total_cashback / gross_rev * 100) if gross_rev > 0 else 0.0
+    avg_cashback_per_order = (total_cashback / cb_orders_cnt) if cb_orders_cnt > 0 else 0.0
+
+    # Basket level metrics
+    gross_basket = (gross_rev / tot_orders) if tot_orders > 0 else 0.0
+    net_basket = (net_rev / tot_orders) if tot_orders > 0 else 0.0
+    cb_per_basket = (total_cashback / tot_orders) if tot_orders > 0 else 0.0
+    pct_basket_lost = (cb_per_basket / gross_basket * 100) if gross_basket > 0 else 0.0
+
+    # ── Excluded Orders (raw_df-based) ───────────────────────────────────────
+    excl_orders_cnt = 0
+    excl_gross_rev = 0.0
+    excl_statuses_found: list[str] = []
+    if raw_df is not None and not raw_df.empty:
+        raw_status_col = (
+            "Order Status" if "Order Status" in raw_df.columns
+            else "Status" if "Status" in raw_df.columns
+            else None
+        )
+        if raw_status_col:
+            excl_mask = raw_df[raw_status_col].astype(str).str.lower().isin(EXCLUDED_STATUSES)
+            excl_df = raw_df[excl_mask]
+            raw_id_col = "Order ID" if "Order ID" in excl_df.columns else "Order Number" if "Order Number" in excl_df.columns else None
+            if raw_id_col:
+                excl_orders_cnt = excl_df[raw_id_col].nunique()
+            else:
+                excl_orders_cnt = len(excl_df)
+            # Gross revenue of excluded rows (use Gross Amount if available, else Item Cost * Quantity)
+            if "Gross Amount" in excl_df.columns:
+                excl_gross_rev = float(excl_df["Gross Amount"].sum())
+            elif "Item Cost" in excl_df.columns and "Quantity" in excl_df.columns:
+                excl_gross_rev = float((excl_df["Item Cost"] * excl_df["Quantity"]).sum())
+            elif "Total Amount" in excl_df.columns:
+                excl_gross_rev = float(excl_df["Total Amount"].sum())
+            excl_statuses_found = sorted(excl_df[raw_status_col].astype(str).str.lower().unique().tolist())
+
+    st.markdown("### ⚖️ Revenue & Basket Size Cashback Impact Analysis")
+    st.info(f"💡 **Revenue Equation:** Gross Revenue (**TK {gross_rev:,.0f}**) - Cashback/Discount Fees (**TK {total_cashback:,.0f}**) = **Actual Net Revenue (TK {net_rev:,.0f})**")
+
+    # Show excluded orders banner when raw data is provided
+    if excl_orders_cnt > 0:
+        status_label = ", ".join(f"`{s}`" for s in excl_statuses_found)
+        st.warning(
+            f"🚫 **Excluded from Analytics:** **{excl_orders_cnt:,} order(s)** · "
+            f"Gross Value: **TK {excl_gross_rev:,.0f}** · "
+            f"Status: {status_label} — these are intentionally excluded from revenue figures above."
+        )
+
+    st.markdown("##### 💵 Overall Revenue Impact")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.metric("💵 Actual Realized Revenue", f"TK {net_rev:,.0f}")
+    with c2:
+        st.metric("🏷️ Gross Revenue (Pre-Discount)", f"TK {gross_rev:,.0f}")
+    with c3:
+        st.metric("💸 Cash Back & Fee Discount", f"TK {total_cashback:,.0f}", delta=f"{pct_rev_lost:.1f}% of gross", delta_color="inverse")
+    with c4:
+        st.metric("📉 % Revenue Lost", f"{pct_rev_lost:.1f}%", delta=f"-TK {total_cashback:,.0f} lost", delta_color="inverse")
+
+    st.markdown("##### 🛍️ Basket Size / AOV Impact")
+    b1, b2, b3, b4 = st.columns(4)
+    with b1:
+        st.metric("🛍️ Actual Net Basket Value", f"TK {net_basket:,.0f}")
+    with b2:
+        st.metric("🛒 Gross Basket Value (Pre-Discount)", f"TK {gross_basket:,.0f}")
+    with b3:
+        st.metric("🎁 Cashback per Basket", f"-TK {cb_per_basket:,.0f}", delta=f"Avg cashback/order", delta_color="inverse")
+    with b4:
+        st.metric("📉 % Basket Value Lost", f"{pct_basket_lost:.1f}%", delta=f"-TK {cb_per_basket:,.0f} lost/basket", delta_color="inverse")
+
+    # ── Category Repetition & Cashback Tier Metrics ───────────────────────────
+    HIGH_VAL_CODES = {"101", "106", "108", "110"}
+    MID_VAL_CODES = {"102"}
+    LOW_VAL_CODES = {"105", "107", "109", "TB"}
+
+    def _classify_row_cat(r):
+        s = str(r.get("SKU", ""))
+        code = s.split("-")[0] if "-" in s else ""
+        if code in HIGH_VAL_CODES:
+            return "High"
+        if code in MID_VAL_CODES:
+            return "Mid"
+        if code in LOW_VAL_CODES:
+            return "Low"
+        comb = f"{str(r.get('Item Name',''))} {str(r.get('Category',''))}".lower()
+        if any(kw in comb for kw in ["jeans", "panjabi", "sweatshirt", "trouser"]):
+            return "High"
+        if "shirt" in comb and "t-shirt" not in comb:
+            return "Mid"
+        return "Low"
+
+    cnt_500_tier = 0
+    cnt_700_tier = 0
+    high_rep_cnt = 0
+    mid_rep_cnt = 0
+    low_rep_cnt = 0
+
+    if id_col and cb_orders_cnt > 0:
+        cb_df_all = m_df[cb_orders_mask] if cb_orders_mask.any() else m_df.copy()
+        for _, grp in cb_df_all.groupby(id_col):
+            order_cb_amt = 0.0
+            if "Cashback Discount" in grp.columns:
+                order_cb_amt = float(grp["Cashback Discount"].iloc[0])
+            if order_cb_amt == 0 and "Gross Amount" in grp.columns and "Total Amount" in grp.columns:
+                order_cb_amt = float(grp["Gross Amount"].iloc[0] - grp["Total Amount"].iloc[0])
+
+            if 400 <= order_cb_amt < 650 or (order_cb_amt == 0 and "Gross Amount" in grp.columns and 2300 <= grp["Gross Amount"].iloc[0] < 2900):
+                cnt_500_tier += 1
+            elif order_cb_amt >= 650 or (order_cb_amt == 0 and "Gross Amount" in grp.columns and grp["Gross Amount"].iloc[0] >= 2900):
+                cnt_700_tier += 1
+
+            cat_counts = {"High": 0, "Mid": 0, "Low": 0}
+            grp_items = []
+            for _, row in grp.iterrows():
+                c_type = _classify_row_cat(row)
+                q = int(row.get("Quantity", 1)) if pd.notna(row.get("Quantity")) else 1
+                c_cost = float(row.get("Item Cost", 0)) if pd.notna(row.get("Item Cost")) else 0.0
+                p_name = str(row.get("Item Name", row.get("Clean_Product", "")))
+                cat_counts[c_type] += q
+                grp_items.append({"name": p_name, "cost": c_cost, "qty": q, "cat_type": c_type})
+
+            if cat_counts["High"] > 1:
+                high_rep_cnt += 1
+            if cat_counts["Mid"] > 1:
+                mid_rep_cnt += 1
+            if cat_counts["Low"] > 1:
+                low_rep_cnt += 1
+
+            # Detect Filler Item
+            tot_grp_cost = sum(it["cost"] * it["qty"] for it in grp_items)
+            threshold_val = 2500 if order_cb_amt < 650 else 3000
+            sorted_grp = sorted(grp_items, key=lambda x: x["cost"])
+            cheapest_it = sorted_grp[0] if sorted_grp else None
+            rest_grp_cost = tot_grp_cost - (cheapest_it["cost"] * cheapest_it["qty"]) if cheapest_it else 0
+
+            if cheapest_it and rest_grp_cost < threshold_val and tot_grp_cost >= threshold_val:
+                filler_orders_cnt += 1
+                base_name = cheapest_it["name"].split(" - ")[0]
+                filler_dict[base_name]["count"] += 1
+                filler_dict[base_name]["costs"].append(cheapest_it["cost"])
+                filler_dict[base_name]["cat_type"] = cheapest_it["cat_type"]
+
+    pct_500 = (cnt_500_tier / cb_orders_cnt * 100) if cb_orders_cnt > 0 else 0.0
+    pct_700 = (cnt_700_tier / cb_orders_cnt * 100) if cb_orders_cnt > 0 else 0.0
+    pct_high_rep = (high_rep_cnt / cb_orders_cnt * 100) if cb_orders_cnt > 0 else 0.0
+    pct_mid_rep = (mid_rep_cnt / cb_orders_cnt * 100) if cb_orders_cnt > 0 else 0.0
+    pct_low_rep = (low_rep_cnt / cb_orders_cnt * 100) if cb_orders_cnt > 0 else 0.0
+
+    st.markdown("##### 🎯 Cashback Tier & Category Repetition Breakdown")
+    t1, t2, t3, t4, t5 = st.columns(5)
+    with t1:
+        st.metric("💰 500 Cashback Tier", f"{cnt_500_tier} orders", delta=f"{pct_500:.1f}% of cashback")
+    with t2:
+        st.metric("💜 700 Cashback Tier", f"{cnt_700_tier} orders", delta=f"{pct_700:.1f}% of cashback")
+    with t3:
+        st.metric("👖 High Value Repeat %", f"{pct_high_rep:.1f}%", delta=f"{high_rep_cnt} orders (Jeans/Panjabi)")
+    with t4:
+        st.metric("👔 Mid Value Repeat %", f"{pct_mid_rep:.1f}%", delta=f"{mid_rep_cnt} orders (Shirts)")
+    with t5:
+        st.metric("👕 Low Value Repeat %", f"{pct_low_rep:.1f}%", delta=f"{low_rep_cnt} orders (T-Shirts/Acc)")
+
+    # Top Filler Products Breakdown Table
+    if filler_dict and cb_orders_cnt > 0:
+        pct_filler_total = (filler_orders_cnt / cb_orders_cnt * 100) if cb_orders_cnt > 0 else 0
+        st.markdown(
+            f"##### 🛒 Top Filler Products Added to Avail Cashback Threshold "
+            f"(found in **{filler_orders_cnt}** orders · **{pct_filler_total:.1f}%** of cashback orders)"
+        )
+        filler_rows = []
+        for fname, fdata in sorted(filler_dict.items(), key=lambda x: -x[1]["count"]):
+            cnt = fdata["count"]
+            pct_f = (cnt / cb_orders_cnt) * 100
+            avg_cost = sum(fdata["costs"]) / len(fdata["costs"]) if fdata["costs"] else 0
+            filler_rows.append({
+                "Product Base Name": fname,
+                "Category Value": fdata["cat_type"],
+                "Filler Orders Count": cnt,
+                "% of Cashback Orders": f"{pct_f:.1f}%",
+                "Avg Unit Price": f"TK {avg_cost:,.0f}",
+            })
+        filler_df = pd.DataFrame(filler_rows)
+        st.dataframe(filler_df.head(15), use_container_width=True, hide_index=True)
+
+    from src.components.dashboard.dashboard_charts import render_revenue_cashback_comparison_chart
+    render_revenue_cashback_comparison_chart(m_df)
+
+    # Show filtered Cashback / Discount Orders Table
+    if cb_orders_cnt > 0:
+        with st.expander(f"📋 View Orders with Cashback / Discount Applied ({cb_orders_cnt} orders)", expanded=False):
+            cb_df = m_df[cb_orders_mask].copy() if cb_orders_mask.any() else m_df.copy()
+            show_cols = [c for c in ["Order ID", "Order Status", "Item Name", "SKU", "Subtotal Cost", "Item Cost", "Cashback Discount", "Gross Amount", "Total Amount", "Coupons"] if c in cb_df.columns]
+            st.dataframe(cb_df[show_cols].head(100), use_container_width=True)
+
+    # Show excluded orders detail table
+    if excl_orders_cnt > 0 and raw_df is not None and not raw_df.empty:
+        raw_status_col = (
+            "Order Status" if "Order Status" in raw_df.columns
+            else "Status" if "Status" in raw_df.columns
+            else None
+        )
+        if raw_status_col:
+            excl_mask = raw_df[raw_status_col].astype(str).str.lower().isin(EXCLUDED_STATUSES)
+            excl_detail_df = raw_df[excl_mask].copy()
+            with st.expander(f"🚫 View Excluded Orders ({excl_orders_cnt} orders · TK {excl_gross_rev:,.0f} gross)", expanded=False):
+                show_excl_cols = [c for c in ["Order ID", "Order Status", "Item Name", "SKU", "Item Cost", "Quantity", "Gross Amount", "Total Amount", "Cashback Discount"] if c in excl_detail_df.columns]
+                st.caption("These orders are excluded from all analytics due to their status (pending, cancelled, failed, refunded, etc.)")
+                st.dataframe(excl_detail_df[show_excl_cols].head(200), use_container_width=True)
+
