@@ -1518,3 +1518,16 @@ div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stElementC
     }
 }
 
+/* ============================================================
+   App Banner Animations
+   ============================================================ */
+@keyframes banner-shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+}
+
+@keyframes banner-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.5; }
+}
+
