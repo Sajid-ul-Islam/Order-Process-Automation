@@ -240,9 +240,219 @@
           "revenue": 9560.0
         }
       ]
+    },
+    {
+      "ts": "2026-08-06T10:07:28.425868+06:00",
+      "label": "Today",
+      "revenue": 75380.0,
+      "orders": 28,
+      "qty": 54,
+      "aov": 2692.14,
+      "top_products": [
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 30",
+          "revenue": 7470.0
+        },
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 34",
+          "revenue": 4980.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 32",
+          "revenue": 4662.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 34",
+          "revenue": 4662.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 32",
+          "revenue": 2490.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-06T10:07:34.291370+06:00",
+      "label": "Today",
+      "revenue": 131467.0,
+      "orders": 55,
+      "qty": 105,
+      "aov": 2390.31,
+      "top_products": [
+        {
+          "name": "High-End Light Blue Jeans - Regular Fit - 32",
+          "revenue": 9560.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 30",
+          "revenue": 9324.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 34",
+          "revenue": 9324.0
+        },
+        {
+          "name": "High-End Light Blue Jeans - Regular Fit - 34",
+          "revenue": 7170.0
+        },
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 34",
+          "revenue": 4980.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-06T10:07:39.115362+06:00",
+      "label": "Today",
+      "revenue": 75380.0,
+      "orders": 28,
+      "qty": 54,
+      "aov": 2692.14,
+      "top_products": [
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 30",
+          "revenue": 7470.0
+        },
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 34",
+          "revenue": 4980.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 32",
+          "revenue": 4662.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 34",
+          "revenue": 4662.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 34",
+          "revenue": 2490.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-06T10:07:53.451367+06:00",
+      "label": "Today",
+      "revenue": 77939.0,
+      "orders": 29,
+      "qty": 56,
+      "aov": 2687.55,
+      "top_products": [
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 30",
+          "revenue": 7470.0
+        },
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 34",
+          "revenue": 4980.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 34",
+          "revenue": 4662.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 32",
+          "revenue": 4662.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Regular Fit - 36",
+          "revenue": 4429.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-06T10:25:11.847853+06:00",
+      "label": "Today",
+      "revenue": 75380.0,
+      "orders": 28,
+      "qty": 54,
+      "aov": 2692.14,
+      "top_products": [
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 30",
+          "revenue": 7470.0
+        },
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 34",
+          "revenue": 4980.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 32",
+          "revenue": 4662.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 34",
+          "revenue": 4662.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 32",
+          "revenue": 2490.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-06T10:32:16.512816+06:00",
+      "label": "Today",
+      "revenue": 206847.0,
+      "orders": 83,
+      "qty": 159,
+      "aov": 2492.13,
+      "top_products": [
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 34",
+          "revenue": 13986.0
+        },
+        {
+          "name": "High-End Light Blue Jeans - Regular Fit - 32",
+          "revenue": 11950.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 30",
+          "revenue": 11655.0
+        },
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 34",
+          "revenue": 9960.0
+        },
+        {
+          "name": "High-End Light Blue Jeans - Regular Fit - 34",
+          "revenue": 9560.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-06T10:33:11.563024+06:00",
+      "label": "Today",
+      "revenue": 131467.0,
+      "orders": 55,
+      "qty": 105,
+      "aov": 2390.31,
+      "top_products": [
+        {
+          "name": "High-End Light Blue Jeans - Regular Fit - 32",
+          "revenue": 9560.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 30",
+          "revenue": 9324.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 34",
+          "revenue": 9324.0
+        },
+        {
+          "name": "High-End Light Blue Jeans - Regular Fit - 34",
+          "revenue": 7170.0
+        },
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 32",
+          "revenue": 4980.0
+        }
+      ]
     }
   ],
-  "daily_revenue": 1579396.0,
-  "daily_orders": 636,
-  "daily_qty": 1218
+  "daily_revenue": 2353256.0,
+  "daily_orders": 942,
+  "daily_qty": 1805
 }

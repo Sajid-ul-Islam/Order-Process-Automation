@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from src.components.ui.widgets import render_reset_confirm
 from src.config.constants import SHIPPED_STATUSES
 from src.processing.column_detection import find_columns
-from src.processing.data_processing import prepare_granular_data, aggregate_data, filter_shipped_by_slot
+from src.processing.data_processing import prepare_granular_data, aggregate_data, filter_shipped_by_slot, filter_all_orders_to_slot
 from src.components.dashboard.dashboard_output import render_dashboard_output
 from src.components.dashboard.dashboard_metrics import render_operational_metrics
 from src.services.woocommerce.client import load_live_source
@@ -63,7 +63,11 @@ def _refresh_core_metrics():
     c_df = st.session_state.get("wc_prev_df" if nav_mode == "Today" else "wc_curr_df") if nav_mode != "Backlog" else None
 
     order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
-    if order_view_mode == "Shipped Only":
+    if order_view_mode == "All Orders" and nav_mode == "Today":
+        m_df = filter_all_orders_to_slot(m_df, nav_mode)
+        if c_df is not None and not c_df.empty:
+            c_df = filter_all_orders_to_slot(c_df, "Prev")
+    elif order_view_mode == "Shipped Only":
         from src.processing.data_processing import filter_shipped_by_slot
         m_df = filter_shipped_by_slot(m_df, nav_mode, is_comparison=False)
         if c_df is not None and not c_df.empty:
@@ -177,7 +181,12 @@ def render_live_tab():
     status_col = "Order Status" if "Order Status" in df_live.columns else "Status" if "Status" in df_live.columns else None
 
     if status_col:
-        if order_view_mode == "Shipped Only":
+        if order_view_mode == "All Orders" and nav_mode == "Today":
+            df_live = filter_all_orders_to_slot(df_live, nav_mode)
+            if df_live is None or df_live.empty:
+                st.info(f"📦 No active orders found in the **{nav_mode}** slot.")
+                return
+        elif order_view_mode == "Shipped Only":
             df_live = filter_shipped_by_slot(df_live, nav_mode, is_comparison=False)
             if df_live is None or df_live.empty:
                 st.info(f"📦 No shipped orders found in the **{nav_mode}** slot.")

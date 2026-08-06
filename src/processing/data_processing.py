@@ -69,7 +69,8 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
             if not shipped_today.empty:
                 return shipped_today
 
-        return shipped_df
+        # All date-based filters exhausted with no matches → truly 0 shipped orders today
+        return shipped_df.iloc[0:0]
 
     # ── Operational slot boundaries for Prev mode or comparison slots ──
     slot_key = "wc_curr_slot" if nav_mode == "Today" else "wc_prev_slot" if nav_mode == "Prev" else None
@@ -87,7 +88,110 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
         ]
         return filtered
 
-    return shipped_df
+    # No slot boundaries available → cannot scope to this slot, return empty
+    return shipped_df.iloc[0:0]
+
+
+def filter_all_orders_to_slot(df, nav_mode):
+    """Scopes 'All Orders' view to only the relevant slot window and whitelisted statuses.
+
+    For Today mode, keeps:
+      - Active statuses (processing, on-hold, pending, waiting) placed within the slot window
+      - Shipped/completed orders whose modification date falls within the slot window
+
+    For other modes (Prev / Backlog), delegates to slot boundaries as defined in session state.
+
+    Returns a filtered DataFrame — never falls back to the full unscoped dataset.
+    """
+    from datetime import datetime, timedelta, timezone
+    from src.config.constants import SHIPPED_STATUSES
+
+    ACTIVE_STATUSES  = {"processing", "on-hold", "pending", "waiting"}
+    ALL_VALID        = ACTIVE_STATUSES | set(SHIPPED_STATUSES)
+
+    if df is None or df.empty:
+        return df
+
+    status_col = (
+        "Order Status" if "Order Status" in df.columns
+        else "Status" if "Status" in df.columns
+        else None
+    )
+    if status_col is None:
+        return df
+
+    # 1. Status whitelist — drop anything not in the allowed set
+    status_lower = df[status_col].astype(str).str.lower()
+    df = df[status_lower.isin(ALL_VALID)].copy()
+    if df.empty:
+        return df
+
+    # 2. Choose the slot boundary key for the current nav mode
+    if nav_mode == "Today":
+        slot_key = "wc_curr_slot"
+    elif nav_mode == "Prev":
+        slot_key = "wc_prev_slot"
+    else:
+        slot_key = None
+
+    slot = st.session_state.get(slot_key) if slot_key else None
+
+    if slot:
+        slot_start = pd.to_datetime(slot[0])
+        slot_end   = pd.to_datetime(slot[1])
+
+        mod_col  = "mod_dt_parsed" if "mod_dt_parsed" in df.columns else "Order Date Modified" if "Order Date Modified" in df.columns else None
+        date_col = "dt_parsed" if "dt_parsed" in df.columns else "Order Date" if "Order Date" in df.columns else None
+
+        status_lower = df[status_col].astype(str).str.lower()
+        is_active  = status_lower.isin(ACTIVE_STATUSES)
+        is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
+
+        # Active orders: scoped by creation date within slot
+        if date_col:
+            dt_create = pd.to_datetime(df[date_col], errors="coerce")
+            active_mask = is_active & (dt_create >= slot_start) & (dt_create <= slot_end)
+        else:
+            active_mask = is_active  # can't scope further without a date column
+
+        # Shipped orders: scoped by modification date within slot
+        if mod_col:
+            dt_mod = pd.to_datetime(df[mod_col], errors="coerce")
+            shipped_mask = is_shipped & (dt_mod >= slot_start) & (dt_mod <= slot_end)
+        else:
+            shipped_mask = pd.Series(False, index=df.index)  # no mod date → exclude shipped
+
+        combined = df[active_mask | shipped_mask]
+        return combined
+
+    # No slot boundaries — fall back to calendar day (BD UTC+6) for Today mode
+    if nav_mode == "Today":
+        tz_bd    = timezone(timedelta(hours=6))
+        today_bd = datetime.now(tz_bd).date()
+
+        date_col = "dt_parsed" if "dt_parsed" in df.columns else "Order Date" if "Order Date" in df.columns else None
+        mod_col  = "mod_dt_parsed" if "mod_dt_parsed" in df.columns else "Order Date Modified" if "Order Date Modified" in df.columns else None
+
+        status_lower = df[status_col].astype(str).str.lower()
+        is_active  = status_lower.isin(ACTIVE_STATUSES)
+        is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
+
+        if date_col:
+            dt_create = pd.to_datetime(df[date_col], errors="coerce")
+            active_mask = is_active & (dt_create.dt.date == today_bd)
+        else:
+            active_mask = is_active
+
+        if mod_col:
+            dt_mod = pd.to_datetime(df[mod_col], errors="coerce")
+            shipped_mask = is_shipped & (dt_mod.dt.date == today_bd)
+        else:
+            shipped_mask = pd.Series(False, index=df.index)
+
+        return df[active_mask | shipped_mask]
+
+    # Prev/Backlog with no slot info — return status-filtered only
+    return df
 
 
 
