@@ -138,16 +138,18 @@ def generate_report_data():
     
     gross_rev = df_live["Gross Amount"].sum() if (df_live is not None and "Gross Amount" in df_live.columns) else today_rev
     cashback_disc = df_live["Cashback Discount"].sum() if (df_live is not None and "Cashback Discount" in df_live.columns) else max(0.0, gross_rev - today_rev)
+    net_rev = gross_rev - cashback_disc
+    net_aov = (net_rev / today_orders) if today_orders > 0 else today_aov
     loss_pct = (cashback_disc / gross_rev * 100) if gross_rev > 0 else 0.0
 
     prompt = f"""
     Generate a high-impact executive briefing for today's e-commerce operations.
     
     *Core Metrics:*
-    - Today Net Realized Revenue (After Cashback): ৳{today_rev:,.0f} ({today_orders} orders, {today_qty} items).
+    - Today Net Realized Revenue (After Cashback): ৳{net_rev:,.0f} ({today_orders} orders, {today_qty} items).
     - Gross Revenue (Pre-Discount): ৳{gross_rev:,.0f}.
     - Total Cashback & Fee Discounts: ৳{cashback_disc:,.0f} ({loss_pct:.1f}% revenue lost).
-    - Net Basket Size: ৳{today_aov:,.0f}.
+    - Net Basket Size: ৳{net_aov:,.0f}.
     - Yesterday Net Revenue: ৳{prev_rev:,.0f} revenue, {prev_orders} orders.
     - Logistics: {dm.get('pathao_count', 0)} Pathao, {dm.get('other_count', 0)} other.
     - Prediction: {forecast_str}
@@ -179,7 +181,7 @@ def generate_report_data():
         print(f"❌ AI narrative generation failed: {e}. Falling back to template.")
         from src.processing.data_processing import generate_executive_briefing
         report_text = generate_executive_briefing(
-            today_rev, today_qty, today_orders, today_aov, dm, top,
+            net_rev, today_qty, today_orders, net_aov, dm, top,
             prev_rev=prev_rev, prev_orders=prev_orders, forecast_str=forecast_str,
             gross_rev=gross_rev, cashback_disc=cashback_disc
         )

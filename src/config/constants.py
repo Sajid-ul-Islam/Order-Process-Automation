@@ -15,7 +15,7 @@ SALES_SNAPSHOT_PATH = os.path.join(RESOURCES_DIR, "sales_snapshot.csv")
 METRIC_SNAPSHOT_DIR = os.path.join(RESOURCES_DIR, "metric_snapshots")
 
 # Unified Shipped Statuses
-SHIPPED_STATUSES = ["shipped", "completed", "confirmed", "cashbacked", "cashback", "wc-cashbacked"]
+SHIPPED_STATUSES = ["shipped", "completed", "confirmed", "cashbacked", "cashback", "wc-shipped", "wc-completed", "wc-confirmed", "wc-cashbacked"]
 
 # Promotional offer keywords — items containing these are NOT actual stock
 OFFER_KEYWORDS = ["combo", "bundle", "buy any"]

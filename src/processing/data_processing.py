@@ -41,13 +41,26 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     elif "Order Date Modified" in shipped_df.columns:
         mod_col = "Order Date Modified"
 
+    def _safe_tz_naive(series):
+        dt_s = pd.to_datetime(series, errors="coerce")
+        return dt_s.dt.tz_localize(None) if getattr(dt_s.dt, "tz", None) is not None else dt_s
+
+    def _safe_dt_naive(val):
+        dt_v = pd.to_datetime(val)
+        return dt_v.tz_localize(None) if getattr(dt_v, "tz", None) is not None else dt_v
+
     if nav_mode == "Today" and not is_comparison:
         # 1. First try filtering by operational shift slot boundaries if defined
         slot = st.session_state.get("wc_curr_slot")
-        if slot and mod_col:
-            slot_start, slot_end = pd.to_datetime(slot[0]), pd.to_datetime(slot[1])
-            dt_series = pd.to_datetime(shipped_df[mod_col], errors="coerce")
-            shipped_in_slot = shipped_df[(dt_series >= slot_start) & (dt_series <= slot_end)]
+        if slot:
+            slot_start, slot_end = _safe_dt_naive(slot[0]), _safe_dt_naive(slot[1])
+            dt_series = _safe_tz_naive(shipped_df[mod_col]) if mod_col else pd.Series(pd.NaT, index=shipped_df.index)
+            date_col = "dt_parsed" if "dt_parsed" in shipped_df.columns else "Order Date" if "Order Date" in shipped_df.columns else None
+            dt_create = _safe_tz_naive(shipped_df[date_col]) if date_col else pd.Series(pd.NaT, index=shipped_df.index)
+
+            # Match mod_dt within slot OR (mod_dt is NaT and dt_create is within slot)
+            in_slot_mask = ((dt_series >= slot_start) & (dt_series <= slot_end)) | (dt_series.isna() & (dt_create >= slot_start) & (dt_create <= slot_end))
+            shipped_in_slot = shipped_df[in_slot_mask]
             if not shipped_in_slot.empty:
                 return shipped_in_slot
 
@@ -56,7 +69,7 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
         today_bd = datetime.now(tz_bd).date()
 
         if mod_col:
-            dt_series = pd.to_datetime(shipped_df[mod_col], errors="coerce")
+            dt_series = _safe_tz_naive(shipped_df[mod_col])
             shipped_today = shipped_df[dt_series.dt.date == today_bd]
             if not shipped_today.empty:
                 return shipped_today
@@ -64,7 +77,7 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
         # 3. Fallback to order creation date column
         date_col = "dt_parsed" if "dt_parsed" in shipped_df.columns else "Order Date" if "Order Date" in shipped_df.columns else None
         if date_col:
-            dt_create = pd.to_datetime(shipped_df[date_col], errors="coerce")
+            dt_create = _safe_tz_naive(shipped_df[date_col])
             shipped_today = shipped_df[dt_create.dt.date == today_bd]
             if not shipped_today.empty:
                 return shipped_today
@@ -80,8 +93,8 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     slot = st.session_state.get(slot_key) if slot_key else None
 
     if slot and mod_col:
-        slot_start, slot_end = pd.to_datetime(slot[0]), pd.to_datetime(slot[1])
-        dt_series = pd.to_datetime(shipped_df[mod_col], errors="coerce")
+        slot_start, slot_end = _safe_dt_naive(slot[0]), _safe_dt_naive(slot[1])
+        dt_series = _safe_tz_naive(shipped_df[mod_col])
         filtered = shipped_df[
             (dt_series >= slot_start) &
             (dt_series <= slot_end)
@@ -492,16 +505,23 @@ def aggregate_data(df, selected_cols):
 
 def get_dispatch_metrics(active_df, total_orders=0):
     """Calculates dispatch, exchange, and freebie metrics from active shift data."""
+    from src.config.constants import SHIPPED_STATUSES
+
     metrics = {
         "outlet_dispatch": 0,
         "exchange_dispatch": 0,
         "last_shipped_order": "N/A",
         "last_pathao_print": "N/A",
-        "ecom_dispatch": 0
+        "ecom_dispatch": 0,
+        "pathao_count": 0,
+        "other_count": 0,
+        "pending": 0,
+        "dispatched": 0,
+        "dispatch_rate": 0.0
     }
     
     if active_df is not None and not active_df.empty:
-        status_col = "Order Status" if "Order Status" in active_df.columns else None
+        status_col = "Order Status" if "Order Status" in active_df.columns else "Status" if "Status" in active_df.columns else None
         order_col = "Order ID" if "Order ID" in active_df.columns else "Order Number" if "Order Number" in active_df.columns else None
         date_col = "Date" if "Date" in active_df.columns else "Order Date" if "Order Date" in active_df.columns else None
         pmt_col = "Payment Method Title" if "Payment Method Title" in active_df.columns else None
@@ -515,13 +535,49 @@ def get_dispatch_metrics(active_df, total_orders=0):
                     outlet_mask = outlet_mask | active_df[pmt_col].astype(str).str.lower().str.contains("outlet", na=False)
                 metrics["outlet_dispatch"] = active_df[outlet_mask][order_col].nunique()
 
-        if status_col and order_col:
-            shipped_df = active_df[active_df[status_col].astype(str).str.lower().isin(["shipped"])]
-            if not shipped_df.empty:
-                latest_shipped = shipped_df.sort_values(date_col, ascending=False).iloc[0] if date_col else shipped_df.iloc[0]
-                metrics["last_shipped_order"] = str(latest_shipped[order_col])
-                metrics["last_pathao_print"] = str(latest_shipped[order_col])
+                # Pending orders
+                pending_mask = active_df[status_col].astype(str).str.lower().isin(["processing", "on-hold", "pending", "waiting"])
+                metrics["pending"] = active_df[pending_mask][order_col].nunique()
 
+                # Dispatched orders using SHIPPED_STATUSES
+                shipped_mask = active_df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES)
+                shipped_df = active_df[shipped_mask]
+                metrics["dispatched"] = shipped_df[order_col].nunique() if not shipped_df.empty else 0
+            else:
+                metrics["dispatched"] = active_df[order_col].nunique()
+                shipped_df = active_df
+
+            # Pathao Consignment ID check
+            if "Pathao Consignment ID" in active_df.columns:
+                p_col = active_df["Pathao Consignment ID"].astype(str).str.strip().str.lower()
+                pathao_mask = (p_col != "") & (p_col != "nan") & (p_col != "none") & (p_col != "n/a")
+                metrics["pathao_count"] = active_df[pathao_mask][order_col].nunique() if order_col else int(pathao_mask.sum())
+            elif "Shipping Method Title" in active_df.columns:
+                p_col = active_df["Shipping Method Title"].astype(str).str.lower()
+                pathao_mask = p_col.str.contains("pathao", na=False)
+                metrics["pathao_count"] = active_df[pathao_mask][order_col].nunique() if order_col else int(pathao_mask.sum())
+            else:
+                metrics["pathao_count"] = metrics["dispatched"]
+
+            metrics["other_count"] = max(0, metrics["dispatched"] - metrics["pathao_count"])
+
+            if not shipped_df.empty:
+                latest_shipped = shipped_df.sort_values(date_col, ascending=False).iloc[0] if date_col and date_col in shipped_df.columns else shipped_df.iloc[0]
+                metrics["last_shipped_order"] = str(latest_shipped[order_col])
+                
+                if "Pathao Consignment ID" in shipped_df.columns:
+                    p_col_s = shipped_df["Pathao Consignment ID"].astype(str).str.strip().str.lower()
+                    p_shipped = shipped_df[(p_col_s != "") & (p_col_s != "nan") & (p_col_s != "none") & (p_col_s != "n/a")]
+                    if not p_shipped.empty:
+                        latest_pathao = p_shipped.sort_values(date_col, ascending=False).iloc[0] if date_col and date_col in p_shipped.columns else p_shipped.iloc[0]
+                        metrics["last_pathao_print"] = str(latest_pathao[order_col])
+                    else:
+                        metrics["last_pathao_print"] = str(latest_shipped[order_col])
+                else:
+                    metrics["last_pathao_print"] = str(latest_shipped[order_col])
+
+    if total_orders > 0:
+        metrics["dispatch_rate"] = (metrics["dispatched"] / total_orders) * 100.0
     metrics["ecom_dispatch"] = max(0, total_orders - metrics["outlet_dispatch"] - metrics["exchange_dispatch"])
     return metrics
 
@@ -529,6 +585,8 @@ def get_dispatch_metrics(active_df, total_orders=0):
 def generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, dm, top, prev_rev=None, prev_orders=None, forecast_str="", gross_rev=None, cashback_disc=None):
     """Generates the single source of truth narrative for the Executive Briefing."""
     from datetime import datetime, timedelta, timezone
+    
+    dm = dm or {}
     
     rev_trend = ""
     if prev_rev is not None:

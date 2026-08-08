@@ -29,7 +29,12 @@ def _render_operational_cycle_metrics(m_df, c_df, nav_mode, dummy_mapping, wc_ra
     if c_df is not None:
         status_col_c = "Order Status" if "Order Status" in c_df.columns else "Status" if "Status" in c_df.columns else None
 
-    if order_view_mode == "Shipped Only":
+    if order_view_mode == "All Orders" and nav_mode == "Today":
+        from src.processing.data_processing import filter_all_orders_to_slot
+        m_df = filter_all_orders_to_slot(m_df, nav_mode)
+        if c_df is not None and not c_df.empty:
+            c_df = filter_all_orders_to_slot(c_df, "Prev")
+    elif order_view_mode == "Shipped Only":
         from src.processing.data_processing import filter_shipped_by_slot
         m_df = filter_shipped_by_slot(m_df, nav_mode, is_comparison=False)
         if c_df is not None:
@@ -625,11 +630,18 @@ def render_dashboard_output(
     if is_operational:
         st.subheader("📱 Executive Briefing")
         dm = get_dispatch_metrics(active_df, today_orders)
-        gross_rev = float(active_df["Gross Amount"].sum()) if (active_df is not None and "Gross Amount" in active_df.columns) else (
-            float(active_df["Total Amount"].sum()) if (active_df is not None and "Total Amount" in active_df.columns) else
-            float(summ['Total Amount'].sum() if summ is not None else 0)
-        )
-        cashback_disc = float(active_df["Cashback Discount"].sum()) if (active_df is not None and "Cashback Discount" in active_df.columns) else 0.0
+
+        # ── Safe gross/cashback computation (active_df may be None when no orders match filter) ──
+        _adf = active_df if (active_df is not None and not active_df.empty) else None
+        if _adf is not None and "Gross Amount" in _adf.columns:
+            gross_rev = float(_adf["Gross Amount"].sum())
+        elif _adf is not None and "Total Amount" in _adf.columns:
+            gross_rev = float(_adf["Total Amount"].sum())
+        else:
+            gross_rev = float(summ['Total Amount'].sum()) if summ is not None else 0.0
+
+        cashback_disc = float(_adf["Cashback Discount"].sum()) if (_adf is not None and "Cashback Discount" in _adf.columns) else 0.0
+
         # Net revenue = Gross − Cashback (consistent with KPI cards)
         today_rev = gross_rev - cashback_disc
         net_aov = (today_rev / today_orders) if today_orders > 0 else float(today_aov)
@@ -642,9 +654,10 @@ def render_dashboard_output(
 
         final_report_text = st.session_state.get("ai_report_text", report_text)
 
+        # Pass net_aov (post-cashback basket value) to AI briefing so it aligns with KPI cards
         _render_ai_briefing_section(
             is_operational, summ, top, active_df,
-            today_rev, today_qty, today_orders, today_aov,
+            today_rev, today_qty, today_orders, net_aov,
             dm, current_data_fingerprint, final_report_text
         )
 
