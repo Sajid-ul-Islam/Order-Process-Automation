@@ -82,32 +82,61 @@ def render_operational_metrics(
     drill, summ, top, basket = aggregate_data(m_df, dummy_mapping)
 
     m_qty = m_df["Quantity"].sum() if "Quantity" in m_df.columns else 0
-    m_rev = (m_df["Quantity"] * m_df["Item Cost"]).sum() if "Quantity" in m_df.columns and "Item Cost" in m_df.columns else 0
     m_ord = basket["total_orders"] if basket else 0
-    m_bv = basket.get("avg_customer_value", basket.get("avg_basket_value", 0)) if basket else 0
-    if pd.isna(m_bv): m_bv = 0
+    m_item_rev = (m_df["Quantity"] * m_df["Item Cost"]).sum() if "Quantity" in m_df.columns and "Item Cost" in m_df.columns else 0.0
+
+    # ── Robust Gross Revenue, Cashback, and Net Revenue Calculation ──
+    if "Cashback Discount" in m_df.columns and (m_df["Cashback Discount"] > 0).any():
+        m_cashback_disc = float(m_df["Cashback Discount"].sum())
+    else:
+        cb_cols = [c for c in ["Order Discount Total", "Fee Discount Total", "Item Discount"] if c in m_df.columns]
+        if cb_cols:
+            m_cashback_disc = float(m_df[cb_cols].sum().sum())
+        elif "Subtotal Cost" in m_df.columns and "Item Cost" in m_df.columns and "Quantity" in m_df.columns:
+            m_cashback_disc = float(((m_df["Subtotal Cost"] - m_df["Item Cost"]).clip(lower=0) * m_df["Quantity"]).sum())
+        else:
+            m_cashback_disc = 0.0
+
+    if "Gross Amount" in m_df.columns:
+        m_gross_rev = float(m_df["Gross Amount"].sum())
+    elif "Subtotal Cost" in m_df.columns and "Quantity" in m_df.columns:
+        m_gross_rev = float((m_df["Subtotal Cost"] * m_df["Quantity"]).sum())
+    else:
+        m_gross_rev = m_item_rev
+
+    # Net Revenue = Gross Revenue - Cashback/Discount Fees
+    m_net_rev = max(0.0, m_gross_rev - m_cashback_disc)
+
+    m_loss_pct = (m_cashback_disc / m_gross_rev * 100) if m_gross_rev > 0 else 0.0
+    m_gross_bv = (m_gross_rev / m_ord) if m_ord > 0 else 0.0
+    m_net_bv = (m_net_rev / m_ord) if m_ord > 0 else 0.0
+    m_cb_per_basket = (m_cashback_disc / m_ord) if m_ord > 0 else 0.0
+    m_bv = m_net_bv
 
     dq_str, dr_str, do_str, db_str = None, None, None, None
     if c_df is not None and not c_df.empty:
         co_q = c_df["Quantity"].sum() if "Quantity" in c_df.columns else 0
-        co_r = (c_df["Quantity"] * c_df["Item Cost"]).sum() if "Quantity" in c_df.columns and "Item Cost" in c_df.columns else 0
+        co_item_r = (c_df["Quantity"] * c_df["Item Cost"]).sum() if "Quantity" in c_df.columns and "Item Cost" in c_df.columns else 0.0
         _, _, _, co_basket = aggregate_data(c_df, dummy_mapping)
         co_o = co_basket["total_orders"] if co_basket else 0
-        co_b = co_basket.get("avg_customer_value", co_basket.get("avg_basket_value", 0)) if co_basket else 0
-        if pd.isna(co_b): co_b = 0
+
+        co_cb = float(c_df["Cashback Discount"].sum()) if "Cashback Discount" in c_df.columns else 0.0
+        co_gross = float(c_df["Gross Amount"].sum()) if "Gross Amount" in c_df.columns else co_item_r
+        co_net_r = max(0.0, co_gross - co_cb)
+        co_b = (co_net_r / co_o) if co_o > 0 else 0.0
 
         prefix = "Today " if nav_mode == "Prev" else ""
         suffix = "" if nav_mode == "Prev" else " vs Prev"
 
         dq = m_qty - co_q
-        dr = m_rev - co_r
+        dr = m_net_rev - co_net_r
         d_o = m_ord - co_o
-        db = m_bv - co_b
+        db = m_net_bv - co_b
         if nav_mode == "Prev":
             dq = co_q - m_qty
-            dr = co_r - m_rev
+            dr = co_net_r - m_net_rev
             d_o = co_o - m_ord
-            db = co_b - m_bv
+            db = co_b - m_net_bv
 
         dq_str = f"{prefix}{dq:+,.0f}{suffix}"
         dr_str = f"{prefix}{'+' if dr >= 0 else '-'}TK {abs(dr):,.0f}{suffix}"
@@ -129,9 +158,9 @@ def render_operational_metrics(
         return f'<div class="metric-delta {cls}">{delta_str}</div>'
 
     v_qty = f"{m_qty:,.0f}"
-    v_rev = f"TK {m_rev:,.0f}"
+    v_rev = f"TK {m_net_rev:,.0f}"
     v_ord = f"{m_ord:,.0f}"
-    v_bv = f"TK {int(m_bv):,}"
+    v_bv = f"TK {int(m_net_bv):,}"
 
     html_dq = format_delta(dq_str)
     html_dr = format_delta(dr_str)
@@ -139,7 +168,7 @@ def render_operational_metrics(
     html_db = format_delta(db_str)
 
     extra_metric_label = "Basket Size"
-    extra_metric_value = v_bv  # will be overridden below once net values are computed
+    extra_metric_value = v_bv
     extra_metric_delta = html_db
     extra_metric_icon = "🛍️"
 
@@ -203,9 +232,12 @@ def render_operational_metrics(
                 qty_series = t_df.groupby("_hr")["Quantity"].sum().reindex(all_hours, fill_value=0)
                 t_qty_vals = qty_series.tolist()
                 
-                # 2. Revenue Sum
-                t_df["_rev"] = t_df["Quantity"] * t_df["Item Cost"]
-                rev_series = t_df.groupby("_hr")["_rev"].sum().reindex(all_hours, fill_value=0)
+                # 2. Net Revenue Sum per hour
+                if "Total Amount" in t_df.columns:
+                    rev_series = t_df.groupby("_hr")["Total Amount"].sum().reindex(all_hours, fill_value=0)
+                else:
+                    t_df["_rev"] = t_df["Quantity"] * t_df["Item Cost"]
+                    rev_series = t_df.groupby("_hr")["_rev"].sum().reindex(all_hours, fill_value=0)
                 t_rev_vals = rev_series.tolist()
                 
                 # 3. Orders Count (unique order IDs)
@@ -226,31 +258,6 @@ def render_operational_metrics(
                 s_bv = _generate_sparkline_svg(t_bv_vals, theme_cfg.get("spark_bv", "#f59e0b"))
         except Exception as e:
             log_system_event("SPARKLINE_ERROR", f"Failed to generate sparklines: {e}")
-
-    # ── Robust Gross Revenue, Cashback, and Net Revenue Calculation ──
-    if "Cashback Discount" in m_df.columns and (m_df["Cashback Discount"] > 0).any():
-        m_cashback_disc = float(m_df["Cashback Discount"].sum())
-    else:
-        cb_cols = [c for c in ["Order Discount Total", "Fee Discount Total", "Item Discount"] if c in m_df.columns]
-        if cb_cols:
-            m_cashback_disc = float(m_df[cb_cols].sum().sum())
-        elif "Subtotal Cost" in m_df.columns and "Item Cost" in m_df.columns and "Quantity" in m_df.columns:
-            m_cashback_disc = float(((m_df["Subtotal Cost"] - m_df["Item Cost"]).clip(lower=0) * m_df["Quantity"]).sum())
-        else:
-            m_cashback_disc = 0.0
-
-    if "Gross Amount" in m_df.columns:
-        m_gross_rev = float(m_df["Gross Amount"].sum())
-    elif "Subtotal Cost" in m_df.columns and "Quantity" in m_df.columns:
-        m_gross_rev = float((m_df["Subtotal Cost"] * m_df["Quantity"]).sum())
-    else:
-        m_gross_rev = m_rev + m_cashback_disc
-
-    m_net_rev = m_gross_rev - m_cashback_disc
-    m_loss_pct = (m_cashback_disc / m_gross_rev * 100) if m_gross_rev > 0 else 0.0
-    m_gross_bv = (m_gross_rev / m_ord) if m_ord > 0 else 0.0
-    m_net_bv = (m_net_rev / m_ord) if m_ord > 0 else 0.0
-    m_cb_per_basket = (m_cashback_disc / m_ord) if m_ord > 0 else 0.0
 
     # % of unique orders with cashback
     _ord_id_col = next((c for c in ["Order ID", "Order Number"] if c in m_df.columns), None)
@@ -351,9 +358,9 @@ def render_operational_metrics(
         g1, g2 = st.columns(2)
         with g1:
             if rev_goal > 0:
-                pct = min(m_rev / rev_goal, 1.0)
+                pct = min(m_net_rev / rev_goal, 1.0)
                 color = "#10b981" if pct >= 1.0 else "#f59e0b" if pct >= 0.7 else "#ef4444"
-                label = "✅ Goal Reached!" if pct >= 1.0 else f"৳{m_rev:,.0f} / ৳{rev_goal:,.0f}"
+                label = "✅ Goal Reached!" if pct >= 1.0 else f"৳{m_net_rev:,.0f} / ৳{rev_goal:,.0f}"
                 st.markdown(
                     f'<div style="margin-bottom:8px;">'  
                     f'<span style="font-size:0.72rem;font-weight:700;color:{color};letter-spacing:0.05em;">'
@@ -380,7 +387,7 @@ def render_operational_metrics(
 
     # ── Feature #5: Auto-Save Shift Snapshot ───────────────────────────────────
     # Only save once per render cycle, silently — keyed by data fingerprint
-    snap_key = f"{m_rev:.0f}_{m_ord}_{m_qty}"
+    snap_key = f"{m_net_rev:.0f}_{m_ord}_{m_qty}"
     if st.session_state.get("_last_snap_key") != snap_key and m_ord > 0:
         top_list = []
         if top is not None and not top.empty:
@@ -389,7 +396,7 @@ def render_operational_metrics(
             for _, row in top.sort_values(amt_col, ascending=False).head(5).iterrows() if amt_col else []:
                 top_list.append({"name": str(row.get(name_col, "")), "revenue": float(row.get(amt_col, 0))})
         save_shift_snapshot(
-            revenue=float(m_rev),
+            revenue=float(m_net_rev),
             orders=int(m_ord),
             qty=int(m_qty),
             aov=float(m_bv),
@@ -417,9 +424,9 @@ def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.Da
         return
 
     # Compute calculations
-    gross_rev = m_df["Gross Amount"].sum() if "Gross Amount" in m_df.columns else (m_df["Quantity"] * m_df["Item Cost"]).sum()
-    net_rev = m_df["Total Amount"].sum() if "Total Amount" in m_df.columns else (m_df["Quantity"] * m_df["Item Cost"]).sum()
-    total_cashback = m_df["Cashback Discount"].sum() if "Cashback Discount" in m_df.columns else max(0.0, gross_rev - net_rev)
+    gross_rev = float(m_df["Gross Amount"].sum()) if "Gross Amount" in m_df.columns else float((m_df["Quantity"] * m_df["Item Cost"]).sum())
+    total_cashback = float(m_df["Cashback Discount"].sum()) if "Cashback Discount" in m_df.columns else 0.0
+    net_rev = float(m_df["Total Amount"].sum()) if "Total Amount" in m_df.columns else (gross_rev - total_cashback)
     
     cb_orders_mask = (m_df["Cashback Discount"] > 0) if "Cashback Discount" in m_df.columns else pd.Series(False, index=m_df.index)
     id_col = "Order ID" if "Order ID" in m_df.columns else "Order Number" if "Order Number" in m_df.columns else None

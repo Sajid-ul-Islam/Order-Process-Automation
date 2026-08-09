@@ -930,9 +930,99 @@
           "revenue": 944.0
         }
       ]
+    },
+    {
+      "ts": "2026-08-09T16:48:21.501429+06:00",
+      "label": "Today",
+      "revenue": 44836.0,
+      "orders": 24,
+      "qty": 34,
+      "aov": 1868.17,
+      "top_products": [
+        {
+          "name": "High-End Vintage Wash Jeans - Regular Fit - 34",
+          "revenue": 4662.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 32",
+          "revenue": 4482.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 36",
+          "revenue": 2331.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Regular Fit - 32",
+          "revenue": 2331.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Regular Fit - 32",
+          "revenue": 2241.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-09T17:07:24.547499+06:00",
+      "label": "Today",
+      "revenue": 38160.0,
+      "orders": 21,
+      "qty": 30,
+      "aov": 1817.14,
+      "top_products": [
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 32",
+          "revenue": 4482.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 36",
+          "revenue": 2331.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Regular Fit - 34",
+          "revenue": 2331.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Regular Fit - 32",
+          "revenue": 2331.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Regular Fit - 34",
+          "revenue": 2241.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-09T17:15:23.533752+06:00",
+      "label": "Today",
+      "revenue": 62389.0,
+      "orders": 29,
+      "qty": 44,
+      "aov": 2151.34,
+      "top_products": [
+        {
+          "name": "High-End Vintage Wash Jeans - Regular Fit - 32",
+          "revenue": 6993.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Regular Fit - 34",
+          "revenue": 6993.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Regular Fit - 34",
+          "revenue": 4482.0
+        },
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 30",
+          "revenue": 4482.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Slim Fit - 32",
+          "revenue": 4482.0
+        }
+      ]
     }
   ],
-  "daily_revenue": 3377795.0,
-  "daily_orders": 1462,
-  "daily_qty": 2881
+  "daily_revenue": 3523180.0,
+  "daily_orders": 1536,
+  "daily_qty": 2989
 }
