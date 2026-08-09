@@ -263,11 +263,28 @@ def render_operational_metrics(
         _total_ord = max(1, int(m_ord))
     m_cb_orders_pct = (_cb_ord_cnt / _total_ord * 100) if _cb_ord_cnt > 0 else 0.0
 
-    v_rev = f"TK {m_net_rev:,.0f}"
+    order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
 
-    l1 = "Backlog Items" if nav_mode == "Backlog" else "Gross Items"
-    l2 = "Backlog Rev" if nav_mode == "Backlog" else "Actual Net Revenue"
-    l3 = "Backlog Orders" if nav_mode == "Backlog" else "Orders"
+    if nav_mode == "Backlog":
+        l1 = "Backlog Items"
+        l2 = "Backlog Rev"
+        l3 = "Backlog Orders"
+        icon_l3 = "🛒"
+    elif order_view_mode == "Shipped Only":
+        l1 = "Shipped Items"
+        l2 = "Shipped Net Revenue"
+        l3 = "Shipped Orders"
+        icon_l3 = "🚚"
+    elif order_view_mode == "Processing Only":
+        l1 = "Processing Items"
+        l2 = "Processing Rev"
+        l3 = "Processing Orders"
+        icon_l3 = "⚙️"
+    else:
+        l1 = "Gross Items"
+        l2 = "Actual Net Revenue"
+        l3 = "Orders"
+        icon_l3 = "🛒"
 
     gross_items_card = (
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{l1}</div>'
@@ -289,7 +306,7 @@ def render_operational_metrics(
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{l2}</div>'
         f'<div class="metric-value">{v_rev}</div>{cb_badge}{html_dr}{s_rev}</div><div class="metric-icon">৳</div></div>'
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{l3}</div>'
-        f'<div class="metric-value">{v_ord}</div>{cb_orders_badge}{html_do}{s_ord}</div><div class="metric-icon">🛒</div></div>'
+        f'<div class="metric-value">{v_ord}</div>{cb_orders_badge}{html_do}{s_ord}</div><div class="metric-icon">{icon_l3}</div></div>'
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{extra_metric_label}</div>'
         f'<div class="metric-value">{extra_metric_value}</div>{cb_basket_badge}{extra_metric_delta}'
         f'{s_bv if nav_mode != "Backlog" else ""}</div>'

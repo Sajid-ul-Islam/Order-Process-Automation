@@ -190,11 +190,28 @@ def get_woocommerce_shipped_orders_count(after_iso: str, before_iso: str) -> int
 
 
 def _get_operational_sync_params() -> dict:
-    """Build API params for the Operational Cycle sync mode (3-day rolling window)."""
+    """Build API params for the Operational Cycle sync mode (3-day rolling window or user-selected custom date range)."""
     tz_bd = timezone(timedelta(hours=6))
     now_bd = datetime.now(tz_bd)
     shift_h = st.session_state.get("shift_cutoff_hour", 18)
     shift_m = st.session_state.get("shift_cutoff_minute", 0)
+
+    custom_range = st.session_state.get("live_custom_range")
+    if custom_range and isinstance(custom_range, (tuple, list)) and len(custom_range) == 2:
+        start_d, end_d = custom_range[0], custom_range[1]
+        today_bd = now_bd.date()
+        if start_d != today_bd or end_d != today_bd:
+            start_dt = datetime.combine(start_d, datetime.min.time()) - timedelta(hours=6)
+            end_dt = datetime.combine(end_d, datetime.max.time()) - timedelta(hours=6)
+            return {
+                "per_page": 100,
+                "after": start_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+                "before": end_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+                "status": "processing,completed,shipped,on-hold,pending,waiting,confirmed",
+                "orderby": "date",
+                "order": "desc",
+            }
+
     anchor = now_bd.replace(hour=shift_h, minute=shift_m, second=0, microsecond=0) - timedelta(days=3)
 
     return {
@@ -341,7 +358,7 @@ def _apply_shipped_history(df_full):
         actual_mod_dt = row["mod_dt_parsed"]
         if pd.notnull(actual_mod_dt):
             if oid in shipped_history:
-                stored_dt = pd.to_datetime(shipped_history[oid], errors="coerce")
+                stored_dt = safe_coerce_datetime_naive(pd.Series([shipped_history[oid]])).iloc[0]
                 if pd.isnull(stored_dt) or actual_mod_dt > stored_dt:
                     shipped_history[oid] = str(actual_mod_dt)
                     history_updated = True
@@ -349,7 +366,7 @@ def _apply_shipped_history(df_full):
                 shipped_history[oid] = str(actual_mod_dt)
                 history_updated = True
         elif oid in shipped_history:
-            stored_dt = pd.to_datetime(shipped_history[oid], errors="coerce")
+            stored_dt = safe_coerce_datetime_naive(pd.Series([shipped_history[oid]])).iloc[0]
             if pd.notnull(stored_dt):
                 df_full.at[idx, "mod_dt_parsed"] = stored_dt
 
@@ -380,14 +397,13 @@ def _partition_operational_data(df_full):
     is_waiting = df_full["Order Status"].astype(str).str.lower().isin(["pending", "waiting"])
 
     shipped_recent = is_shipped & (
-        df_full["mod_dt_parsed"].isna()
-        | (df_full["mod_dt_parsed"] >= prev_cutoff)
-        | (df_full["dt_parsed"] >= prev_cutoff)
+        (df_full["mod_dt_parsed"] >= prev_cutoff)
+        | (df_full["mod_dt_parsed"].isna() & (df_full["dt_parsed"] >= prev_cutoff))
     )
 
     df_live = df_full[
         ((~is_shipped) & (df_full["dt_parsed"] >= prev_cutoff))
-        | is_shipped
+        | shipped_recent
         | is_confirmed | is_processing
     ].copy()
 

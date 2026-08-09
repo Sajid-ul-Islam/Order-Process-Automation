@@ -42,12 +42,28 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
         mod_col = "Order Date Modified"
 
     def _safe_tz_naive(series):
-        dt_s = pd.to_datetime(series, errors="coerce")
-        return dt_s.dt.tz_localize(None) if getattr(dt_s.dt, "tz", None) is not None else dt_s
+        return safe_coerce_datetime_naive(series)
 
     def _safe_dt_naive(val):
         dt_v = pd.to_datetime(val)
         return dt_v.tz_localize(None) if getattr(dt_v, "tz", None) is not None else dt_v
+
+    custom_range = st.session_state.get("live_custom_range")
+    tz_bd = timezone(timedelta(hours=6))
+    today_bd = datetime.now(tz_bd).date()
+
+    if not is_comparison and custom_range and isinstance(custom_range, (tuple, list)) and len(custom_range) == 2:
+        start_d, end_d = custom_range[0], custom_range[1]
+        if start_d != today_bd or end_d != today_bd:
+            dt_series = _safe_tz_naive(shipped_df[mod_col]) if mod_col else pd.Series(pd.NaT, index=shipped_df.index)
+            date_col = "dt_parsed" if "dt_parsed" in shipped_df.columns else "Order Date" if "Order Date" in shipped_df.columns else None
+            dt_create = _safe_tz_naive(shipped_df[date_col]) if date_col else pd.Series(pd.NaT, index=shipped_df.index)
+
+            mask = (
+                ((dt_series.dt.date >= start_d) & (dt_series.dt.date <= end_d))
+                | (dt_series.isna() & (dt_create.dt.date >= start_d) & (dt_create.dt.date <= end_d))
+            )
+            return shipped_df[mask]
 
     if nav_mode == "Today" and not is_comparison:
         # 1. First try filtering by operational shift slot boundaries if defined
@@ -59,10 +75,12 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
             dt_create = _safe_tz_naive(shipped_df[date_col]) if date_col else pd.Series(pd.NaT, index=shipped_df.index)
 
             # Match mod_dt within slot OR (mod_dt is NaT and dt_create is within slot)
-            in_slot_mask = ((dt_series >= slot_start) & (dt_series <= slot_end)) | (dt_series.isna() & (dt_create >= slot_start) & (dt_create <= slot_end))
+            in_slot_mask = (
+                ((dt_series >= slot_start) & (dt_series <= slot_end))
+                | (dt_series.isna() & (dt_create >= slot_start) & (dt_create <= slot_end))
+            )
             shipped_in_slot = shipped_df[in_slot_mask]
-            if not shipped_in_slot.empty:
-                return shipped_in_slot
+            return shipped_in_slot
 
         # 2. Fallback to calendar date matching (BD Time UTC+6)
         tz_bd = timezone(timedelta(hours=6))
@@ -71,18 +89,15 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
         if mod_col:
             dt_series = _safe_tz_naive(shipped_df[mod_col])
             shipped_today = shipped_df[dt_series.dt.date == today_bd]
-            if not shipped_today.empty:
-                return shipped_today
+            return shipped_today
 
         # 3. Fallback to order creation date column
         date_col = "dt_parsed" if "dt_parsed" in shipped_df.columns else "Order Date" if "Order Date" in shipped_df.columns else None
         if date_col:
             dt_create = _safe_tz_naive(shipped_df[date_col])
             shipped_today = shipped_df[dt_create.dt.date == today_bd]
-            if not shipped_today.empty:
-                return shipped_today
+            return shipped_today
 
-        # All date-based filters exhausted with no matches → truly 0 shipped orders today
         return shipped_df.iloc[0:0]
 
     # ── Operational slot boundaries for Prev mode or comparison slots ──
@@ -101,7 +116,6 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
         ]
         return filtered
 
-    # No slot boundaries available → cannot scope to this slot, return empty
     return shipped_df.iloc[0:0]
 
 
@@ -138,6 +152,31 @@ def filter_all_orders_to_slot(df, nav_mode):
     df = df[status_lower.isin(ALL_VALID)].copy()
     if df.empty:
         return df
+
+    # Check for custom date range selected by user
+    custom_range = st.session_state.get("live_custom_range")
+    tz_bd = timezone(timedelta(hours=6))
+    today_bd = datetime.now(tz_bd).date()
+
+    if custom_range and isinstance(custom_range, (tuple, list)) and len(custom_range) == 2:
+        start_d, end_d = custom_range[0], custom_range[1]
+        if start_d != today_bd or end_d != today_bd:
+            mod_col  = "mod_dt_parsed" if "mod_dt_parsed" in df.columns else "Order Date Modified" if "Order Date Modified" in df.columns else None
+            date_col = "dt_parsed" if "dt_parsed" in df.columns else "Order Date" if "Order Date" in df.columns else None
+
+            status_lower = df[status_col].astype(str).str.lower()
+            is_active  = status_lower.isin(ACTIVE_STATUSES)
+            is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
+
+            dt_mod = safe_coerce_datetime_naive(df[mod_col]) if mod_col else pd.Series(pd.NaT, index=df.index)
+            dt_create = safe_coerce_datetime_naive(df[date_col]) if date_col else pd.Series(pd.NaT, index=df.index)
+
+            active_mask = is_active & (dt_create.dt.date >= start_d) & (dt_create.dt.date <= end_d)
+            shipped_mask = is_shipped & (
+                ((dt_mod.dt.date >= start_d) & (dt_mod.dt.date <= end_d))
+                | (dt_mod.isna() & (dt_create.dt.date >= start_d) & (dt_create.dt.date <= end_d))
+            )
+            return df[active_mask | shipped_mask]
 
     # 2. Choose the slot boundary key for the current nav mode
     if nav_mode == "Today":
@@ -217,36 +256,39 @@ def process_data(df, selected_cols):
     return drill, summ, top, timeframe, basket
 
 def safe_coerce_datetime_naive(series: pd.Series) -> pd.Series:
-    """Safely converts a pandas Series to timezone-naive datetime64[ns],
-    handling naive, aware, and mixed timezone string formats robustly.
+    """Safely converts a pandas Series to timezone-naive datetime64[ns].
+    If timestamps are timezone-aware or contain explicit UTC ISO indicators (Z or offset),
+    converts them to Asia/Dhaka local time (+6).
+    Naive timestamps are preserved as local naive datetimes without double shift.
     """
     if series is None or series.empty:
         return pd.to_datetime(series, errors="coerce")
 
-    # Try standard parsing first
+    # If series is already datetime64 dtype
+    if pd.api.types.is_datetime64_any_dtype(series):
+        if getattr(series.dt, "tz", None) is not None:
+            return series.dt.tz_convert("Asia/Dhaka").dt.tz_localize(None)
+        return series
+
+    # Standard parsing first
     parsed = pd.to_datetime(series, errors="coerce")
-    
-    # If the parsed series is timezone-aware, convert it to Asia/Dhaka local time and strip tz
     if getattr(parsed.dt, "tz", None) is not None:
         try:
             return parsed.dt.tz_convert("Asia/Dhaka").dt.tz_localize(None)
         except Exception:
+            return parsed.dt.tz_localize(None)
+
+    # If parsed result is naive string series, check if strings contain explicit UTC timezone designators ('Z', '+00:00')
+    s_clean = series.dropna()
+    if not s_clean.empty and isinstance(s_clean.iloc[0], str):
+        first_val = str(s_clean.iloc[0])
+        if "Z" in first_val or "+00" in first_val or "UTC" in first_val.upper():
             try:
-                return parsed.dt.tz_convert(None)
+                parsed_utc = pd.to_datetime(series, errors="coerce", utc=True)
+                if getattr(parsed_utc.dt, "tz", None) is not None:
+                    return parsed_utc.dt.tz_convert("Asia/Dhaka").dt.tz_localize(None)
             except Exception:
-                return parsed.dt.tz_localize(None)
-        
-    # If the parsed series is object dtype (mixed timezones), parse with utc=True,
-    # convert to Asia/Dhaka, and strip tz
-    if parsed.dtype == "object":
-        try:
-            parsed_utc = pd.to_datetime(series, errors="coerce", utc=True)
-            try:
-                return parsed_utc.dt.tz_convert("Asia/Dhaka").dt.tz_localize(None)
-            except Exception:
-                return parsed_utc.dt.tz_convert(None)
-        except Exception:
-            pass
+                pass
 
     return parsed
 

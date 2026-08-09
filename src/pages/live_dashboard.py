@@ -102,9 +102,14 @@ def render_live_tab():
         st.session_state.live_sync_time = None
         st.session_state.wc_view_historical = False
         st.session_state.wc_sync_mode = "Operational Cycle"
+        st.session_state.wc_nav_mode = "Today"
+        st.session_state.live_order_filter = "All Orders"
 
     render_reset_confirm("Live Dashboard", "live", _reset_live_state)
     st.session_state.manual_tab_active = False
+
+    if "wc_nav_mode" not in st.session_state:
+        st.session_state.wc_nav_mode = "Today"
 
     if "live_order_filter" not in st.session_state:
         st.session_state.live_order_filter = "All Orders"
@@ -115,15 +120,58 @@ def render_live_tab():
     nav_mode = st.session_state.get("wc_nav_mode", "Today")
     order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
 
-    # ── Header: Auto-Sync label + Refresh button ──────────────────────────────
-    col_hdr1, col_hdr2 = st.columns([4, 1])
+    # ── Header: Auto-Sync label + Date Range Selector + Refresh button ───────
+    col_hdr1, col_hdr2, col_hdr3 = st.columns([2.2, 2.2, 1.1])
     with col_hdr1:
         # Auto-sync fragment (renders compact caption inline)
         if nav_mode == "Today" and order_view_mode == "Shipped Only":
             _sync_60s()
         else:
             _sync_180s()
+
+        curr_r = st.session_state.get("live_custom_range")
+        tz_bd = timezone(timedelta(hours=6))
+        today_bd = datetime.now(tz_bd).date()
+        if curr_r and (curr_r[0] != today_bd or curr_r[1] != today_bd):
+            st.caption(f"🗓️ Custom Range: **{curr_r[0].strftime('%b %d')} – {curr_r[1].strftime('%b %d')}**")
+            if st.button("❌ Clear Custom Range", key="btn_clear_custom_range", type="secondary"):
+                st.session_state["live_custom_range"] = (today_bd, today_bd)
+                if "wc_sync_start_date" in st.session_state:
+                    del st.session_state["wc_sync_start_date"]
+                if "wc_sync_end_date" in st.session_state:
+                    del st.session_state["wc_sync_end_date"]
+                st.rerun()
+
     with col_hdr2:
+        tz_bd = timezone(timedelta(hours=6))
+        today_bd = datetime.now(tz_bd).date()
+        curr_range = st.session_state.get("live_custom_range", (today_bd, today_bd))
+
+        sel_dates = st.date_input(
+            "📅 Date Range",
+            value=curr_range,
+            max_value=today_bd,
+            key="live_date_picker_widget",
+            label_visibility="collapsed",
+            help="Select custom start and end date range to filter orders.",
+        )
+
+        if isinstance(sel_dates, (list, tuple)) and len(sel_dates) == 2:
+            new_r = (sel_dates[0], sel_dates[1])
+            if st.session_state.get("live_custom_range") != new_r:
+                st.session_state["live_custom_range"] = new_r
+                st.session_state["wc_sync_start_date"] = sel_dates[0]
+                st.session_state["wc_sync_end_date"] = sel_dates[1]
+                st.rerun()
+        elif isinstance(sel_dates, (list, tuple)) and len(sel_dates) == 1:
+            new_r = (sel_dates[0], sel_dates[0])
+            if st.session_state.get("live_custom_range") != new_r:
+                st.session_state["live_custom_range"] = new_r
+                st.session_state["wc_sync_start_date"] = sel_dates[0]
+                st.session_state["wc_sync_end_date"] = sel_dates[0]
+                st.rerun()
+
+    with col_hdr3:
         if st.button("🔄 Refresh", use_container_width=True, key="btn_refresh_newly_shipped", type="secondary"):
             load_live_source(force_refresh=True)
             st.toast("⚡ Data refreshed!")
@@ -297,21 +345,11 @@ def _render_dispatch_export():
     if status_col is None:
         return
 
-    is_shipped = raw_df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES)
-    curr_slot = st.session_state.get("wc_curr_slot")
-    if curr_slot and "mod_dt_parsed" in raw_df.columns:
-        s_start, s_end = pd.to_datetime(curr_slot[0]), pd.to_datetime(curr_slot[1])
-        shipped_today = raw_df[is_shipped & (raw_df["mod_dt_parsed"] >= s_start) & (raw_df["mod_dt_parsed"] <= s_end)]
-        if shipped_today.empty:
-            shipped_today = raw_df[is_shipped & (raw_df["mod_dt_parsed"].dt.date == today_bd)]
-    else:
-        shipped_today = raw_df[is_shipped & (raw_df["mod_dt_parsed"].dt.date == today_bd)]
+    from src.processing.data_processing import filter_shipped_by_slot
+    shipped_today = filter_shipped_by_slot(raw_df, nav_mode="Today", is_comparison=False)
 
-    confirmed_df = raw_df[raw_df[status_col].astype(str).str.lower() == "confirmed"]
-    waiting_df = raw_df[
-        (raw_df[status_col].astype(str).str.lower() == "waiting") &
-        (raw_df["dt_parsed"].dt.date == today_bd)
-    ]
+    if shipped_today is None or shipped_today.empty:
+        return
 
     keep_cols = [
         c for c in [
@@ -329,30 +367,11 @@ def _render_dispatch_export():
         return d
 
     shipped_dedup = _dedup(shipped_today, "✅ Shipped Today")
-    confirmed_dedup = _dedup(confirmed_df, "🚚 Confirmed")
-    waiting_dedup = _dedup(waiting_df, "⏳ Waiting (today)")
 
-    parts = []
-    if not shipped_dedup.empty:
-        parts.append(shipped_dedup)
-    if not confirmed_dedup.empty:
-        confirmed_dedup = confirmed_dedup[~confirmed_dedup["Order ID"].isin(shipped_dedup["Order ID"])]
-        if not confirmed_dedup.empty:
-            parts.append(confirmed_dedup)
-    if not waiting_dedup.empty:
-        already_seen = set()
-        if not shipped_dedup.empty:
-            already_seen |= set(shipped_dedup["Order ID"])
-        if not confirmed_dedup.empty:
-            already_seen |= set(confirmed_dedup["Order ID"])
-        waiting_dedup = waiting_dedup[~waiting_dedup["Order ID"].isin(already_seen)]
-        if not waiting_dedup.empty:
-            parts.append(waiting_dedup)
-
-    if not parts:
+    if shipped_dedup.empty:
         return
 
-    export_df = pd.concat(parts, ignore_index=True)
+    export_df = shipped_dedup.copy()
 
     # Sort chronologically by modification date (most recent dispatches first)
     sort_cols = [c for c in ["mod_dt_parsed", "dt_parsed"] if c in export_df.columns]
@@ -379,12 +398,10 @@ def _render_dispatch_export():
 
     st.divider()
     with st.expander(
-        f"📋 Dispatch Export — {len(export_df)} Orders "
-        f"({len(shipped_dedup)} shipped · {len(confirmed_dedup) if not confirmed_dedup.empty else 0} confirmed · "
-        f"{len(waiting_dedup) if not waiting_dedup.empty else 0} waiting)",
+        f"📋 Dispatch Export — {len(export_df)} Shipped Orders",
         expanded=True,
     ):
-        st.caption("Shipped today + confirmed + today's waiting orders · one row per Order ID.")
+        st.caption("Orders shipped during today's shift · one row per Order ID.")
 
         search_q = st.text_input("🔍 Search by Order ID, Name, or Phone", key="dispatch_export_search").strip()
         display_df = export_df.copy()

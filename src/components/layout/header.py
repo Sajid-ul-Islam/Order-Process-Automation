@@ -109,6 +109,8 @@ Advanced Operational Command &amp; Strategic Business Intelligence
 
 def render_banner_mode_controls():
     """Renders operational mode segmented controls at the bottom-left of the banner area."""
+    if "wc_nav_mode" not in st.session_state:
+        st.session_state.wc_nav_mode = "Today"
     nav_mode = st.session_state.get("wc_nav_mode", "Today")
     mode_options = ["Last Day", "Active", "Queue"]
     mode_icons = {"Last Day": "⏳", "Active": "⚡", "Queue": "📥"}
