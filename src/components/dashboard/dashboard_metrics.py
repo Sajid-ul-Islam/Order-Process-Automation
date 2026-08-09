@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import streamlit as st
@@ -316,6 +316,30 @@ def render_operational_metrics(
 
 
     st.markdown(card_html, unsafe_allow_html=True)
+
+    # ── Explicit Operational Date Range Subtitle for Transparency ───────────
+    custom_r = st.session_state.get("live_custom_range")
+    slot_key = "wc_curr_slot" if nav_mode == "Today" else "wc_prev_slot" if nav_mode == "Prev" else None
+    slot = st.session_state.get(slot_key) if slot_key else None
+
+    if custom_r and isinstance(custom_r, (tuple, list)) and len(custom_r) == 2:
+        start_d, end_d = custom_r[0], custom_r[1]
+        tz_bd = timezone(timedelta(hours=6))
+        today_bd = datetime.now(tz_bd).date()
+        if start_d != today_bd or end_d != today_bd:
+            range_sub = f"📊 Filtered Date Range: **{start_d.strftime('%b %d, %Y')}** to **{end_d.strftime('%b %d, %Y')}** (Asia/Dhaka)"
+        elif slot:
+            s_st, s_en = pd.to_datetime(slot[0]), pd.to_datetime(slot[1])
+            range_sub = f"📊 Operational Shift Window: **{s_st.strftime('%b %d, %I:%M %p')}** to **{s_en.strftime('%b %d, %I:%M %p')}** (Asia/Dhaka)"
+        else:
+            range_sub = f"📊 Active Shift Window (Asia/Dhaka)"
+    elif slot:
+        s_st, s_en = pd.to_datetime(slot[0]), pd.to_datetime(slot[1])
+        range_sub = f"📊 {nav_mode} Operational Shift Window: **{s_st.strftime('%b %d, %I:%M %p')}** to **{s_en.strftime('%b %d, %I:%M %p')}** (Asia/Dhaka)"
+    else:
+        range_sub = f"📊 {nav_mode} Shift Window (Asia/Dhaka)"
+
+    st.caption(range_sub)
 
     # ── Feature #3: Goal Threshold Alerts ──────────────────────────────────────
     goals = st.session_state.get("shift_goals", {})
