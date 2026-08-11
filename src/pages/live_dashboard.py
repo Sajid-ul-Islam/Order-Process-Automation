@@ -18,11 +18,24 @@ from src.utils.safe_ops import safe_render, safe_filter
 # _sync_60s  → Active + Shipped Only (high-frequency, catches new dispatches)
 # _sync_180s → All other modes (light background refresh)
 
+def _check_and_trigger_ui_rerun():
+    df_curr = st.session_state.get("wc_curr_df")
+    if df_curr is not None and not df_curr.empty:
+        max_oid = str(df_curr["Order ID"].max()) if "Order ID" in df_curr.columns else "0"
+        max_mod = str(df_curr["mod_dt_parsed"].max()) if "mod_dt_parsed" in df_curr.columns else ""
+        new_fp = f"{len(df_curr)}_{max_oid}_{max_mod}"
+        old_fp = st.session_state.get("_live_dash_data_fingerprint", "")
+        st.session_state["_live_dash_data_fingerprint"] = new_fp
+        if old_fp and new_fp != old_fp:
+            st.rerun()
+
+
 @st.fragment(run_every=60)
 def _sync_60s():
     """60-second background sync used in Shipped-Only / Active mode."""
     try:
         load_live_source(force_refresh=True)
+        _check_and_trigger_ui_rerun()
     except Exception:
         pass
     sync_time = st.session_state.get("live_sync_time")
@@ -36,7 +49,8 @@ def _sync_60s():
 def _sync_180s():
     """3-minute background sync used for all other dashboard modes."""
     try:
-        load_live_source()
+        load_live_source(force_refresh=True)
+        _check_and_trigger_ui_rerun()
     except Exception:
         pass
     sync_time = st.session_state.get("live_sync_time")

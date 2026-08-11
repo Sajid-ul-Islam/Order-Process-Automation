@@ -172,7 +172,7 @@ def render_distribution_tab(search_q):
         
         if st.button("Generate Outlet Stock Report", use_container_width=True):
             with st.status("📊 Compiling stock data...", expanded=True) as stock_status:
-                inv_map, warnings, _, sku_to_title_size = inv_core.load_inventory_from_uploads(loc_files)
+                inv_map, warnings, enriched_dfs, sku_to_title_size = inv_core.load_inventory_from_uploads(loc_files)
                 stock_status.update(label="✅ Stock data compiled", state="complete")
                 if warnings:
                     for w in warnings:
@@ -752,7 +752,6 @@ def render_distribution_tab(search_q):
                             pathao_status.update(label="✅ Pathao sheet ready", state="complete")
                             st.rerun()
                     except Exception as e:
-                        from src.utils.logging import log_error
                         log_error(e, context="Inventory Pathao Processor")
                         pathao_status.update(label="❌ Pathao processing failed", state="error")
                         st.error(f"Pathao processing failed: {e}")

@@ -13,13 +13,25 @@ from src.utils.logging import log_system_event
 # ── Data transformation helpers ──────────────────────────────────────────────
 
 
+def _normalize_iso_gmt(dt_str: str) -> str:
+    """Ensure ISO date string from WooCommerce GMT fields has an explicit Z suffix if missing."""
+    if not dt_str or not isinstance(dt_str, str):
+        return dt_str
+    dt_str = dt_str.strip()
+    if dt_str and not dt_str.endswith("Z") and "+" not in dt_str and "-" not in dt_str[10:]:
+        return dt_str + "Z"
+    return dt_str
+
+
 def _flatten_order(order: dict) -> list[dict]:
     """Flatten a single WooCommerce order JSON into one dict per line item."""
     oid = order.get("id")
     onum = order.get("number")
-    d_val = order.get("date_created")
+    d_raw = order.get("date_created_gmt") or order.get("date_created")
+    m_raw = order.get("date_modified_gmt") or order.get("date_modified")
+    d_val = _normalize_iso_gmt(d_raw)
+    m_val = _normalize_iso_gmt(m_raw)
     status = order.get("status")
-    m_val = order.get("date_modified")
     bill = order.get("billing", {})
     ship = order.get("shipping", {})
     c_name = f"{bill.get('first_name', '')} {bill.get('last_name', '')}".strip()
@@ -65,7 +77,8 @@ def _flatten_order(order: dict) -> list[dict]:
     fee_notes_str = ", ".join(fee_notes) if fee_notes else ""
 
     flattened = []
-    for item in line_items:
+    for idx, item in enumerate(line_items):
+        item_id = item.get("id", idx)
         qty_raw = item.get("quantity", 1)
         qty_num = float(str(qty_raw if qty_raw is not None else "1").replace(",", "")) if float(str(qty_raw if qty_raw is not None else "1").replace(",", "")) > 0 else 1.0
         
@@ -80,6 +93,8 @@ def _flatten_order(order: dict) -> list[dict]:
 
         flattened.append({
             "Order ID": oid,
+            "Line Item ID": item_id,
+            "Line Item Index": idx,
             "Order Number": onum,
             "Order Date": d_val,
             "Order Date Modified": m_val,
@@ -131,7 +146,7 @@ def _fetch_wc_page(url: str, params: dict, auth: HTTPBasicAuth, page: int):
 
 def _fetch_wc_batch(url: str, params: dict, auth: HTTPBasicAuth) -> list:
     """Fetch all pages of WooCommerce orders concurrently and return flattened rows."""
-    fields = "id,number,date_created,date_modified,status,billing,shipping,payment_method_title,line_items,total,discount_total,shipping_total,fee_lines,coupon_lines,meta_data"
+    fields = "id,number,date_created,date_created_gmt,date_modified,date_modified_gmt,status,billing,shipping,payment_method_title,line_items,total,discount_total,shipping_total,fee_lines,coupon_lines,meta_data"
     params["_fields"] = fields
 
 
@@ -212,12 +227,14 @@ def _get_operational_sync_params() -> dict:
                 "order": "desc",
             }
 
-    anchor = now_bd.replace(hour=shift_h, minute=shift_m, second=0, microsecond=0) - timedelta(days=3)
+    anchor_bd = now_bd.replace(hour=shift_h, minute=shift_m, second=0, microsecond=0) - timedelta(days=3)
+    anchor_utc = anchor_bd - timedelta(hours=6)
+    before_utc = (now_bd + timedelta(minutes=10)) - timedelta(hours=6)
 
     return {
         "per_page": 100,
-        "after": anchor.strftime("%Y-%m-%dT%H:%M:%S"),
-        "before": now_bd.replace(hour=23, minute=59, second=59, microsecond=0).strftime("%Y-%m-%dT%H:%M:%S"),
+        "after": anchor_utc.strftime("%Y-%m-%dT%H:%M:%S"),
+        "before": before_utc.strftime("%Y-%m-%dT%H:%M:%S"),
         "status": "processing,completed,shipped,on-hold,pending,waiting,confirmed",
         "orderby": "date",
         "order": "desc",
@@ -278,10 +295,11 @@ def _get_custom_range_params() -> dict:
 
 
 def _merge_deduplicated_orders(main_rows: list, extra_rows: list) -> list:
-    """Merge two order lists, deduplicating by (Order ID, Item Name), preferring the latest date_modified / latest status."""
+    """Merge two order lists, deduplicating by unique line item, preferring the latest date_modified / latest status."""
     order_map = {}
     for r in main_rows + extra_rows:
-        key = (r["Order ID"], r["Item Name"])
+        line_key = r.get("Line Item ID") if r.get("Line Item ID") is not None else r.get("Line Item Index", 0)
+        key = (r.get("Order ID"), r.get("Item Name", ""), r.get("SKU", ""), line_key)
         if key not in order_map:
             order_map[key] = r
         else:
@@ -396,15 +414,15 @@ def _partition_operational_data(df_full):
     is_hold = df_full["Order Status"].astype(str).str.lower() == "on-hold"
     is_waiting = df_full["Order Status"].astype(str).str.lower().isin(["pending", "waiting"])
 
-    shipped_recent = is_shipped & (
-        (df_full["mod_dt_parsed"] >= prev_cutoff)
-        | (df_full["mod_dt_parsed"].isna() & (df_full["dt_parsed"] >= prev_cutoff))
-    )
+    # Any order created or modified in today's shift (status changes, newly placed, dispatches)
+    modified_recent = (df_full["mod_dt_parsed"] >= prev_cutoff)
+    created_recent = (df_full["dt_parsed"] >= prev_cutoff)
 
     df_live = df_full[
-        ((~is_shipped) & (df_full["dt_parsed"] >= prev_cutoff))
-        | shipped_recent
-        | is_confirmed | is_processing
+        created_recent
+        | modified_recent
+        | is_confirmed
+        | is_processing
     ].copy()
 
     df_prev = df_full[

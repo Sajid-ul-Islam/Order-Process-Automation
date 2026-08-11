@@ -1,104 +1,5 @@
 [
     {
-        "timestamp": "2026-06-14 11:55:07",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-14 11:55:26",
-        "context": "safe_render",
-        "error": "cannot access local variable 'io' where it is not associated with a value",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\stock_analytics.py\", line 567, in render_stock_analytics_tab\n    render_outlet_stock_analysis_tab()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\stock_analytics.py\", line 356, in render_outlet_stock_analysis_tab\n    default_obj = io.BytesIO(file_bytes)\n                  ^^\nUnboundLocalError: cannot access local variable 'io' where it is not associated with a value\n",
-        "details": {
-            "fallback_msg": "Stock Analytics unavailable."
-        }
-    },
-    {
-        "timestamp": "2026-06-14 11:55:28",
-        "context": "safe_render",
-        "error": "cannot access local variable 'io' where it is not associated with a value",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\stock_analytics.py\", line 567, in render_stock_analytics_tab\n    render_outlet_stock_analysis_tab()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\stock_analytics.py\", line 356, in render_outlet_stock_analysis_tab\n    default_obj = io.BytesIO(file_bytes)\n                  ^^\nUnboundLocalError: cannot access local variable 'io' where it is not associated with a value\n",
-        "details": {
-            "fallback_msg": "Stock Analytics unavailable."
-        }
-    },
-    {
-        "timestamp": "2026-06-14 11:57:02",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-14 12:00:05",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-14 12:03:30",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-14 12:08:38",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-14 12:12:05",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-14 12:15:53",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-14 12:22:44",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-14 12:29:10",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
         "timestamp": "2026-06-14 12:34:26",
         "context": "safe_render",
         "error": "division by zero",
@@ -878,5 +779,104 @@
         "error": "invalid syntax (return_analytics.py, line 110)",
         "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\app.py\", line 13, in <module>\n    run_app()\n    ~~~~~~~^^\n  File \"H:\\Repo\\DEEN-OPS\\src\\app_bootstrap.py\", line 441, in run_app\n    _route_page(selected_nav)\n    ~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"H:\\Repo\\DEEN-OPS\\src\\app_bootstrap.py\", line 372, in _route_page\n    from src.pages.return_analytics import render_return_analytics_tab\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\return_analytics.py\", line 110\n    order_ids_to_fetch = df_to_match[\"Order ID\"].astype(int).unique().tolist()                            with st.status(\"\ud83d\udd17 Enriching return data...\", expanded=True) as enrich_status:\n                                                                                                          ^^^^\nSyntaxError: invalid syntax\n",
         "details": {}
+    },
+    {
+        "timestamp": "2026-08-09 17:32:37",
+        "context": "safe_render",
+        "error": "name 'm_rev' is not defined",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 92, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 392, in render_operational_metrics\n    snap_key = f\"{m_rev:.0f}_{m_ord}_{m_qty}\"\n                  ^^^^^\nNameError: name 'm_rev' is not defined. Did you mean: 'v_rev'?\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 287, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: name 'm_rev' is not defined\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-09 17:32:51",
+        "context": "safe_render",
+        "error": "name 'm_rev' is not defined",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 92, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 392, in render_operational_metrics\n    snap_key = f\"{m_rev:.0f}_{m_ord}_{m_qty}\"\n                  ^^^^^\nNameError: name 'm_rev' is not defined. Did you mean: 'v_rev'?\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 287, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: name 'm_rev' is not defined\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-09 17:32:56",
+        "context": "safe_render",
+        "error": "name 'm_rev' is not defined",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 92, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 392, in render_operational_metrics\n    snap_key = f\"{m_rev:.0f}_{m_ord}_{m_qty}\"\n                  ^^^^^\nNameError: name 'm_rev' is not defined. Did you mean: 'v_rev'?\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 287, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: name 'm_rev' is not defined\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-09 17:33:10",
+        "context": "safe_render",
+        "error": "name 'm_rev' is not defined",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 92, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 392, in render_operational_metrics\n    snap_key = f\"{m_rev:.0f}_{m_ord}_{m_qty}\"\n                  ^^^^^\nNameError: name 'm_rev' is not defined. Did you mean: 'v_rev'?\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 287, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: name 'm_rev' is not defined\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-09 17:33:15",
+        "context": "safe_render",
+        "error": "name 'm_rev' is not defined",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 92, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 392, in render_operational_metrics\n    snap_key = f\"{m_net_rev:.0f}_{m_ord}_{m_qty}\"\n                  ^^^^^\nNameError: name 'm_rev' is not defined. Did you mean: 'v_rev'?\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 287, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: name 'm_rev' is not defined\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-09 17:33:29",
+        "context": "safe_render",
+        "error": "name 'm_rev' is not defined",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 92, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 392, in render_operational_metrics\n    snap_key = f\"{m_net_rev:.0f}_{m_ord}_{m_qty}\"\n                  ^^^^^\nNameError: name 'm_rev' is not defined. Did you mean: 'v_rev'?\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 287, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: name 'm_rev' is not defined\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-09 17:34:14",
+        "context": "safe_render",
+        "error": "name 'm_rev' is not defined",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 92, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 392, in render_operational_metrics\n    snap_key = f\"{m_net_rev:.0f}_{m_ord}_{m_qty}\"\n                  ^^^^^\nNameError: name 'm_rev' is not defined. Did you mean: 'v_rev'?\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 287, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: name 'm_rev' is not defined\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-09 17:34:20",
+        "context": "safe_render",
+        "error": "name 'm_rev' is not defined",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 92, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 392, in render_operational_metrics\n    snap_key = f\"{m_net_rev:.0f}_{m_ord}_{m_qty}\"\n                  ^^^^^\nNameError: name 'm_rev' is not defined. Did you mean: 'v_rev'?\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 287, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: name 'm_rev' is not defined\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-09 17:34:25",
+        "context": "safe_render",
+        "error": "name 'm_rev' is not defined",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 92, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 392, in render_operational_metrics\n    snap_key = f\"{m_net_rev:.0f}_{m_ord}_{m_qty}\"\n                  ^^^^^\nNameError: name 'm_rev' is not defined. Did you mean: 'v_rev'?\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 287, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: name 'm_rev' is not defined\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-09 17:35:18",
+        "context": "safe_render",
+        "error": "name 'm_rev' is not defined",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 92, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 392, in render_operational_metrics\n    snap_key = f\"{m_net_rev:.0f}_{m_ord}_{m_qty}\"\n                  ^^^^^\nNameError: name 'm_rev' is not defined. Did you mean: 'v_rev'?\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 287, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: name 'm_rev' is not defined\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-09 17:35:25",
+        "context": "safe_render",
+        "error": "name 'm_rev' is not defined",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 92, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 392, in render_operational_metrics\n    snap_key = f\"{m_net_rev:.0f}_{m_ord}_{m_qty}\"\n                  ^^^^^\nNameError: name 'm_rev' is not defined. Did you mean: 'v_rev'?\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 287, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: name 'm_rev' is not defined\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
     }
 ]
