@@ -201,14 +201,14 @@ def filter_all_orders_to_slot(df, nav_mode):
 
         # Active orders: scoped by creation date within slot
         if date_col:
-            dt_create = pd.to_datetime(df[date_col], errors="coerce")
+            dt_create = safe_coerce_datetime_naive(df[date_col])
             active_mask = is_active & (dt_create >= slot_start) & (dt_create <= slot_end)
         else:
             active_mask = is_active  # can't scope further without a date column
 
         # Shipped orders: scoped by modification date within slot
         if mod_col:
-            dt_mod = pd.to_datetime(df[mod_col], errors="coerce")
+            dt_mod = safe_coerce_datetime_naive(df[mod_col])
             shipped_mask = is_shipped & (dt_mod >= slot_start) & (dt_mod <= slot_end)
         else:
             shipped_mask = pd.Series(False, index=df.index)  # no mod date → exclude shipped
@@ -229,13 +229,13 @@ def filter_all_orders_to_slot(df, nav_mode):
         is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
 
         if date_col:
-            dt_create = pd.to_datetime(df[date_col], errors="coerce")
+            dt_create = safe_coerce_datetime_naive(df[date_col])
             active_mask = is_active & (dt_create.dt.date == today_bd)
         else:
             active_mask = is_active
 
         if mod_col:
-            dt_mod = pd.to_datetime(df[mod_col], errors="coerce")
+            dt_mod = safe_coerce_datetime_naive(df[mod_col])
             shipped_mask = is_shipped & (dt_mod.dt.date == today_bd)
         else:
             shipped_mask = pd.Series(False, index=df.index)

@@ -18,12 +18,26 @@ from src.utils.safe_ops import safe_render, safe_filter
 # _sync_60s  → Active + Shipped Only (high-frequency, catches new dispatches)
 # _sync_180s → All other modes (light background refresh)
 
+def _compute_live_data_fingerprint(df):
+    """Compute deterministic MD5 fingerprint across Order IDs, Order Statuses, and Modified Dates."""
+    if df is None or df.empty:
+        return ""
+    import hashlib
+    status_col = "Order Status" if "Order Status" in df.columns else "Status" if "Status" in df.columns else None
+    mod_col = "mod_dt_parsed" if "mod_dt_parsed" in df.columns else "Order Date Modified" if "Order Date Modified" in df.columns else None
+    oid_col = "Order ID" if "Order ID" in df.columns else None
+
+    cols = [c for c in [oid_col, status_col, mod_col] if c and c in df.columns]
+    if cols:
+        summary_str = f"{len(df)}_" + df[cols].astype(str).to_string()
+        return hashlib.md5(summary_str.encode("utf-8")).hexdigest()
+    return str(len(df))
+
+
 def _check_and_trigger_ui_rerun():
     df_curr = st.session_state.get("wc_curr_df")
     if df_curr is not None and not df_curr.empty:
-        max_oid = str(df_curr["Order ID"].max()) if "Order ID" in df_curr.columns else "0"
-        max_mod = str(df_curr["mod_dt_parsed"].max()) if "mod_dt_parsed" in df_curr.columns else ""
-        new_fp = f"{len(df_curr)}_{max_oid}_{max_mod}"
+        new_fp = _compute_live_data_fingerprint(df_curr)
         old_fp = st.session_state.get("_live_dash_data_fingerprint", "")
         st.session_state["_live_dash_data_fingerprint"] = new_fp
         if old_fp and new_fp != old_fp:
@@ -348,10 +362,11 @@ def _render_dispatch_export():
 
     raw_df = raw_df.copy()
 
+    from src.processing.data_processing import safe_coerce_datetime_naive
     if "mod_dt_parsed" in raw_df.columns:
-        raw_df["mod_dt_parsed"] = pd.to_datetime(raw_df["mod_dt_parsed"], errors="coerce")
+        raw_df["mod_dt_parsed"] = safe_coerce_datetime_naive(raw_df["mod_dt_parsed"])
     if "dt_parsed" in raw_df.columns:
-        raw_df["dt_parsed"] = pd.to_datetime(raw_df["dt_parsed"], errors="coerce")
+        raw_df["dt_parsed"] = safe_coerce_datetime_naive(raw_df["dt_parsed"])
 
     tz_bd = timezone(timedelta(hours=6))
     today_bd = datetime.now(tz_bd).date()
@@ -409,7 +424,7 @@ def _render_dispatch_export():
 
     for dt_col in ["Last Modified", "Order Date"]:
         if dt_col in export_df.columns:
-            export_df[dt_col] = pd.to_datetime(export_df[dt_col], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+            export_df[dt_col] = safe_coerce_datetime_naive(export_df[dt_col]).dt.strftime("%Y-%m-%d %I:%M %p")
 
     st.divider()
     with st.expander(

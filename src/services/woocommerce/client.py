@@ -27,10 +27,15 @@ def _flatten_order(order: dict) -> list[dict]:
     """Flatten a single WooCommerce order JSON into one dict per line item."""
     oid = order.get("id")
     onum = order.get("number")
-    d_raw = order.get("date_created_gmt") or order.get("date_created")
-    m_raw = order.get("date_modified_gmt") or order.get("date_modified")
-    d_val = _normalize_iso_gmt(d_raw)
-    m_val = _normalize_iso_gmt(m_raw)
+    if order.get("date_created_gmt"):
+        d_val = _normalize_iso_gmt(order.get("date_created_gmt"))
+    else:
+        d_val = order.get("date_created")
+
+    if order.get("date_modified_gmt"):
+        m_val = _normalize_iso_gmt(order.get("date_modified_gmt"))
+    else:
+        m_val = order.get("date_modified")
     status = order.get("status")
     bill = order.get("billing", {})
     ship = order.get("shipping", {})
@@ -229,12 +234,10 @@ def _get_operational_sync_params() -> dict:
 
     anchor_bd = now_bd.replace(hour=shift_h, minute=shift_m, second=0, microsecond=0) - timedelta(days=3)
     anchor_utc = anchor_bd - timedelta(hours=6)
-    before_utc = (now_bd + timedelta(minutes=10)) - timedelta(hours=6)
 
     return {
         "per_page": 100,
-        "after": anchor_utc.strftime("%Y-%m-%dT%H:%M:%S"),
-        "before": before_utc.strftime("%Y-%m-%dT%H:%M:%S"),
+        "after": f"{anchor_utc.strftime('%Y-%m-%dT%H:%M:%S')}Z",
         "status": "processing,completed,shipped,on-hold,pending,waiting,confirmed",
         "orderby": "date",
         "order": "desc",
@@ -326,6 +329,8 @@ def _compute_cutoff_times(tz_bd):
     shift_h = st.session_state.get("shift_cutoff_hour", 18)
     shift_m = st.session_state.get("shift_cutoff_minute", 0)
     cutoff_today = ref_now.replace(hour=shift_h, minute=shift_m, second=0, microsecond=0)
+    if ref_now >= cutoff_today:
+        cutoff_today = cutoff_today + timedelta(days=1)
 
     holiday_list = st.session_state.get("operational_holidays", [])
 

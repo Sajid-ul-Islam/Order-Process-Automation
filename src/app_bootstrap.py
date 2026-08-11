@@ -209,9 +209,12 @@ def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> N
         st.caption(sync_label)
 
         if st.button("🔄 Refresh Now", use_container_width=True, type="primary"):
-            from src.services.woocommerce.client import load_from_woocommerce
-            load_from_woocommerce.clear()
-            st.session_state.live_sync_time = datetime.now()
+            from src.services.woocommerce.client import load_live_source
+            try:
+                load_live_source(force_refresh=True)
+                st.toast("⚡ Live data refreshed!")
+            except Exception as e:
+                st.error(f"Refresh failed: {e}")
             st.rerun()
 
         if st.button("Save session state", use_container_width=True):
