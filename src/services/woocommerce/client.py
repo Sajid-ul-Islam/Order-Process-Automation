@@ -263,7 +263,7 @@ def _get_today_modified_shipped_params() -> dict:
     prev_cutoff_utc = prev_cutoff - timedelta(hours=6)
     return {
         "per_page": 100,
-        "modified_after": prev_cutoff_utc.strftime("%Y-%m-%dT%H:%M:%S"),
+        "modified_after": f"{prev_cutoff_utc.strftime('%Y-%m-%dT%H:%M:%S')}Z",
         "status": "any",
         "orderby": "modified",
         "order": "desc",

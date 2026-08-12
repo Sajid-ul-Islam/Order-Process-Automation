@@ -53,6 +53,7 @@ def render_category_charts(
     display_col: str,
     color_map: dict[str, str],
     metrics_summary: dict | None = None,
+    total_revenue: float | None = None,
 ) -> None:
     """Render the Revenue Share pie and Volume bar charts with truncated labels.
 
@@ -61,6 +62,7 @@ def render_category_charts(
         display_col: Column name to use for chart grouping ('Category' or 'Sub-Category').
         color_map: Mapping of category values to hex colours.
         metrics_summary: Optional dictionary containing top revenue/volume metrics.
+        total_revenue: Optional Net Realized Revenue override for exact center donut alignment.
     """
     summ_display = summ.copy()
     summ_display["Display_Label"] = summ_display[display_col].apply(lambda x: truncate_label(get_short_category_label(x), max_len=15))
@@ -87,16 +89,22 @@ def render_category_charts(
 
             pie_display["Pie_Name"] = pie_display.apply(resolve_low_share_name, axis=1)
 
-            agg_dict = {"Total Amount": "sum", "Total Qty": "sum"}
-            if display_col in pie_display.columns:
-                agg_dict[display_col] = "first"
-            if "Category" in pie_display.columns:
-                agg_dict["Category"] = "first"
+        # Consolidate duplicate Pie_Name rows cleanly before calculating top slices and Others
+        agg_dict = {"Total Amount": "sum", "Total Qty": "sum"}
+        if display_col in pie_display.columns:
+            agg_dict[display_col] = "first"
+        if "Category" in pie_display.columns:
+            agg_dict["Category"] = "first"
+        pie_display = pie_display.groupby("Pie_Name", as_index=False).agg(agg_dict)
 
-            pie_display = pie_display.groupby("Pie_Name", as_index=False).agg(agg_dict)
+        # Scale category amounts to match Net Realized Revenue if provided
+        gross_tot = float(pie_display["Total Amount"].sum())
+        if total_revenue is not None and total_revenue > 0 and gross_tot > 0 and abs(gross_tot - total_revenue) > 0.01:
+            scale_factor = total_revenue / gross_tot
+            pie_display["Total Amount"] = pie_display["Total Amount"] * scale_factor
 
         name_totals = pie_display.groupby("Pie_Name")["Total Amount"].sum().sort_values(ascending=False)
-        total_amt = name_totals.sum()
+        total_amt = float(total_revenue) if (total_revenue is not None and total_revenue > 0) else float(name_totals.sum())
 
         top_p = name_totals[name_totals >= 0.02 * total_amt].index.tolist()
 
@@ -107,17 +115,13 @@ def render_category_charts(
         if len(top_p) < len(name_totals):
             others_mask = ~pie_display["Pie_Name"].isin(top_p)
             others_rev = pie_display.loc[others_mask, "Total Amount"].sum()
-
-            # Merge any category whose revenue share is lower than Others total share into Others
-            if others_rev > 0:
-                smaller_than_others = (pie_display["Total Amount"] < others_rev) & (pie_display["Pie_Name"] != "Others")
-                others_mask = others_mask | smaller_than_others
+            others_qty = pie_display.loc[others_mask, "Total Qty"].sum()
 
             others_row = pd.DataFrame([{
                 "Pie_Name": "Others",
                 display_col: "Others",
-                "Total Amount": pie_display.loc[others_mask, "Total Amount"].sum(),
-                "Total Qty": pie_display.loc[others_mask, "Total Qty"].sum(),
+                "Total Amount": others_rev,
+                "Total Qty": others_qty,
             }])
             pie_display = pd.concat([pie_display[~others_mask], others_row], ignore_index=True)
 

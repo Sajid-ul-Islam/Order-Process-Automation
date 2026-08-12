@@ -391,6 +391,8 @@ def prepare_granular_data(df, selected_cols):
             if neg_fees.any():
                 df.loc[neg_fees, "Cashback Discount"] = df.loc[neg_fees, "Cashback Discount"] + raw_fees[neg_fees].abs()
 
+        df["Net Amount"] = df["Total Amount"]
+
 
         # Ensure Order Status and other operational columns are present
         if "Order Status" not in df.columns:
@@ -591,25 +593,33 @@ def get_dispatch_metrics(active_df, total_orders=0):
                 pending_mask = active_df[status_col].astype(str).str.lower().isin(["processing", "on-hold", "pending", "waiting"])
                 metrics["pending"] = active_df[pending_mask][order_col].nunique()
 
-                # Dispatched orders using SHIPPED_STATUSES
-                shipped_mask = active_df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES)
+                # Dispatched orders using SHIPPED_STATUSES or consignment presence
+                has_consignment = pd.Series(False, index=active_df.index)
+                if "Pathao Consignment ID" in active_df.columns:
+                    p_col_check = active_df["Pathao Consignment ID"].astype(str).str.strip().str.lower()
+                    has_consignment = (p_col_check != "") & (p_col_check != "nan") & (p_col_check != "none") & (p_col_check != "n/a")
+
+                shipped_mask = active_df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES) | has_consignment
                 shipped_df = active_df[shipped_mask]
                 metrics["dispatched"] = shipped_df[order_col].nunique() if not shipped_df.empty else 0
             else:
                 metrics["dispatched"] = active_df[order_col].nunique()
                 shipped_df = active_df
 
-            # Pathao Consignment ID check
-            if "Pathao Consignment ID" in active_df.columns:
-                p_col = active_df["Pathao Consignment ID"].astype(str).str.strip().str.lower()
-                pathao_mask = (p_col != "") & (p_col != "nan") & (p_col != "none") & (p_col != "n/a")
-                metrics["pathao_count"] = active_df[pathao_mask][order_col].nunique() if order_col else int(pathao_mask.sum())
-            elif "Shipping Method Title" in active_df.columns:
-                p_col = active_df["Shipping Method Title"].astype(str).str.lower()
-                pathao_mask = p_col.str.contains("pathao", na=False)
-                metrics["pathao_count"] = active_df[pathao_mask][order_col].nunique() if order_col else int(pathao_mask.sum())
+            # Pathao Consignment ID check on shipped dataframe
+            if not shipped_df.empty:
+                if "Pathao Consignment ID" in shipped_df.columns:
+                    p_col = shipped_df["Pathao Consignment ID"].astype(str).str.strip().str.lower()
+                    pathao_mask = (p_col != "") & (p_col != "nan") & (p_col != "none") & (p_col != "n/a")
+                    metrics["pathao_count"] = shipped_df[pathao_mask][order_col].nunique()
+                elif "Shipping Method Title" in shipped_df.columns:
+                    p_col = shipped_df["Shipping Method Title"].astype(str).str.lower()
+                    pathao_mask = p_col.str.contains("pathao", na=False)
+                    metrics["pathao_count"] = shipped_df[pathao_mask][order_col].nunique()
+                else:
+                    metrics["pathao_count"] = metrics["dispatched"]
             else:
-                metrics["pathao_count"] = metrics["dispatched"]
+                metrics["pathao_count"] = 0
 
             metrics["other_count"] = max(0, metrics["dispatched"] - metrics["pathao_count"])
 
@@ -634,7 +644,7 @@ def get_dispatch_metrics(active_df, total_orders=0):
     return metrics
 
 
-def generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, dm, top, prev_rev=None, prev_orders=None, forecast_str="", gross_rev=None, cashback_disc=None):
+def generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, dm, top, prev_rev=None, prev_orders=None, forecast_str="", gross_rev=None, cashback_disc=None, new_customers=None, returning_customers=None):
     """Generates the single source of truth narrative for the Executive Briefing."""
     from datetime import datetime, timedelta, timezone
     
@@ -681,15 +691,36 @@ def generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, d
             f"📉 *Cashback Lost per Basket:* -৳{cb_per_basket:,.0f} ({pct_basket_lost:.1f}% lost/basket)",
         ])
 
+    dispatched_cnt = dm.get("dispatched", 0)
+    pending_cnt = dm.get("pending", 0)
+    pathao_cnt = dm.get("pathao_count", 0)
+    other_cnt = dm.get("other_count", 0)
+    dispatch_rate = dm.get("dispatch_rate", 0.0)
+
     report_lines.extend([
         "",
-        f"🚚 *Last Shipped Order:* {dm.get('last_shipped_order', 'N/A')}",
+        f"🚚 *Dispatched Orders (Actual):* {dispatched_cnt:,.0f} ({dispatch_rate:.1f}% fulfillment rate)",
+        f"  • Pathao Courier: {pathao_cnt:,.0f}",
+        f"  • Other / Self-Handover: {other_cnt:,.0f}",
+        f"⏳ *Pending / Processing:* {pending_cnt:,.0f}",
+        f"📋 *Last Shipped Order:* {dm.get('last_shipped_order', 'N/A')}",
         f"🖨️ *Last Pathao Print:* {dm.get('last_pathao_print', 'N/A')}",
         "",
-        f"🛒 *Total Orders:* {today_orders:,.0f}",
-        f"🔄 *Exchange:* {dm.get('exchange_dispatch', 0):,.0f}",
-        f"🚀 *Ecom Dispatch:* {dm.get('ecom_dispatch', 0):,.0f}",
-        f"🏪 *Outlet Dispatch:* {dm.get('outlet_dispatch', 0):,.0f}",
+        f"🛒 *Total Shift Orders:* {today_orders:,.0f}",
+    ])
+
+    if new_customers is not None or returning_customers is not None:
+        n_c = int(new_customers or 0)
+        r_c = int(returning_customers or 0)
+        tot_c = n_c + r_c
+        pct_n = (n_c / tot_c * 100) if tot_c > 0 else 0
+        pct_r = (r_c / tot_c * 100) if tot_c > 0 else 0
+        report_lines.append(f"👥 *Customer Mix:* 🆕 {n_c:,} New ({pct_n:.0f}%) | 🔄 {r_c:,} Returning ({pct_r:.0f}%)")
+
+    report_lines.extend([
+        f"🔄 *Exchange Orders:* {dm.get('exchange_dispatch', 0):,.0f}",
+        f"🚀 *Ecom Orders:* {dm.get('ecom_dispatch', 0):,.0f}",
+        f"🏪 *Outlet Orders:* {dm.get('outlet_dispatch', 0):,.0f}",
     ])
 
     if prev_rev is not None:

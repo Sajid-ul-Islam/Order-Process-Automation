@@ -83,7 +83,7 @@ def _render_ingestion_mode_metrics(granular_df, dummy_mapping, last_updated):
     return drill, summ, top, basket, active_df
 
 
-def _render_charts(summ):
+def _render_charts(summ, total_rev=None):
     """Render the Performance Outlook charts section with executive metric highlights."""
     if summ is None or summ.empty:
         st.info("No category sales data available for current selection.")
@@ -117,7 +117,7 @@ def _render_charts(summ):
     metrics_summary = {}
     top_rev_cat = chart_summ.sort_values("Total Amount", ascending=False).iloc[0] if not chart_summ.empty else None
     top_vol_cat = chart_summ.sort_values("Total Qty", ascending=False).iloc[0] if not chart_summ.empty else None
-    tot_rev = chart_summ["Total Amount"].sum()
+    tot_rev = total_rev if (total_rev is not None and total_rev > 0) else chart_summ["Total Amount"].sum()
     tot_vol = chart_summ["Total Qty"].sum()
 
     if top_rev_cat is not None:
@@ -148,7 +148,7 @@ def _render_charts(summ):
     }
 
     if not chart_summ.empty:
-        render_category_charts(chart_summ, display_col, color_map, metrics_summary=metrics_summary)
+        render_category_charts(chart_summ, display_col, color_map, metrics_summary=metrics_summary, total_revenue=total_rev)
     st.divider()
 
     return color_map
@@ -250,12 +250,16 @@ def _build_export_data(is_operational, summ, top, active_df, today_rev, today_qt
     return export_data
 
 
-def _stream_ai_briefing(summ, top, active_df, today_rev, today_qty, today_orders, today_aov, dm, current_data_fingerprint):
+def _stream_ai_briefing(summ, top, active_df, today_rev, today_qty, today_orders, today_aov, dm, current_data_fingerprint, new_customers=None, returning_customers=None):
     """Stream an AI-generated briefing via the Data Pilot agent."""
     import queue
     import threading
     import time
     import asyncio
+
+    if new_customers is None or returning_customers is None:
+        from src.utils.customer_registry import compute_new_vs_returning_counts
+        new_customers, returning_customers = compute_new_vs_returning_counts(active_df)
 
     context_data = {"sales_summary": summ, "top_products": top, "raw_sales_data": active_df}
 
@@ -283,14 +287,18 @@ def _stream_ai_briefing(summ, top, active_df, today_rev, today_qty, today_orders
         f"- Net Basket Size: ৳{net_aov:,.0f}\n"
         f"- Gross Basket Size: ৳{gross_aov:,.0f}\n"
         f"- Basket Cashback Impact: -৳{cb_per_basket:,.0f} per basket ({pct_basket_lost:.1f}% lost/basket)\n"
-        f"- Orders: {today_orders}\n"
-        f"- Items Sold: {today_qty}\n\n"
-        f"Dispatch Metrics:\n"
+        f"- Shift Orders: {today_orders}\n"
+        f"- Items Sold: {today_qty}\n"
+        f"- Customer Breakdown: {new_customers or 0} New Customers | {returning_customers or 0} Returning Customers\n\n"
+        f"Dispatch & Fulfillment Status (Actual Counts):\n"
+        f"- Total Dispatched / Shipped Orders: {dm.get('dispatched', 0)} ({dm.get('dispatch_rate', 0.0):.1f}% fulfillment rate)\n"
         f"- Shipped via Pathao: {dm.get('pathao_count', 0)}\n"
-        f"- Shipped via Other: {dm.get('other_count', 0)}\n"
+        f"- Shipped via Other / Self-Handover: {dm.get('other_count', 0)}\n"
+        f"- Pending / Processing Orders: {dm.get('pending', 0)}\n"
+        f"- Ecom Orders: {dm.get('ecom_dispatch', 0)} | Outlet: {dm.get('outlet_dispatch', 0)} | Exchange: {dm.get('exchange_dispatch', 0)}\n"
         f"{top_spotlight_str}\n\n"
         f"Based on the provided context data (sales_summary, top_products), write a concise, professional, and insightful narrative.\n"
-        f"Highlight Net Realized Revenue as the primary headline figure, explicitly analyze cashback/fee discount impact on overall revenue & basket size, summarize the \"Product Spotlight\" to point out what is driving revenue, and provide a concluding remark on the day's performance.\n"
+        f"Highlight Net Realized Revenue as the primary headline figure, explicitly analyze actual shipped status counts (total dispatched orders, Pathao vs other courier breakdown, pending fulfillment status, and dispatch rate), analyze customer acquisition mix (New vs Returning customer count and ratio), analyze cashback/fee discount impact on overall revenue & basket size, summarize the \"Product Spotlight\" to point out what is driving revenue, and provide a concluding remark on the day's performance.\n"
         f"The entire response should be a single block of text formatted for WhatsApp (using markdown like *bold* and _italic_)."
     )
 
@@ -364,7 +372,7 @@ def _stream_ai_briefing(summ, top, active_df, today_rev, today_qty, today_orders
         st.error(f"AI generation failed: {e}")
 
 
-def _render_ai_briefing_section(is_operational, summ, top, active_df, today_rev, today_qty, today_orders, today_aov, dm, current_data_fingerprint, final_report_text):
+def _render_ai_briefing_section(is_operational, summ, top, active_df, today_rev, today_qty, today_orders, today_aov, dm, current_data_fingerprint, final_report_text, new_customers=None, returning_customers=None):
     """Render the AI executive briefing expander with auto-generation and streaming."""
     if not is_operational:
         return
@@ -381,7 +389,7 @@ def _render_ai_briefing_section(is_operational, summ, top, active_df, today_rev,
 
             if gen_clicked or (auto_gen and data_changed):
                 with st.spinner("🧠 AI Pilot is analyzing today's performance..."):
-                    _stream_ai_briefing(summ, top, active_df, today_rev, today_qty, today_orders, today_aov, dm, current_data_fingerprint)
+                    _stream_ai_briefing(summ, top, active_df, today_rev, today_qty, today_orders, today_aov, dm, current_data_fingerprint, new_customers=new_customers, returning_customers=returning_customers)
 
         with c3:
             render_copy_button(final_report_text, label="📋 Copy Briefing")
@@ -632,6 +640,42 @@ def render_dashboard_output(
     else:
         drill, summ, top, basket, active_df = _render_ingestion_mode_metrics(granular_df, dummy_mapping, last_updated)
 
+    # ── Executive Briefing & Key Metrics ──
+    today_qty = summ['Total Qty'].sum() if summ is not None else 0
+    today_orders = basket.get('total_orders', 0) if basket else 0
+    today_aov = basket.get('avg_customer_value', basket.get('avg_basket_value', 0)) if basket else 0
+
+    dm = None
+    final_report_text = ""
+    hero = st.session_state.get("hero_metrics", {})
+    
+    today_qty = hero.get("qty", summ['Total Qty'].sum() if summ is not None else 0)
+    today_orders = hero.get("orders", basket.get('total_orders', 0) if basket else 0)
+    today_aov = hero.get("net_aov", basket.get('avg_customer_value', basket.get('avg_basket_value', 0)) if basket else 0)
+
+    dm = None
+    final_report_text = ""
+    today_rev = float(hero.get("net_rev", summ['Total Amount'].sum() if summ is not None else 0.0))
+    gross_rev = float(hero.get("gross_rev", today_rev))
+    cashback_disc = float(hero.get("cashback_disc", 0.0))
+
+    if is_operational:
+        dm = get_dispatch_metrics(active_df, today_orders)
+
+        _adf = active_df if (active_df is not None and not active_df.empty) else None
+        if not hero:
+            cashback_disc = float(_adf["Cashback Discount"].sum()) if (_adf is not None and "Cashback Discount" in _adf.columns) else 0.0
+
+            if _adf is not None and "Total Amount" in _adf.columns:
+                today_rev = float(_adf["Total Amount"].sum())
+            else:
+                today_rev = float(summ['Total Amount'].sum()) if summ is not None else 0.0
+
+            if _adf is not None and "Gross Amount" in _adf.columns:
+                gross_rev = float(_adf["Gross Amount"].sum())
+            else:
+                gross_rev = today_rev + cashback_disc
+
     # ── Performance Hub: Category Share | Spotlight | SKU Report ─────────────
     tab_cat, tab_spot, tab_sku = st.tabs([
         "Category Share",
@@ -640,36 +684,26 @@ def render_dashboard_output(
     ])
 
     with tab_cat:
-        color_map = _render_charts(summ)
+        color_map = _render_charts(summ, total_rev=today_rev)
 
-    # ── Executive Briefing ──
-    today_qty = summ['Total Qty'].sum() if summ is not None else 0
-    today_orders = basket.get('total_orders', 0) if basket else 0
-    today_aov = basket.get('avg_customer_value', basket.get('avg_basket_value', 0)) if basket else 0
-
-    dm = None
-    final_report_text = ""
-    today_rev = float(summ['Total Amount'].sum()) if summ is not None else 0.0  # default; overridden below for operational mode
     if is_operational:
-        dm = get_dispatch_metrics(active_df, today_orders)
+        net_aov = float(hero.get("net_aov", (today_rev / today_orders) if today_orders > 0 else float(today_aov)))
 
-        # ── Safe gross/cashback computation (active_df may be None when no orders match filter) ──
-        _adf = active_df if (active_df is not None and not active_df.empty) else None
-        if _adf is not None and "Gross Amount" in _adf.columns:
-            gross_rev = float(_adf["Gross Amount"].sum())
-        elif _adf is not None and "Total Amount" in _adf.columns:
-            gross_rev = float(_adf["Total Amount"].sum())
+        if "new_customers" in hero and "returning_customers" in hero:
+            new_cust_cnt = hero["new_customers"]
+            ret_cust_cnt = hero["returning_customers"]
         else:
-            gross_rev = float(summ['Total Amount'].sum()) if summ is not None else 0.0
+            from src.utils.customer_registry import compute_new_vs_returning_counts
+            full_df_for_cust = st.session_state.get("wc_curr_df")
+            new_cust_cnt, ret_cust_cnt = compute_new_vs_returning_counts(active_df, full_df_for_cust, wc_raw_mapping)
 
-        cashback_disc = float(_adf["Cashback Discount"].sum()) if (_adf is not None and "Cashback Discount" in _adf.columns) else 0.0
+        report_text = generate_executive_briefing(
+            today_rev, today_qty, today_orders, net_aov, dm, top,
+            gross_rev=gross_rev, cashback_disc=cashback_disc,
+            new_customers=new_cust_cnt, returning_customers=ret_cust_cnt
+        )
 
-        # Net revenue = Gross − Cashback (consistent with KPI cards)
-        today_rev = gross_rev - cashback_disc
-        net_aov = (today_rev / today_orders) if today_orders > 0 else float(today_aov)
-        report_text = generate_executive_briefing(today_rev, today_qty, today_orders, net_aov, dm, top, gross_rev=gross_rev, cashback_disc=cashback_disc)
-
-        current_data_fingerprint = f"{today_rev}_{today_orders}_{dm.get('pathao_count', 0)}_{dm.get('other_count', 0)}"
+        current_data_fingerprint = f"{today_rev}_{today_orders}_{dm.get('pathao_count', 0)}_{dm.get('other_count', 0)}_{new_cust_cnt}_{ret_cust_cnt}"
 
         if st.session_state.get("last_ai_data_fingerprint", "") != current_data_fingerprint:
             st.session_state.pop("ai_report_text", None)
@@ -679,7 +713,8 @@ def render_dashboard_output(
         _render_ai_briefing_section(
             is_operational, summ, top, active_df,
             today_rev, today_qty, today_orders, net_aov,
-            dm, current_data_fingerprint, final_report_text
+            dm, current_data_fingerprint, final_report_text,
+            new_customers=new_cust_cnt, returning_customers=ret_cust_cnt
         )
 
     with tab_spot:

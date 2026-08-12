@@ -760,6 +760,21 @@ def render_operational_metrics(
         )
         st.session_state["_last_snap_key"] = snap_key
 
+    # Publish Hero Metrics as the single source of truth for downstream widgets
+    st.session_state["hero_metrics"] = {
+        "gross_rev": float(m_gross_rev),
+        "cashback_disc": float(m_cashback_disc),
+        "net_rev": float(m_net_rev),
+        "orders": int(m_ord),
+        "qty": int(m_qty),
+        "net_aov": float(m_net_bv),
+        "gross_aov": float(m_gross_bv),
+        "cb_per_basket": float(m_cb_per_basket),
+        "loss_pct": float(m_loss_pct),
+        "new_customers": int(m_new_cnt),
+        "returning_customers": int(m_ret_cnt),
+    }
+
     return drill, summ, top, basket, active_df
 
 
