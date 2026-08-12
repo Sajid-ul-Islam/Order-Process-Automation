@@ -206,9 +206,18 @@ def render_live_tab():
             st.toast("⚡ Data refreshed!")
             st.rerun()
 
-    # ── Silent Live Data Sync ─────────────────────────────────────────────────
     try:
-        df_live, source_name, modified_at = load_live_source()
+        live_res = load_live_source()
+        if isinstance(live_res, dict):
+            df_live = live_res.get("df_to_return")
+            source_name = live_res.get("sync_desc", "WooCommerce_API")
+            modified_at = live_res.get("modified_at", "")
+        elif isinstance(live_res, (list, tuple)) and len(live_res) == 3:
+            df_live, source_name, modified_at = live_res
+        else:
+            df_live = live_res
+            source_name = "WooCommerce_API"
+            modified_at = ""
     except Exception as api_err:
         log_system_event("LIVE_API_ERROR", f"Live sync failed, attempting fallback: {api_err}")
         from src.utils.snapshots import load_sales_snapshot

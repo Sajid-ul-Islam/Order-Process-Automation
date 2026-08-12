@@ -92,19 +92,13 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
         tz_bd = timezone(timedelta(hours=6))
         today_bd = datetime.now(tz_bd).date()
 
-        if mod_col:
-            dt_series = _safe_tz_naive(shipped_df[mod_col])
-            shipped_today = shipped_df[dt_series.dt.date == today_bd]
-            return shipped_today
-
-        # 3. Fallback to order creation date column
+        dt_series = _safe_tz_naive(shipped_df[mod_col]) if mod_col else pd.Series(pd.NaT, index=shipped_df.index)
         date_col = "dt_parsed" if "dt_parsed" in shipped_df.columns else "Order Date" if "Order Date" in shipped_df.columns else None
-        if date_col:
-            dt_create = _safe_tz_naive(shipped_df[date_col])
-            shipped_today = shipped_df[dt_create.dt.date == today_bd]
-            return shipped_today
+        dt_create = _safe_tz_naive(shipped_df[date_col]) if date_col else pd.Series(pd.NaT, index=shipped_df.index)
 
-        return shipped_df.iloc[0:0]
+        dt_effective = dt_series.fillna(dt_create)
+        shipped_today = shipped_df[(dt_effective.dt.date == today_bd) | (dt_create.dt.date == today_bd)]
+        return shipped_today
 
     # ── Operational slot boundaries for Prev mode or comparison slots ──
     slot_key = "wc_curr_slot" if nav_mode == "Today" else "wc_prev_slot" if nav_mode == "Prev" else None
@@ -218,12 +212,15 @@ def filter_all_orders_to_slot(df, nav_mode):
         else:
             active_mask = is_active  # can't scope further without a date column
 
-        # Shipped orders: scoped by modification date within slot
-        if mod_col:
-            dt_mod = safe_coerce_datetime_naive(df[mod_col])
-            shipped_mask = is_shipped & (dt_mod >= slot_start) & (dt_mod <= slot_end)
-        else:
-            shipped_mask = pd.Series(False, index=df.index)  # no mod date → exclude shipped
+        # Shipped orders: scoped by modification date within slot, falling back to creation date
+        dt_mod = safe_coerce_datetime_naive(df[mod_col]) if mod_col else pd.Series(pd.NaT, index=df.index)
+        dt_create = safe_coerce_datetime_naive(df[date_col]) if date_col else pd.Series(pd.NaT, index=df.index)
+        dt_effective = dt_mod.fillna(dt_create)
+
+        shipped_mask = is_shipped & (
+            ((dt_effective >= slot_start) & (dt_effective <= slot_end))
+            | (dt_create.notna() & (dt_create >= slot_start) & (dt_create <= slot_end))
+        )
 
         combined = df[active_mask | shipped_mask]
         return combined
@@ -236,21 +233,22 @@ def filter_all_orders_to_slot(df, nav_mode):
         date_col = "dt_parsed" if "dt_parsed" in df.columns else "Order Date" if "Order Date" in df.columns else None
         mod_col  = "mod_dt_parsed" if "mod_dt_parsed" in df.columns else "Order Date Modified" if "Order Date Modified" in df.columns else None
 
+        has_consignment = pd.Series(False, index=df.index)
+        for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
+            if c_col in df.columns:
+                p_val = df[c_col].astype(str).str.strip().str.lower()
+                has_consignment = has_consignment | (~p_val.isin(["", "nan", "none", "n/a", "0", "null"]))
+
         status_lower = df[status_col].astype(str).str.lower()
-        is_active  = status_lower.isin(ACTIVE_STATUSES)
-        is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
+        is_active  = status_lower.isin(ACTIVE_STATUSES) & (~has_consignment)
+        is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES]) | has_consignment
 
-        if date_col:
-            dt_create = safe_coerce_datetime_naive(df[date_col])
-            active_mask = is_active & (dt_create.dt.date == today_bd)
-        else:
-            active_mask = is_active
+        dt_create = safe_coerce_datetime_naive(df[date_col]) if date_col else pd.Series(pd.NaT, index=df.index)
+        dt_mod = safe_coerce_datetime_naive(df[mod_col]) if mod_col else pd.Series(pd.NaT, index=df.index)
+        dt_effective = dt_mod.fillna(dt_create)
 
-        if mod_col:
-            dt_mod = safe_coerce_datetime_naive(df[mod_col])
-            shipped_mask = is_shipped & (dt_mod.dt.date == today_bd)
-        else:
-            shipped_mask = pd.Series(False, index=df.index)
+        active_mask = is_active & (dt_create.dt.date == today_bd) if date_col else is_active
+        shipped_mask = is_shipped & ((dt_effective.dt.date == today_bd) | (dt_create.dt.date == today_bd))
 
         return df[active_mask | shipped_mask]
 

@@ -44,9 +44,16 @@ def _flatten_order(order: dict) -> list[dict]:
     
     ptc_consignment_id = ""
     for meta in order.get("meta_data", []):
-        if meta.get("key") == "ptc_consignment_id":
-            ptc_consignment_id = meta.get("value", "")
-            break
+        k = str(meta.get("key", "")).lower()
+        if k in [
+            "ptc_consignment_id", "pathao_consignment_id", "consignment_id",
+            "tracking_number", "tracking_code", "_pathao_consignment_id",
+            "pathao_tracking", "shipment_id", "_tracking_number", "courier_consignment_id"
+        ]:
+            v = str(meta.get("value", "")).strip()
+            if v and v.lower() not in ["none", "nan", "null", "n/a", "0"]:
+                ptc_consignment_id = v
+                break
 
     # Use the actual order status directly from WooCommerce
     if not status or not str(status).strip():
@@ -227,7 +234,7 @@ def _get_operational_sync_params() -> dict:
                 "per_page": 100,
                 "after": start_dt.strftime("%Y-%m-%dT%H:%M:%S"),
                 "before": end_dt.strftime("%Y-%m-%dT%H:%M:%S"),
-                "status": "processing,completed,shipped,on-hold,pending,waiting,confirmed",
+                "status": "any",
                 "orderby": "date",
                 "order": "desc",
             }
@@ -238,7 +245,7 @@ def _get_operational_sync_params() -> dict:
     return {
         "per_page": 100,
         "after": f"{anchor_utc.strftime('%Y-%m-%dT%H:%M:%S')}Z",
-        "status": "processing,completed,shipped,on-hold,pending,waiting,confirmed",
+        "status": "any",
         "orderby": "date",
         "order": "desc",
     }
@@ -440,6 +447,7 @@ def _partition_operational_data(df_full):
         | modified_recent
         | is_confirmed
         | is_processing
+        | is_shipped
     ].copy()
 
     df_prev = df_full[

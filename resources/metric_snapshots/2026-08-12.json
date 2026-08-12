@@ -240,9 +240,189 @@
           "revenue": 1914.0
         }
       ]
+    },
+    {
+      "ts": "2026-08-12T11:51:14.056496+06:00",
+      "label": "Today",
+      "revenue": 26626.0,
+      "orders": 16,
+      "qty": 25,
+      "aov": 1664.12,
+      "top_products": [
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 32",
+          "revenue": 4980.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Regular Fit - 38",
+          "revenue": 2490.0
+        },
+        {
+          "name": "Arrowtown Embroidered Panjabi - 44",
+          "revenue": 1914.0
+        },
+        {
+          "name": "Brown Embroidered Panjabi - 46",
+          "revenue": 1914.0
+        },
+        {
+          "name": "Stone Embroidered Panjabi - 42",
+          "revenue": 1914.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-12T11:51:44.591413+06:00",
+      "label": "Today",
+      "revenue": 30790.0,
+      "orders": 18,
+      "qty": 33,
+      "aov": 1710.56,
+      "top_products": [
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 32",
+          "revenue": 4980.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Regular Fit - 38",
+          "revenue": 2490.0
+        },
+        {
+          "name": "Arrowtown Embroidered Panjabi - 44",
+          "revenue": 1914.0
+        },
+        {
+          "name": "Stone Embroidered Panjabi - 42",
+          "revenue": 1914.0
+        },
+        {
+          "name": "Brown Embroidered Panjabi - 46",
+          "revenue": 1914.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-12T11:55:24.313018+06:00",
+      "label": "Today",
+      "revenue": 39706.0,
+      "orders": 22,
+      "qty": 42,
+      "aov": 1804.82,
+      "top_products": [
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 32",
+          "revenue": 4980.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Regular Fit - 38",
+          "revenue": 2490.0
+        },
+        {
+          "name": "Arrowtown Embroidered Panjabi - 44",
+          "revenue": 1914.0
+        },
+        {
+          "name": "Brown Embroidered Panjabi - 46",
+          "revenue": 1914.0
+        },
+        {
+          "name": "Stone Embroidered Panjabi - 42",
+          "revenue": 1914.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-12T11:55:31.129995+06:00",
+      "label": "Today",
+      "revenue": 27602.0,
+      "orders": 17,
+      "qty": 33,
+      "aov": 1623.65,
+      "top_products": [
+        {
+          "name": "High-End Whisker Faded Jeans - Regular Fit - 38",
+          "revenue": 2490.0
+        },
+        {
+          "name": "Arrowtown Embroidered Panjabi - 44",
+          "revenue": 1914.0
+        },
+        {
+          "name": "Brown Embroidered Panjabi - 46",
+          "revenue": 1914.0
+        },
+        {
+          "name": "Stone Embroidered Panjabi - 42",
+          "revenue": 1914.0
+        },
+        {
+          "name": "Mako Embroidered Panjabi - 42",
+          "revenue": 1794.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-12T11:55:37.578107+06:00",
+      "label": "Today",
+      "revenue": 12104.0,
+      "orders": 5,
+      "qty": 9,
+      "aov": 2420.8,
+      "top_products": [
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 32",
+          "revenue": 4980.0
+        },
+        {
+          "name": "Mako Embroidered Panjabi - 46",
+          "revenue": 1794.0
+        },
+        {
+          "name": "Black Faded Jeans - Slim Fit - 28",
+          "revenue": 1352.0
+        },
+        {
+          "name": "Teal Swirl Casual Half Shirt - L",
+          "revenue": 1272.0
+        },
+        {
+          "name": "Burgundy Floral Casual Half Shirt - L",
+          "revenue": 1160.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-12T11:55:55.007633+06:00",
+      "label": "Today",
+      "revenue": 27602.0,
+      "orders": 17,
+      "qty": 33,
+      "aov": 1623.65,
+      "top_products": [
+        {
+          "name": "High-End Whisker Faded Jeans - Regular Fit - 38",
+          "revenue": 2490.0
+        },
+        {
+          "name": "Arrowtown Embroidered Panjabi - 44",
+          "revenue": 1914.0
+        },
+        {
+          "name": "Stone Embroidered Panjabi - 42",
+          "revenue": 1914.0
+        },
+        {
+          "name": "Brown Embroidered Panjabi - 46",
+          "revenue": 1914.0
+        },
+        {
+          "name": "Mako Embroidered Panjabi - 42",
+          "revenue": 1794.0
+        }
+      ]
     }
   ],
-  "daily_revenue": 225500.0,
-  "daily_orders": 134,
-  "daily_qty": 224
+  "daily_revenue": 389930.0,
+  "daily_orders": 229,
+  "daily_qty": 399
 }
