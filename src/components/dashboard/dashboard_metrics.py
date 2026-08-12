@@ -10,49 +10,82 @@ import streamlit as st
 
 from src.processing.data_processing import aggregate_data, prepare_granular_data, safe_coerce_datetime_naive
 from src.utils.metric_history import save_shift_snapshot, load_snapshot_history
+from src.utils.customer_registry import load_customer_registry, update_customer_registry
 from src.utils.logging import log_system_event
 
 
-def _generate_sparkline_svg(values: list[float], color: str = "#3b82f6") -> str:
-    """Generates a lightweight normalized SVG path for metric trends.
-    Uses base64 encoding inside an img tag to prevent Streamlit Cloud sanitizing raw SVG.
+def _generate_sparkline_svg(
+    values: list[float],
+    color: str = "#3b82f6",
+    prefix: str = "",
+    suffix: str = "",
+) -> tuple[str, str]:
+    """Generates an enhanced normalized SVG sparkline with peak indicator dots and micro-summary stats badges.
+    Returns (svg_html_snippet, micro_badge_html_snippet).
     """
     if not values or len(values) < 2:  # A line needs at least 2 points to show a trend.
-        return ""
+        return "", ""
     
     # Normalize values to fit 100x30 SVG coordinate system
     min_v, max_v = min(values), max(values)
+    avg_v = sum(values) / len(values)
+    latest_v = values[-1]
     rng = max_v - min_v if max_v != min_v else 1
     
-    points = []
     width = 100
     height = 30
     step = width / (len(values) - 1)
     
+    coords = []
+    max_idx = 0
     for i, v in enumerate(values):
         x = i * step
         # Use 4px padding top/bottom to prevent clipping line caps
         y = height - ((v - min_v) / rng * (height - 8)) - 4
-        points.append(f"{x:.1f},{y:.1f}")
+        coords.append((x, y))
+        if v == max_v:
+            max_idx = i
     
-    path_data = "M " + " L ".join(points)
-    # Create a closed path for the area fill
+    if len(coords) == 2:
+        path_data = f"M {coords[0][0]:.1f},{coords[0][1]:.1f} L {coords[1][0]:.1f},{coords[1][1]:.1f}"
+    else:
+        path_data = f"M {coords[0][0]:.1f},{coords[0][1]:.1f}"
+        for i in range(len(coords) - 1):
+            p0 = coords[i]
+            p1 = coords[i + 1]
+            cx = (p0[0] + p1[0]) / 2
+            path_data += f" C {cx:.1f},{p0[1]:.1f} {cx:.1f},{p1[1]:.1f} {p1[0]:.1f},{p1[1]:.1f}"
+    
     area_data = path_data + f" L {width:.1f},{height:.1f} L 0.0,{height:.1f} Z"
     
-    # Render SVG with explicit namespaces
+    px, py = coords[max_idx]
+    ex, ey = coords[-1]
+    
+    tooltip_txt = f"7-Day Trend: Peak {prefix}{max_v:,.0f}{suffix} | Avg {prefix}{avg_v:,.0f}{suffix} | Today {prefix}{latest_v:,.0f}{suffix}"
+    
     svg_raw = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 30" preserveAspectRatio="none">
+        <title>{tooltip_txt}</title>
         <path d="{area_data}" fill="{color}" fill-opacity="0.15" />
         <path d="{path_data}" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        <circle cx="{px:.1f}" cy="{py:.1f}" r="3" fill="{color}" stroke="#ffffff" stroke-width="1.2" />
+        <circle cx="{ex:.1f}" cy="{ey:.1f}" r="2.5" fill="#ffffff" stroke="{color}" stroke-width="1.5" />
     </svg>"""
     
     import base64
     b64_svg = base64.b64encode(svg_raw.encode("utf-8")).decode("utf-8")
     
-    return f"""
-    <div class="metric-sparkline">
+    svg_html = f"""
+    <div class="metric-sparkline" title="{tooltip_txt}">
         <img src="data:image/svg+xml;base64,{b64_svg}" style="width: 100%; height: 30px; display: block;" />
     </div>
     """
+    
+    badge_html = f"""<div style="font-size:0.68rem;color:rgba(255,255,255,0.65);margin-top:4px;display:flex;justify-content:space-between;align-items:center;">
+        <span>🔥 7D Peak: <b>{prefix}{max_v:,.0f}{suffix}</b></span>
+        <span>📊 7D Avg: <b>{prefix}{avg_v:,.0f}{suffix}</b></span>
+    </div>"""
+
+    return svg_html, badge_html
 
 
 def render_operational_metrics(
@@ -195,80 +228,181 @@ def render_operational_metrics(
         except Exception:
             pass
             
-    # ── Day-Wise Trend Extraction ──
+    # ── Last 7-Days KPI Sparkline Extraction ──
     s_qty, s_rev, s_ord, s_bv = "", "", "", ""
     if not m_df.empty and nav_mode != "Backlog":
         try:
-            # Prefer standardized 'Date' column over raw Order Date
-            date_col = "Date" if "Date" in m_df.columns else wc_raw_mapping.get("date", "Order Date")
-            t_df = m_df.copy()
-            t_df["_dt"] = safe_coerce_datetime_naive(t_df[date_col])
-            t_df = t_df.dropna(subset=["_dt"])
-            
-            if not t_df.empty:
-                t_df["_day"] = t_df["_dt"].dt.floor("D")
-                unique_days = t_df["_day"].nunique()
-                
-                order_id_col = wc_raw_mapping.get("order_id", "Order ID")
-                if order_id_col not in t_df.columns:
-                    order_id_col = next((c for c in ["Order ID", "Order Number"] if c in t_df.columns), t_df.columns[0])
-                
-                if "Total Amount" in t_df.columns:
-                    t_df["_rev"] = t_df["Total Amount"]
-                else:
-                    t_df["_rev"] = t_df["Quantity"] * t_df["Item Cost"]
+            # 1. Fetch the multi-day source DataFrame from session state if available, fallback to m_df
+            full_df = (
+                st.session_state.get("wc_full_df")
+                if st.session_state.get("wc_full_df") is not None and not st.session_state.get("wc_full_df").empty
+                else st.session_state.get("granular_df")
+                if st.session_state.get("granular_df") is not None and not st.session_state.get("granular_df").empty
+                else st.session_state.get("raw_df")
+                if st.session_state.get("raw_df") is not None and not st.session_state.get("raw_df").empty
+                else m_df
+            )
 
-                if unique_days > 1:
-                    # Multi-day view: group by day across all days in dataset
-                    start_day = t_df["_day"].min()
-                    end_day = t_df["_day"].max()
-                    all_days = pd.date_range(start=start_day, end=end_day, freq="D")
-                    
-                    qty_series = t_df.groupby("_day")["Quantity"].sum().reindex(all_days, fill_value=0)
-                    rev_series = t_df.groupby("_day")["_rev"].sum().reindex(all_days, fill_value=0)
-                    ord_series = t_df.groupby("_day")[order_id_col].nunique().reindex(all_days, fill_value=0)
-                    
-                    t_qty_vals = qty_series.tolist()
-                    t_rev_vals = rev_series.tolist()
-                    t_ord_vals = ord_series.tolist()
-                    t_bv_vals = [(r / o if o > 0 else 0) for r, o in zip(t_rev_vals, t_ord_vals)]
-                else:
-                    # Single-day view: build 7-day daily trend (past 6 days + today's live metrics)
-                    today_dt = t_df["_day"].iloc[0]
-                    start_7d = today_dt - pd.Timedelta(days=6)
-                    all_days = pd.date_range(start=start_7d, end=today_dt, freq="D")
-                    
-                    day_map_qty = {}
-                    day_map_rev = {}
-                    day_map_ord = {}
-                    
-                    hist_df = load_snapshot_history(7)
-                    if not hist_df.empty and "date" in hist_df.columns:
-                        hist_df["_day"] = pd.to_datetime(hist_df["date"]).dt.floor("D")
-                        for _, hrow in hist_df.iterrows():
-                            d_key = hrow["_day"]
-                            day_map_qty[d_key] = float(hrow.get("qty", 0))
-                            day_map_rev[d_key] = float(hrow.get("revenue", 0))
-                            day_map_ord[d_key] = float(hrow.get("orders", 0))
-                    
-                    # Override today's point with current live metrics
-                    day_map_qty[today_dt] = float(m_qty)
-                    day_map_rev[today_dt] = float(m_net_rev)
-                    day_map_ord[today_dt] = float(m_ord)
-                    
-                    t_qty_vals = [day_map_qty.get(d, 0.0) for d in all_days]
-                    t_rev_vals = [day_map_rev.get(d, 0.0) for d in all_days]
-                    t_ord_vals = [day_map_ord.get(d, 0.0) for d in all_days]
-                    t_bv_vals = [(r / o if o > 0 else 0) for r, o in zip(t_rev_vals, t_ord_vals)]
-                
-                from src.config.ui_config import CHART_THEMES
-                theme_name = st.session_state.get("chart_theme", "✨ Emerald Cyberpunk")
-                theme_cfg = CHART_THEMES.get(theme_name, CHART_THEMES["✨ Emerald Cyberpunk"])
+            date_col = "Date" if "Date" in full_df.columns else wc_raw_mapping.get("date", "Order Date")
+            if date_col not in full_df.columns:
+                date_col = next((c for c in ["Order Date", "Date", "Created Date"] if c in full_df.columns), full_df.columns[0])
 
-                s_qty = _generate_sparkline_svg(t_qty_vals, theme_cfg.get("spark_qty", "#06b6d4"))
-                s_rev = _generate_sparkline_svg(t_rev_vals, theme_cfg.get("spark_rev", "#10b981"))
-                s_ord = _generate_sparkline_svg(t_ord_vals, theme_cfg.get("spark_ord", "#3b82f6"))
-                s_bv = _generate_sparkline_svg(t_bv_vals, theme_cfg.get("spark_bv", "#f59e0b"))
+            src_df = full_df.copy()
+            src_df["_dt"] = safe_coerce_datetime_naive(src_df[date_col])
+            src_df = src_df.dropna(subset=["_dt"])
+
+            order_id_col = wc_raw_mapping.get("order_id", "Order ID")
+            if order_id_col not in src_df.columns:
+                order_id_col = next((c for c in ["Order ID", "Order Number"] if c in src_df.columns), src_df.columns[0])
+
+            if "Total Amount" in src_df.columns:
+                src_df["_rev"] = src_df["Total Amount"]
+            elif "Gross Amount" in src_df.columns:
+                src_df["_rev"] = src_df["Gross Amount"]
+            else:
+                src_df["_rev"] = src_df["Quantity"] * src_df["Item Cost"]
+
+            src_df["_day"] = src_df["_dt"].dt.floor("D")
+
+            day_map_qty = {}
+            day_map_rev = {}
+            day_map_ord = {}
+
+            # Populate from historical snapshot files
+            hist_df = load_snapshot_history(14)
+            if not hist_df.empty and "date" in hist_df.columns:
+                hist_df["_day"] = pd.to_datetime(hist_df["date"]).dt.floor("D")
+                for _, hrow in hist_df.iterrows():
+                    d_key = hrow["_day"]
+                    day_map_qty[d_key] = float(hrow.get("qty", 0))
+                    day_map_rev[d_key] = float(hrow.get("revenue", 0))
+                    day_map_ord[d_key] = float(hrow.get("orders", 0))
+
+            # Populate / override with multi-day source DataFrame
+            if not src_df.empty:
+                for d_key, grp in src_df.groupby("_day"):
+                    day_map_qty[d_key] = float(grp["Quantity"].sum())
+                    day_map_rev[d_key] = float(grp["_rev"].sum())
+                    day_map_ord[d_key] = float(grp[order_id_col].nunique())
+
+            # Ensure current live metrics are set for today's date
+            today_dt = src_df["_day"].max() if not src_df.empty else pd.to_datetime("today").floor("D")
+            day_map_qty[today_dt] = float(m_qty)
+            day_map_rev[today_dt] = float(m_net_rev)
+            day_map_ord[today_dt] = float(m_ord)
+
+            # Build exact continuous 7-day date window (last 7 days up to today)
+            all_7days = pd.date_range(end=today_dt, periods=7, freq="D")
+
+            t_qty_vals = [day_map_qty.get(d, 0.0) for d in all_7days]
+            t_rev_vals = [day_map_rev.get(d, 0.0) for d in all_7days]
+            t_ord_vals = [day_map_ord.get(d, 0.0) for d in all_7days]
+            t_bv_vals = [(r / o if o > 0 else 0) for r, o in zip(t_rev_vals, t_ord_vals)]
+
+            # Helper to trim leading zero padding when data collection started recently
+            def _trim_leading_zeros(vals: list[float]) -> list[float]:
+                first_nz = next((i for i, v in enumerate(vals) if v > 0), None)
+                if first_nz is not None and first_nz > 0:
+                    return vals[first_nz:]
+                return vals
+
+            t_qty_vals = _trim_leading_zeros(t_qty_vals)
+            t_rev_vals = _trim_leading_zeros(t_rev_vals)
+            t_ord_vals = _trim_leading_zeros(t_ord_vals)
+            t_bv_vals = _trim_leading_zeros(t_bv_vals)
+
+            from src.config.ui_config import CHART_THEMES
+            theme_name = st.session_state.get("chart_theme", "✨ Emerald Cyberpunk")
+            theme_cfg = CHART_THEMES.get(theme_name, CHART_THEMES["✨ Emerald Cyberpunk"])
+
+            s_qty, d_qty = _generate_sparkline_svg(t_qty_vals, theme_cfg.get("spark_qty", "#06b6d4"), prefix="", suffix="")
+            s_rev, d_rev = _generate_sparkline_svg(t_rev_vals, theme_cfg.get("spark_rev", "#10b981"), prefix="৳", suffix="")
+            s_ord, d_ord = _generate_sparkline_svg(t_ord_vals, theme_cfg.get("spark_ord", "#3b82f6"), prefix="", suffix="")
+            s_bv, d_bv = _generate_sparkline_svg(t_bv_vals, theme_cfg.get("spark_bv", "#f59e0b"), prefix="৳", suffix="")
+
+            # ── New vs Returning Customer Calculation (Lifetime Registry Integrated) ──
+            m_new_cnt, m_ret_cnt = 0, 0
+            s_cust, d_cust = "", ""
+            try:
+                # Update persistent customer registry with full_df order history
+                update_customer_registry(full_df, wc_raw_mapping)
+                lifetime_registry = load_customer_registry()
+
+                phone_col = next((c for c in ["Phone (Billing)", "Phone", "Billing Phone", "Customer Phone", "phone"] if c in m_df.columns), None)
+                email_col = next((c for c in ["Billing Email", "Email", "Customer Email", "email"] if c in m_df.columns), None)
+                cust_col = phone_col or email_col
+
+                if cust_col and not full_df.empty:
+                    full_dt_col = "Date" if "Date" in full_df.columns else wc_raw_mapping.get("date", "Order Date")
+                    if full_dt_col not in full_df.columns:
+                        full_dt_col = next((c for c in ["Order Date", "Date"] if c in full_df.columns), full_df.columns[0])
+
+                    f_df = full_df.copy()
+                    f_df["_dt"] = safe_coerce_datetime_naive(f_df[full_dt_col])
+                    f_df["_cust"] = f_df[cust_col].astype(str).str.strip().str.lower()
+                    f_df = f_df.dropna(subset=["_dt", "_cust"])
+
+                    first_order_map = f_df.groupby("_cust")["_dt"].min().to_dict()
+
+                    if not m_df.empty and cust_col in m_df.columns:
+                        active_dt_col = "Date" if "Date" in m_df.columns else wc_raw_mapping.get("date", "Order Date")
+                        t_act = m_df.copy()
+                        t_act["_dt"] = safe_coerce_datetime_naive(t_act[active_dt_col])
+                        t_act["_cust"] = t_act[cust_col].astype(str).str.strip().str.lower()
+
+                        order_id_col = wc_raw_mapping.get("order_id", "Order ID")
+                        if order_id_col not in t_act.columns:
+                            order_id_col = next((c for c in ["Order ID", "Order Number"] if c in t_act.columns), t_act.columns[0])
+
+                        act_uniq = t_act.drop_duplicates(subset=[order_id_col])
+                        for _, urow in act_uniq.iterrows():
+                            c_id = urow.get("_cust")
+                            o_dt = urow.get("_dt")
+
+                            # Check session dataset min date AND persistent lifetime registry min date (from past 1-5 years)
+                            first_dt = first_order_map.get(c_id, o_dt)
+                            reg_dt_str = lifetime_registry.get(c_id)
+                            if reg_dt_str:
+                                reg_dt = pd.to_datetime(reg_dt_str, errors="coerce")
+                                if pd.notna(reg_dt) and reg_dt.tzinfo is not None:
+                                    reg_dt = reg_dt.tz_localize(None)
+                                if pd.notna(reg_dt) and (pd.isna(first_dt) or reg_dt < first_dt):
+                                    first_dt = reg_dt
+
+                            if pd.notna(first_dt) and pd.notna(o_dt) and first_dt < o_dt.floor("D"):
+                                m_ret_cnt += 1
+                            else:
+                                m_new_cnt += 1
+
+                    # 7-Day New Customer Sparkline
+                    if not f_df.empty:
+                        f_df["_day"] = f_df["_dt"].dt.floor("D")
+                        order_id_col = wc_raw_mapping.get("order_id", "Order ID")
+                        if order_id_col not in f_df.columns:
+                            order_id_col = next((c for c in ["Order ID", "Order Number"] if c in f_df.columns), f_df.columns[0])
+
+                        day_map_new = defaultdict(int)
+                        for d_key, d_grp in f_df.groupby("_day"):
+                            for _, drow in d_grp.drop_duplicates(subset=[order_id_col]).iterrows():
+                                c_id = drow.get("_cust")
+                                first_dt = first_order_map.get(c_id)
+                                reg_dt_str = lifetime_registry.get(c_id)
+                                if reg_dt_str:
+                                    reg_dt = pd.to_datetime(reg_dt_str, errors="coerce")
+                                    if pd.notna(reg_dt) and reg_dt.tzinfo is not None:
+                                        reg_dt = reg_dt.tz_localize(None)
+                                    if pd.notna(reg_dt) and (pd.isna(first_dt) or reg_dt < first_dt):
+                                        first_dt = reg_dt
+                                if pd.notna(first_dt) and first_dt >= d_key:
+                                    day_map_new[d_key] += 1
+
+                        today_dt = f_df["_day"].max()
+                        all_7days = pd.date_range(end=today_dt, periods=7, freq="D")
+                        t_cust_vals = [float(day_map_new.get(d, 0)) for d in all_7days]
+                        t_cust_vals = _trim_leading_zeros(t_cust_vals)
+                        s_cust, d_cust = _generate_sparkline_svg(t_cust_vals, theme_cfg.get("spark_qty", "#a855f7"), prefix="", suffix="")
+            except Exception as e:
+                log_system_event("CUSTOMER_MIX_ERROR", f"Failed to compute customer mix: {e}")
         except Exception as e:
             log_system_event("SPARKLINE_ERROR", f"Failed to generate sparklines: {e}")
 
@@ -308,7 +442,7 @@ def render_operational_metrics(
 
     gross_items_card = (
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{l1}</div>'
-        f'<div class="metric-value">{v_qty}</div>{html_dq}{s_qty}</div>'
+        f'<div class="metric-value">{v_qty}</div>{html_dq}{s_qty}{d_qty}</div>'
         '<div class="metric-icon">📦</div></div>'
     )
 
@@ -320,17 +454,31 @@ def render_operational_metrics(
     cb_basket_badge = f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">Gross ৳{int(m_gross_bv):,} || Lost Revenue -{m_loss_pct:.0f}%</div>' if (m_cashback_disc > 0 and extra_metric_label == "Basket Size") else ''
     cb_orders_badge = f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">{m_cb_orders_pct:.0f}% cashbacked</div>' if m_cb_orders_pct > 0 else ''
 
+    tot_cust = m_new_cnt + m_ret_cnt
+    pct_new = (m_new_cnt / tot_cust * 100) if tot_cust > 0 else 0
+    pct_ret = (m_ret_cnt / tot_cust * 100) if tot_cust > 0 else 0
+
+    v_cust = f"{m_new_cnt} New / {m_ret_cnt} Ret" if tot_cust > 0 else "0 New / 0 Ret"
+    cust_badge = f'<div style="font-size:0.75rem;color:#a855f7;font-weight:700;background:rgba(168,85,247,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">🆕 {pct_new:.0f}% New || 🔄 {pct_ret:.0f}% Returning</div>' if tot_cust > 0 else ''
+
+    customer_mix_card = (
+        f'<div class="metric-card"><div class="metric-content"><div class="metric-label">Customer Mix</div>'
+        f'<div class="metric-value" style="font-size:1.3rem;">{v_cust}</div>{cust_badge}{s_cust}{d_cust}</div>'
+        '<div class="metric-icon">👥</div></div>'
+    )
+
     card_html = (
-        '<div class="metric-container metric-container-4">'
+        '<div class="metric-container metric-container-5">'
         f"{gross_items_card}"
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{l2}</div>'
-        f'<div class="metric-value">{v_rev}</div>{cb_badge}{html_dr}{s_rev}</div><div class="metric-icon">৳</div></div>'
+        f'<div class="metric-value">{v_rev}</div>{cb_badge}{html_dr}{s_rev}{d_rev}</div><div class="metric-icon">৳</div></div>'
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{l3}</div>'
-        f'<div class="metric-value">{v_ord}</div>{cb_orders_badge}{html_do}{s_ord}</div><div class="metric-icon">{icon_l3}</div></div>'
+        f'<div class="metric-value">{v_ord}</div>{cb_orders_badge}{html_do}{s_ord}{d_ord}</div><div class="metric-icon">{icon_l3}</div></div>'
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{extra_metric_label}</div>'
         f'<div class="metric-value">{extra_metric_value}</div>{cb_basket_badge}{extra_metric_delta}'
-        f'{s_bv if nav_mode != "Backlog" else ""}</div>'
+        f'{(s_bv + d_bv) if nav_mode != "Backlog" else ""}</div>'
         f'<div class="metric-icon">{extra_metric_icon}</div></div>'
+        f"{customer_mix_card}"
         "</div>"
     )
 

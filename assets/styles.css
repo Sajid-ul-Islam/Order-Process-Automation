@@ -792,6 +792,10 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
     grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.metric-container-5 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .metric-card {
     background: rgba(128, 128, 128, 0.05);
     backdrop-filter: blur(16px);
@@ -911,7 +915,7 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
         grid-template-columns: repeat(2, 1fr);
     }
 
-    .metric-container-4 {
+    .metric-container-4, .metric-container-5 {
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
 }
@@ -922,7 +926,7 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
         gap: 10px;
     }
 
-    .metric-container-4 {
+    .metric-container-4, .metric-container-5 {
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
 
