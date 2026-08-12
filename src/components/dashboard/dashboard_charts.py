@@ -70,9 +70,20 @@ def render_category_charts(
 
         tot_rev = pie_display["Total Amount"].sum()
         if display_col == "Sub-Category" and "Category" in pie_display.columns and tot_rev > 0:
-            # Low percentage threshold (< 5% share): display Main Category name instead of Sub-Category
-            low_mask = pie_display["Total Amount"] < (0.05 * tot_rev)
-            pie_display.loc[low_mask, "Pie_Name"] = pie_display.loc[low_mask, "Category"]
+            def resolve_low_share_name(row):
+                sub_raw = str(row.get(display_col, ""))
+                cat_raw = str(row.get("Category", ""))
+                sub_short = get_short_category_label(sub_raw)
+                cat_short = get_short_category_label(cat_raw)
+
+                # If share is low (< 5%), choose whichever label is shorter between Sub-Category and Category
+                if float(row.get("Total Amount", 0)) < (0.05 * tot_rev):
+                    if len(sub_short) > 0 and len(sub_short) <= len(cat_short):
+                        return sub_short
+                    return cat_short if len(cat_short) > 0 else sub_short
+                return sub_short if len(sub_short) > 0 else cat_short
+
+            pie_display["Pie_Name"] = pie_display.apply(resolve_low_share_name, axis=1)
 
             agg_dict = {"Total Amount": "sum", "Total Qty": "sum"}
             if display_col in pie_display.columns:
@@ -180,20 +191,26 @@ def render_category_charts(
         )
         st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
 
-        # Category Revenue Leaderboard Pills
+        # Executive Category Leaderboard Pills with Rank Medals
         pill_htmls = []
-        for idx, p_row in pie_display.head(6).iterrows():
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣"]
+        for idx, p_row in pie_display.head(6).reset_index(drop=True).iterrows():
             c_name = str(p_row.get(display_col, p_row.get("Pie_Name", "")))
             c_rev = float(p_row.get("Total Amount", 0))
             c_color = color_map.get(c_name, "#a855f7")
             c_pct = (c_rev / total_amt * 100) if total_amt > 0 else 0
+            medal = medals[idx] if idx < len(medals) else f"#{idx+1}"
+
             pill_htmls.append(
-                f"<span style='background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:3px 9px; font-size:10px; white-space:nowrap; box-shadow:0 1px 3px rgba(0,0,0,0.2);'>"
-                f"<span style='color:{c_color}; font-weight:bold; font-size:12px;'>●</span> <b>{truncate_label(c_name, 12)}</b>: ৳{c_rev:,.0f} ({c_pct:.0f}%)"
-                f"</span>"
+                f"<div style='background: var(--card-bg, rgba(255,255,255,0.04)); border: 1px solid var(--border-color, rgba(255,255,255,0.08)); border-radius: 8px; padding: 4px 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.12);'>"
+                f"<span style='font-size:12px;'>{medal}</span> "
+                f"<b>{truncate_label(c_name, 12)}</b>: "
+                f"<span style='color:{c_color}; font-weight:bold;'>৳{c_rev:,.0f}</span> "
+                f"<span style='opacity:0.75; font-size:10px;'>({c_pct:.1f}%)</span>"
+                f"</div>"
             )
         if pill_htmls:
-            st.markdown(f"<div style='display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; margin-bottom:8px;'>{''.join(pill_htmls)}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; margin-bottom:8px;'>{''.join(pill_htmls)}</div>", unsafe_allow_html=True)
 
     with v2:
         bar_axis = "Sub-Category" if "Sub-Category" in summ.columns else display_col
