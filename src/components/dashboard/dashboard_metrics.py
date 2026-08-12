@@ -195,7 +195,7 @@ def render_operational_metrics(
         except Exception:
             pass
             
-    # ── 24-Hour Trend Extraction ──
+    # ── Day-Wise Trend Extraction ──
     s_qty, s_rev, s_ord, s_bv = "", "", "", ""
     if not m_df.empty and nav_mode != "Backlog":
         try:
@@ -206,44 +206,60 @@ def render_operational_metrics(
             t_df = t_df.dropna(subset=["_dt"])
             
             if not t_df.empty:
-                t_df["_hr"] = t_df["_dt"].dt.floor("h")
+                t_df["_day"] = t_df["_dt"].dt.floor("D")
+                unique_days = t_df["_day"].nunique()
                 
-                # Fetch slot boundaries from session state to build continuous hour index
-                slot_key = "wc_curr_slot" if nav_mode == "Today" else "wc_prev_slot" if nav_mode == "Prev" else None
-                slot = st.session_state.get(slot_key) if slot_key else None
+                order_id_col = wc_raw_mapping.get("order_id", "Order ID")
+                if order_id_col not in t_df.columns:
+                    order_id_col = next((c for c in ["Order ID", "Order Number"] if c in t_df.columns), t_df.columns[0])
                 
-                if slot:
-                    start_time, end_time = slot
-                    start_hour = pd.to_datetime(start_time).floor("h")
-                    end_hour = pd.to_datetime(end_time).floor("h")
-                    all_hours = pd.date_range(start=start_hour, end=end_hour, freq="h")
-                else:
-                    # Fallback to actual data range if slot is missing
-                    start_hour = t_df["_dt"].min().floor("h")
-                    end_hour = t_df["_dt"].max().floor("h")
-                    if start_hour == end_hour:
-                        # Ensure we have at least 2 points
-                        all_hours = pd.date_range(start=start_hour - pd.Timedelta(hours=1), end=end_hour + pd.Timedelta(hours=1), freq="h")
-                    else:
-                        all_hours = pd.date_range(start=start_hour, end=end_hour, freq="h")
-                
-                # Group by hour and reindex to include all hours in the shift
-                # 1. Quantity Sum
-                qty_series = t_df.groupby("_hr")["Quantity"].sum().reindex(all_hours, fill_value=0)
-                t_qty_vals = qty_series.tolist()
-                
-                # 2. Net Revenue Sum per hour
                 if "Total Amount" in t_df.columns:
-                    rev_series = t_df.groupby("_hr")["Total Amount"].sum().reindex(all_hours, fill_value=0)
+                    t_df["_rev"] = t_df["Total Amount"]
                 else:
                     t_df["_rev"] = t_df["Quantity"] * t_df["Item Cost"]
-                    rev_series = t_df.groupby("_hr")["_rev"].sum().reindex(all_hours, fill_value=0)
-                t_rev_vals = rev_series.tolist()
-                
-                # 3. Orders Count (unique order IDs)
-                order_id_col = wc_raw_mapping.get("order_id", "Order ID")
-                ord_series = t_df.groupby("_hr")[order_id_col].nunique().reindex(all_hours, fill_value=0)
-                t_ord_vals = ord_series.tolist()
+
+                if unique_days > 1:
+                    # Multi-day view: group by day across all days in dataset
+                    start_day = t_df["_day"].min()
+                    end_day = t_df["_day"].max()
+                    all_days = pd.date_range(start=start_day, end=end_day, freq="D")
+                    
+                    qty_series = t_df.groupby("_day")["Quantity"].sum().reindex(all_days, fill_value=0)
+                    rev_series = t_df.groupby("_day")["_rev"].sum().reindex(all_days, fill_value=0)
+                    ord_series = t_df.groupby("_day")[order_id_col].nunique().reindex(all_days, fill_value=0)
+                    
+                    t_qty_vals = qty_series.tolist()
+                    t_rev_vals = rev_series.tolist()
+                    t_ord_vals = ord_series.tolist()
+                    t_bv_vals = [(r / o if o > 0 else 0) for r, o in zip(t_rev_vals, t_ord_vals)]
+                else:
+                    # Single-day view: build 7-day daily trend (past 6 days + today's live metrics)
+                    today_dt = t_df["_day"].iloc[0]
+                    start_7d = today_dt - pd.Timedelta(days=6)
+                    all_days = pd.date_range(start=start_7d, end=today_dt, freq="D")
+                    
+                    day_map_qty = {}
+                    day_map_rev = {}
+                    day_map_ord = {}
+                    
+                    hist_df = load_snapshot_history(7)
+                    if not hist_df.empty and "date" in hist_df.columns:
+                        hist_df["_day"] = pd.to_datetime(hist_df["date"]).dt.floor("D")
+                        for _, hrow in hist_df.iterrows():
+                            d_key = hrow["_day"]
+                            day_map_qty[d_key] = float(hrow.get("qty", 0))
+                            day_map_rev[d_key] = float(hrow.get("revenue", 0))
+                            day_map_ord[d_key] = float(hrow.get("orders", 0))
+                    
+                    # Override today's point with current live metrics
+                    day_map_qty[today_dt] = float(m_qty)
+                    day_map_rev[today_dt] = float(m_net_rev)
+                    day_map_ord[today_dt] = float(m_ord)
+                    
+                    t_qty_vals = [day_map_qty.get(d, 0.0) for d in all_days]
+                    t_rev_vals = [day_map_rev.get(d, 0.0) for d in all_days]
+                    t_ord_vals = [day_map_ord.get(d, 0.0) for d in all_days]
+                    t_bv_vals = [(r / o if o > 0 else 0) for r, o in zip(t_rev_vals, t_ord_vals)]
                 
                 from src.config.ui_config import CHART_THEMES
                 theme_name = st.session_state.get("chart_theme", "✨ Emerald Cyberpunk")
@@ -252,9 +268,6 @@ def render_operational_metrics(
                 s_qty = _generate_sparkline_svg(t_qty_vals, theme_cfg.get("spark_qty", "#06b6d4"))
                 s_rev = _generate_sparkline_svg(t_rev_vals, theme_cfg.get("spark_rev", "#10b981"))
                 s_ord = _generate_sparkline_svg(t_ord_vals, theme_cfg.get("spark_ord", "#3b82f6"))
-                
-                # For Basket Size trend (Average Basket Value per hour)
-                t_bv_vals = [ (r / o if o > 0 else 0) for r, o in zip(t_rev_vals, t_ord_vals)]
                 s_bv = _generate_sparkline_svg(t_bv_vals, theme_cfg.get("spark_bv", "#f59e0b"))
         except Exception as e:
             log_system_event("SPARKLINE_ERROR", f"Failed to generate sparklines: {e}")
