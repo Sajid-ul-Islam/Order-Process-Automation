@@ -91,12 +91,12 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
             return shipped_df[mask]
 
     # ── Step 4: TODAY MODE — calendar date match only, slot-independent ──────
-    # Rule: "shipped today" = mod_dt_parsed is today's BD date.
-    # Orders that were on-hold / waiting / processing and got status-changed to
-    # shipped today are captured here via mod_dt_parsed.
+    # Rule: "shipped today" = effective date (modification or creation) is today's BD calendar date.
+    # This is independent of the operational shift slot time, ensuring all orders
+    # shipped on the calendar day are included.
     if nav_mode == "Today" and not is_comparison:
         today_mask = dt_effective.dt.date == today_bd
-        return shipped_df[today_mask]
+        return shipped_df[today_mask].copy()
 
     # ── Step 5: PREV / COMPARISON MODE — use slot boundaries ────────────────
     slot_key = "wc_prev_slot" if nav_mode == "Prev" else None
@@ -571,7 +571,11 @@ def get_dispatch_metrics(active_df, total_orders=0):
     if active_df is not None and not active_df.empty:
         status_col = "Order Status" if "Order Status" in active_df.columns else "Status" if "Status" in active_df.columns else None
         order_col = "Order ID" if "Order ID" in active_df.columns else "Order Number" if "Order Number" in active_df.columns else None
-        date_col = "Date" if "Date" in active_df.columns else "Order Date" if "Order Date" in active_df.columns else None
+        
+        # Use modification date for sorting, as this reflects when an order was shipped.
+        # Fall back to creation date if modification date is not available.
+        mod_date_col = "mod_dt_parsed" if "mod_dt_parsed" in active_df.columns else "Order Date Modified" if "Order Date Modified" in active_df.columns else None
+        date_col = mod_date_col if mod_date_col else ("Date" if "Date" in active_df.columns else "Order Date" if "Order Date" in active_df.columns else None)
         pmt_col = "Payment Method Title" if "Payment Method Title" in active_df.columns else None
 
         if order_col:

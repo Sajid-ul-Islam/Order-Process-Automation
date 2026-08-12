@@ -471,13 +471,9 @@ def _partition_operational_data(df_full):
     modified_recent = (df_full["mod_dt_parsed"] >= prev_cutoff)
     created_recent = (df_full["dt_parsed"] >= prev_cutoff)
 
-    df_live = df_full[
-        created_recent
-        | modified_recent
-        | is_confirmed
-        | is_processing
-        | is_shipped
-    ].copy()
+    # For the "Today" view, include ANY order created or modified within the current operational shift.
+    # This is more inclusive and catches old orders that were shipped today.
+    df_live = df_full[created_recent | modified_recent].copy()
 
     df_prev = df_full[
         (df_full["mod_dt_parsed"] >= day_before_prev) & 
