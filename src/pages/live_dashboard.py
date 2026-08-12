@@ -52,11 +52,6 @@ def _sync_60s():
         _check_and_trigger_ui_rerun()
     except Exception:
         pass
-    sync_time = st.session_state.get("live_sync_time")
-    if sync_time:
-        elapsed = int((datetime.now() - sync_time).total_seconds())
-        next_in = max(0, 60 - elapsed)
-        st.caption(f"🔄 Auto-sync · 1m · next in **{next_in}s**")
 
 
 @st.fragment(run_every=180)
@@ -67,13 +62,6 @@ def _sync_180s():
         _check_and_trigger_ui_rerun()
     except Exception:
         pass
-    sync_time = st.session_state.get("live_sync_time")
-    if sync_time:
-        elapsed = int((datetime.now() - sync_time).total_seconds())
-        next_in = max(0, 180 - elapsed)
-        mins, secs = divmod(next_in, 60)
-        label = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
-        st.caption(f"🔄 Auto-sync · 3m · next in **{label}**")
 
 
 # ── Live KPI Fragment (30s auto-refresh) ────────────────────────────────────
@@ -96,12 +84,12 @@ def _refresh_core_metrics():
         m_df = filter_all_orders_to_slot(m_df, nav_mode)
         if c_df is not None and not c_df.empty:
             c_df = filter_all_orders_to_slot(c_df, "Prev")
-    elif order_view_mode == "Shipped Only":
+    elif order_view_mode == "Shipped":
         from src.processing.data_processing import filter_shipped_by_slot
         m_df = filter_shipped_by_slot(m_df, nav_mode, is_comparison=False)
         if c_df is not None and not c_df.empty:
             c_df = filter_shipped_by_slot(c_df, nav_mode, is_comparison=True)
-    elif order_view_mode == "Processing Only":
+    elif order_view_mode == "Processing":
         if m_df is not None and not m_df.empty:
             status_col_m = "Order Status" if "Order Status" in m_df.columns else "Status" if "Status" in m_df.columns else None
             if status_col_m:
@@ -208,32 +196,10 @@ def render_live_tab():
     has_cashback = "Cashback Discount" in df_standard.columns and (df_standard["Cashback Discount"] > 0).any()
 
     # ── Header: Auto-Sync, Date Range, Cashback Toggle, Refresh button ───────
-    c1, c2, c3, c4, c5, c6 = st.columns([1.5, 1.8, 1.5, 1.5, 1.5, 0.5])
-
-    # Column 1: Auto-Sync Label & Custom Range Indicator
-    with c1:
-        # Auto-sync fragment (renders compact caption inline)
-        order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
-        if nav_mode == "Today" and order_view_mode == "Shipped Only":
-            _sync_60s()
-        else:
-            _sync_180s()
-
-        curr_r = st.session_state.get("live_custom_range")
-        tz_bd = timezone(timedelta(hours=6))
-        today_bd = datetime.now(tz_bd).date()
-        if curr_r and (curr_r[0] != today_bd or curr_r[1] != today_bd):
-            st.caption(f"🗓️ Custom Range: **{curr_r[0].strftime('%b %d')} – {curr_r[1].strftime('%b %d')}**")
-            if st.button("❌ Clear Range", key="btn_clear_custom_range", type="secondary"):
-                st.session_state["live_custom_range"] = (today_bd, today_bd)
-                if "wc_sync_start_date" in st.session_state:
-                    del st.session_state["wc_sync_start_date"]
-                if "wc_sync_end_date" in st.session_state:
-                    del st.session_state["wc_sync_end_date"]
-                st.rerun()
+    c1, c2, c3, c4, c5, c6 = st.columns([1.1, 2.1, 2.1, 0.7, 1.0, 0.5])
 
     # Column 2: Date Range Picker
-    with c2:
+    with c1:
         tz_bd = timezone(timedelta(hours=6))
         today_bd = datetime.now(tz_bd).date()
         curr_range = st.session_state.get("live_custom_range", (today_bd, today_bd))
@@ -262,19 +228,28 @@ def render_live_tab():
                 st.session_state["wc_sync_end_date"] = sel_dates[0]
                 st.rerun()
 
+        if curr_range and (curr_range[0] != today_bd or curr_range[1] != today_bd):
+            if st.button("❌ Clear Range", key="btn_clear_custom_range", type="secondary", use_container_width=True):
+                st.session_state["live_custom_range"] = (today_bd, today_bd)
+                if "wc_sync_start_date" in st.session_state:
+                    del st.session_state["wc_sync_start_date"]
+                if "wc_sync_end_date" in st.session_state:
+                    del st.session_state["wc_sync_end_date"]
+                st.rerun()
+
     # Column 3: Operational Mode & Cashback Toggle
-    with c3:
+    with c4:
         if has_cashback:
             st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True) # Vertical alignment helper
             st.toggle(
-                "⚖️ Cashback View",
+                "⚖️ Cashback",
                 value=st.session_state.get("live_compare_cashback", False),
                 key="live_compare_cashback",
                 help="Toggle the Revenue vs Cashback/Fee breakdown section at the bottom of the page."
             )
 
     # Column 4 & 5: Main Dashboard Filters (Op Mode, View, Chart Type)
-    with c4:
+    with c2:
         st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
         mode_options = ["Last Day", "Active", "Queue"]
         mode_icons = {"Last Day": "⏳", "Active": "⚡", "Queue": "📥"}
@@ -301,11 +276,11 @@ def render_live_tab():
             st.session_state.wc_nav_mode = new_nav
             st.rerun()
 
-    with c5:
+    with c3:
         st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
         if nav_mode == "Today":
-            opts_filter = ["All Orders", "Shipped Only", "Processing Only"]
-            filter_icons = {"All Orders": "📦", "Shipped Only": "🚚", "Processing Only": "⚙️"}
+            opts_filter = ["All Orders", "Shipped", "Processing"]
+            filter_icons = {"All Orders": "📦", "Shipped": "🚚", "Processing": "⚙️"}
             curr_filter = st.session_state.get("live_order_filter", "All Orders")
             if curr_filter not in opts_filter: curr_filter = "All Orders"
 
@@ -325,7 +300,16 @@ def render_live_tab():
             # Placeholder to maintain layout when not in "Today" mode
             st.markdown('<div style="height: 38px;"></div>', unsafe_allow_html=True)
 
-    # Column 6: Refresh Button
+    # Column 5: Auto-Sync Label
+    with c5:
+        st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True) # Vertical alignment helper
+        order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
+        if nav_mode == "Today" and order_view_mode == "Shipped":
+            _sync_60s()
+        else:
+            _sync_180s()
+
+    # Column 6: Manual Refresh Button
     with c6:
         st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True) # Vertical alignment helper
         if st.button("🔄", use_container_width=True, key="btn_refresh_newly_shipped", type="secondary", help="Force a manual data refresh"):
@@ -352,12 +336,12 @@ def render_live_tab():
             if df_live is None or df_live.empty:
                 st.info(f"📦 No active orders found in the **{nav_mode}** slot.")
                 return
-        elif order_view_mode == "Shipped Only":
+        elif order_view_mode == "Shipped":
             df_live = filter_shipped_by_slot(df_live, nav_mode, is_comparison=False)
             if df_live is None or df_live.empty:
                 st.info(f"📦 No shipped orders found in the **{nav_mode}** slot.")
                 return
-        elif order_view_mode == "Processing Only":
+        elif order_view_mode == "Processing":
             df_live = df_live[df_live[status_col].astype(str).str.lower() == "processing"]
             if df_live is None or df_live.empty:
                 st.info(f"📋 No processing orders found in the **{nav_mode}** slot.")
@@ -414,7 +398,7 @@ def render_live_tab():
         render_revenue_cashback_comparison_section(df_standard, raw_df=df_live)
 
     # ── Dispatch Export (Shipped Only mode only) ──────────────────────────────
-    if nav_mode == "Today" and order_view_mode == "Shipped Only":
+    if nav_mode == "Today" and order_view_mode == "Shipped":
         _render_dispatch_export()
 
 
