@@ -110,16 +110,42 @@ def _render_ingestion_mode_metrics(granular_df, dummy_mapping, last_updated):
 
 
 def _render_charts(summ):
-    """Render the Performance Outlook charts section."""
-    st.subheader("Performance Outlook")
+    """Render the Performance Outlook charts section with executive metric highlights."""
+    st.subheader("📊 Performance Outlook & Category Analytics")
 
-    display_col = "Category"
-    chart_summ = summ.copy() if summ is not None else pd.DataFrame()
+    if summ is None or summ.empty:
+        st.info("No category sales data available for current selection.")
+        return {}
 
-    if not chart_summ.empty and "Sub-Category" in chart_summ.columns:
-        display_col = st.session_state.get("perf_outlook_view", "Sub-Category")
-        if display_col == "Category":
-            chart_summ = chart_summ.groupby("Category", as_index=False).agg({"Total Qty": "sum", "Total Amount": "sum"})
+    chart_summ = summ.copy()
+    display_col = st.session_state.get("perf_outlook_view", "Sub-Category" if "Sub-Category" in chart_summ.columns else "Category")
+
+    if display_col == "Category" and "Category" in chart_summ.columns:
+        chart_summ = chart_summ.groupby("Category", as_index=False).agg({"Total Qty": "sum", "Total Amount": "sum"})
+
+    # Prepare metrics summary for inline placement inside chart whitespace
+    metrics_summary = {}
+    top_rev_cat = chart_summ.sort_values("Total Amount", ascending=False).iloc[0] if not chart_summ.empty else None
+    top_vol_cat = chart_summ.sort_values("Total Qty", ascending=False).iloc[0] if not chart_summ.empty else None
+    tot_rev = chart_summ["Total Amount"].sum()
+    tot_vol = chart_summ["Total Qty"].sum()
+
+    if top_rev_cat is not None:
+        cat_rev = top_rev_cat["Total Amount"]
+        pct_rev = (cat_rev / tot_rev * 100) if tot_rev > 0 else 0
+        metrics_summary["rev_name"] = top_rev_cat[display_col]
+        metrics_summary["rev_val"] = cat_rev
+        metrics_summary["rev_pct"] = pct_rev
+
+    if top_vol_cat is not None:
+        cat_v_qty = top_vol_cat["Total Qty"]
+        pct_vol = (cat_v_qty / tot_vol * 100) if tot_vol > 0 else 0
+        metrics_summary["vol_name"] = top_vol_cat[display_col]
+        metrics_summary["vol_val"] = cat_v_qty
+        metrics_summary["vol_pct"] = pct_vol
+
+    metrics_summary["cat_cnt"] = len(chart_summ)
+    metrics_summary["avg_price"] = (tot_rev / tot_vol) if tot_vol > 0 else 0
 
     sorted_cats = chart_summ.sort_values("Total Amount", ascending=False)[display_col].tolist() if not chart_summ.empty else []
     from src.config.ui_config import CHART_THEMES
@@ -132,7 +158,7 @@ def _render_charts(summ):
     }
 
     if not chart_summ.empty:
-        render_category_charts(chart_summ, display_col, color_map)
+        render_category_charts(chart_summ, display_col, color_map, metrics_summary=metrics_summary)
     st.divider()
 
     return color_map

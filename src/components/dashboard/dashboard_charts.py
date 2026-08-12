@@ -9,10 +9,48 @@ import streamlit as st
 from src.utils.display import truncate_label
 
 
+def get_short_category_label(name: str) -> str:
+    """Return concise short descriptor (e.g. 'Denim', 'Flannel', 'Corduroy', 'Cuban') instead of long prefixes."""
+    if not isinstance(name, str) or not name:
+        return ""
+    name_str = name.strip()
+    lower_n = name_str.lower()
+
+    if "denim" in lower_n:
+        return "Denim"
+    if "flannel" in lower_n:
+        return "Flannel"
+    if "corduroy" in lower_n:
+        return "Corduroy"
+    if "cuban" in lower_n:
+        return "Cuban"
+    if "panjabi" in lower_n:
+        return "Panjabi"
+    if "sweatshirt" in lower_n or "sweat shirt" in lower_n:
+        return "Sweatshirt"
+    if "jeans" in lower_n:
+        return "Jeans"
+    if "pajama" in lower_n or "payjama" in lower_n:
+        return "Pajama"
+    if "polo" in lower_n:
+        return "Polo"
+    if "cargo" in lower_n:
+        return "Cargo"
+
+    for prefix in ["FS Shirt - ", "HS Shirt - ", "FS T-Shirt - ", "HS T-Shirt - ", "FS Shirt ", "HS Shirt ", "FS ", "HS "]:
+        if name_str.startswith(prefix):
+            short_ver = name_str[len(prefix):].strip()
+            if short_ver:
+                return short_ver
+
+    return name_str
+
+
 def render_category_charts(
     summ: pd.DataFrame,
     display_col: str,
     color_map: dict[str, str],
+    metrics_summary: dict | None = None,
 ) -> None:
     """Render the Revenue Share pie and Volume bar charts with truncated labels.
 
@@ -20,31 +58,42 @@ def render_category_charts(
         summ: Summary DataFrame with 'Total Amount', 'Total Qty', etc.
         display_col: Column name to use for chart grouping ('Category' or 'Sub-Category').
         color_map: Mapping of category values to hex colours.
+        metrics_summary: Optional dictionary containing top revenue/volume metrics.
     """
     summ_display = summ.copy()
-    summ_display["Display_Label"] = summ_display[display_col].apply(lambda x: truncate_label(x, max_len=15))
+    summ_display["Display_Label"] = summ_display[display_col].apply(lambda x: truncate_label(get_short_category_label(x), max_len=15))
 
     v1, v2 = st.columns(2)
     with v1:
         pie_display = summ_display.copy()
-        pie_display["Pie_Name"] = pie_display[display_col]
-        
-        if display_col == "Sub-Category" and len(pie_display) > 12 and "Category" in pie_display.columns:
-            jeans_mask = pie_display["Category"] == "Jeans"
-            pie_display.loc[jeans_mask, "Pie_Name"] = "Jeans"
-            
+        pie_display["Pie_Name"] = pie_display[display_col].apply(get_short_category_label)
+
+        tot_rev = pie_display["Total Amount"].sum()
+        if display_col == "Sub-Category" and "Category" in pie_display.columns and tot_rev > 0:
+            # Low percentage threshold (< 5% share): display Main Category name instead of Sub-Category
+            low_mask = pie_display["Total Amount"] < (0.05 * tot_rev)
+            pie_display.loc[low_mask, "Pie_Name"] = pie_display.loc[low_mask, "Category"]
+
+            agg_dict = {"Total Amount": "sum", "Total Qty": "sum"}
+            if display_col in pie_display.columns:
+                agg_dict[display_col] = "first"
+            if "Category" in pie_display.columns:
+                agg_dict["Category"] = "first"
+
+            pie_display = pie_display.groupby("Pie_Name", as_index=False).agg(agg_dict)
+
         name_totals = pie_display.groupby("Pie_Name")["Total Amount"].sum().sort_values(ascending=False)
         total_amt = name_totals.sum()
-        
-        top_p = name_totals[name_totals >= 0.03 * total_amt].index.tolist()
-        
+
+        top_p = name_totals[name_totals >= 0.02 * total_amt].index.tolist()
+
         max_pie = 12
         if len(top_p) > max_pie - 1:
             top_p = top_p[:max_pie - 1]
-            
+
         if len(top_p) < len(name_totals):
             others_mask = ~pie_display["Pie_Name"].isin(top_p)
-            
+
             others_row = pd.DataFrame([{
                 "Pie_Name": "Others",
                 display_col: "Others",
@@ -52,37 +101,99 @@ def render_category_charts(
                 "Total Qty": pie_display.loc[others_mask, "Total Qty"].sum(),
             }])
             pie_display = pd.concat([pie_display[~others_mask], others_row], ignore_index=True)
-            
+
             if "Others" not in color_map:
                 color_map = color_map.copy()
                 color_map["Others"] = "#94a3b8"
-                
+
             name_totals = pie_display.groupby("Pie_Name")["Total Amount"].sum().sort_values(ascending=False)
 
         pie_display["_Name_Total"] = pie_display["Pie_Name"].map(name_totals)
         pie_display = pie_display.sort_values(["_Name_Total", "Total Amount"], ascending=[False, False])
-        pie_display["Display_Label"] = pie_display[display_col].apply(lambda x: truncate_label(x, max_len=15))
+        pie_display["Display_Label"] = pie_display["Pie_Name"].apply(lambda x: truncate_label(x, max_len=15))
         pie_display["Unique_ID"] = pie_display.index.astype(str)
+
+        r_name = truncate_label(metrics_summary.get("rev_name", "N/A"), max_len=13) if metrics_summary else "N/A"
+        r_pct = metrics_summary.get("rev_pct", 0) if metrics_summary else 0
+        v_name = truncate_label(metrics_summary.get("vol_name", "N/A"), max_len=13) if metrics_summary else "N/A"
+        v_pct = metrics_summary.get("vol_pct", 0) if metrics_summary else 0
+        c_cnt = metrics_summary.get("cat_cnt", 0) if metrics_summary else 0
+        pie_display["Avg_Price"] = pie_display.apply(lambda r: (r["Total Amount"] / r["Total Qty"]) if r["Total Qty"] > 0 else 0, axis=1)
 
         fig_pie = px.pie(
             pie_display,
             values="Total Amount",
             names="Unique_ID",
             color=display_col,
-            hole=0.6,
-            title="Revenue Share (TK)",
+            hole=0.55,
+            title="<b>💰 Revenue Share (TK)</b>",
             color_discrete_map=color_map,
-            hover_data=["Total Qty", "Display_Label", "Pie_Name"],
+            hover_data=["Total Qty", "Display_Label", "Pie_Name", "Avg_Price"],
         )
-        fig_pie.update_layout(margin=dict(t=50, b=20, l=10, r=10), showlegend=False)
+
+        center_annotation_text = (
+            f"<span style='font-size:18px;'><b>৳ {total_amt:,.0f}</b></span><br>"
+            f"<span style='font-size:10px;opacity:0.75;letter-spacing:0.5px;'>TOTAL REVENUE</span>"
+        )
+        fig_pie.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(t=40, b=30, l=20, r=20),
+            height=440,
+            showlegend=False,
+            hoverlabel=dict(
+                bgcolor="#0f172a",
+                font_size=12,
+                font_family="Inter, sans-serif",
+                font_color="#ffffff",
+                bordercolor="#a855f7",
+            ),
+            annotations=[
+                dict(
+                    text=center_annotation_text,
+                    x=0.5, y=0.5,
+                    font=dict(family="Inter, sans-serif"),
+                    showarrow=False,
+                    align="center",
+                )
+            ]
+        )
+        # Determine background gap color so slices do NOT join:
+        # Light mode page -> #ffffff (creates a 4.5px white gap separating slices)
+        # Dark mode page  -> #0f172a (creates a 4.5px dark gap separating slices)
+        is_dark = st.session_state.get("dark_mode", False) or "dark" in str(st.session_state.get("theme_mode", "")).lower()
+        gap_color = "#0f172a" if is_dark else "#ffffff"
+
         fig_pie.update_traces(
             sort=False,
             textposition="inside",
             texttemplate="%{customdata[1]}<br>%{percent:.0%}",
             textfont_size=11,
-            hovertemplate="<b>%{customdata[2]}</b><br>Revenue: %{value:,.0f} TK (%{percent:.0%})<br>Volume: %{customdata[0]:,.0f} Units",
+            marker=dict(line=dict(color=gap_color, width=4.5)),
+            hovertemplate=(
+                "<b>%{customdata[2]}</b><br>"
+                "💰 Net Revenue: <b>৳ %{value:,.0f}</b> (%{percent:.1%})<br>"
+                "📦 Volume Sold: <b>%{customdata[0]:,.0f} Units</b><br>"
+                "🏷️ Avg Item Price: <b>৳ %{customdata[3]:,.0f} / unit</b>"
+                "<extra></extra>"
+            ),
         )
         st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
+
+        # Category Revenue Leaderboard Pills
+        pill_htmls = []
+        for idx, p_row in pie_display.head(6).iterrows():
+            c_name = str(p_row.get(display_col, p_row.get("Pie_Name", "")))
+            c_rev = float(p_row.get("Total Amount", 0))
+            c_color = color_map.get(c_name, "#a855f7")
+            c_pct = (c_rev / total_amt * 100) if total_amt > 0 else 0
+            pill_htmls.append(
+                f"<span style='background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:3px 9px; font-size:10px; white-space:nowrap; box-shadow:0 1px 3px rgba(0,0,0,0.2);'>"
+                f"<span style='color:{c_color}; font-weight:bold; font-size:12px;'>●</span> <b>{truncate_label(c_name, 12)}</b>: ৳{c_rev:,.0f} ({c_pct:.0f}%)"
+                f"</span>"
+            )
+        if pill_htmls:
+            st.markdown(f"<div style='display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; margin-bottom:8px;'>{''.join(pill_htmls)}</div>", unsafe_allow_html=True)
 
     with v2:
         bar_axis = "Sub-Category" if "Sub-Category" in summ.columns else display_col
@@ -107,6 +218,7 @@ def render_category_charts(
             sorted_bars = x_totals.index.tolist()
         
         bar_display = bar_display.sort_values("Total Qty", ascending=False)
+        bar_display["Avg_Unit_Price"] = bar_display.apply(lambda r: (r["Total Amount"] / r["Total Qty"]) if r["Total Qty"] > 0 else 0, axis=1)
         
         unique_bars = pd.DataFrame({"Bar_X": sorted_bars})
         unique_bars["Bar_Label"] = unique_bars["Bar_X"].apply(lambda x: truncate_label(x, max_len=15))
@@ -116,7 +228,7 @@ def render_category_charts(
             x="Bar_X",
             y="Total Qty",
             color=display_col,
-            title="Volume by Category",
+            title="<b>📦 Sales Volume by Category</b>",
             text_auto=".0f",
             color_discrete_map=color_map,
             category_orders={"Bar_X": sorted_bars},
@@ -125,17 +237,57 @@ def render_category_charts(
                 display_col: True,
                 "Total Qty": ":,.0f",
                 "Total Amount": ":,.0f",
+                "Avg_Unit_Price": ":,.0f",
             },
         )
+
+        avg_vol = bar_display["Total Qty"].mean() if not bar_display.empty else 0
+        if avg_vol > 0:
+            fig_bar.add_hline(
+                y=avg_vol,
+                line_dash="dash",
+                line_color="rgba(255,255,255,0.4)",
+                annotation_text=f"Avg: {avg_vol:.1f} units",
+                annotation_position="top right",
+                annotation_font=dict(size=10, color="rgba(255,255,255,0.7)"),
+            )
+
         fig_bar.update_layout(
-            margin=dict(t=50, b=20, l=10, r=20),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(t=40, b=30, l=20, r=20),
+            height=440,
             xaxis_title="",
-            yaxis_title="Quantity Sold",
+            yaxis_title="Units Sold",
             showlegend=False,
+            hoverlabel=dict(
+                bgcolor="#0f172a",
+                font_size=12,
+                font_family="Inter, sans-serif",
+                font_color="#ffffff",
+                bordercolor="#3b82f6",
+            ),
         )
-        fig_bar.update_xaxes(automargin=True, tickmode="array", tickvals=unique_bars["Bar_X"], ticktext=unique_bars["Bar_Label"], tickangle=-45)
-        fig_bar.update_yaxes(automargin=True)
-        fig_bar.update_traces(cliponaxis=False)
+        fig_bar.update_xaxes(
+            showgrid=False,
+            automargin=True,
+            tickmode="array",
+            tickvals=unique_bars["Bar_X"],
+            ticktext=unique_bars["Bar_Label"],
+            tickangle=-45
+        )
+        fig_bar.update_yaxes(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor="rgba(255,255,255,0.06)",
+            zeroline=False,
+            automargin=True
+        )
+        fig_bar.update_traces(
+            cliponaxis=False,
+            marker=dict(line=dict(color="rgba(255,255,255,0.2)", width=1)),
+            hovertemplate="<b>%{x}</b><br>📦 Volume: %{y:,.0f} Units<br>💰 Net Revenue: ৳ %{customdata[1]:,.0f}<br>🏷️ Avg Price: ৳ %{customdata[2]:,.0f}/unit",
+        )
         st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False})
 
 
