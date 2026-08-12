@@ -171,6 +171,92 @@ def _generate_dual_sparkline_svg(
     return svg_html, badge_html
 
 
+def _generate_mini_bar_chart_svg(
+    new_values: list[float],
+    ret_values: list[float],
+    color1: str = "#a855f7",
+    color2: str = "#f59e0b",
+    suffix: str = "%",
+) -> tuple[str, str]:
+    """Generates a 7-day side-by-side dual mini bar SVG chart displaying New vs. Returning customer ratios."""
+    if not new_values or len(new_values) < 2:
+        return "", ""
+
+    n = len(new_values)
+    svg_width = 100.0
+    svg_height = 30.0
+    single_bar_w = 4.8
+    pair_inner_gap = 1.0
+    day_gap = 3.5
+
+    pair_w = 2 * single_bar_w + pair_inner_gap
+    total_w = n * pair_w + (n - 1) * day_gap
+    start_x = (svg_width - total_w) / 2.0
+    max_h = 24.0
+
+    bars_svg = []
+    for i in range(n):
+        x_pair = start_x + i * (pair_w + day_gap)
+        x_new = x_pair
+        x_ret = x_pair + single_bar_w + pair_inner_gap
+
+        val_new = new_values[i]
+        val_ret = ret_values[i]
+        tot = val_new + val_ret
+
+        pct_new = (val_new / tot * 100.0) if tot > 0 else (val_new if suffix == "%" else 0.0)
+        pct_ret = (val_ret / tot * 100.0) if tot > 0 else (val_ret if suffix == "%" else 0.0)
+
+        h_new = (pct_new / 100.0) * max_h if (pct_new > 0 or tot > 0) else 2.0
+        h_ret = (pct_ret / 100.0) * max_h if (pct_ret > 0 or tot > 0) else 2.0
+
+        y_bottom = svg_height - 2.0
+        y_new = y_bottom - h_new
+        y_ret = y_bottom - h_ret
+
+        day_label = f"Day {i+1}" if i < n - 1 else "Today"
+        bar_tooltip = f"{day_label}: 🆕 {pct_new:.0f}% New | 🔄 {pct_ret:.0f}% Returning"
+
+        bar_item = f"""<g title="{bar_tooltip}">
+            <rect x="{x_new:.1f}" y="{y_new:.1f}" width="{single_bar_w:.1f}" height="{h_new:.1f}" fill="{color1}" rx="1" opacity="0.95"><title>{bar_tooltip}</title></rect>
+            <rect x="{x_ret:.1f}" y="{y_ret:.1f}" width="{single_bar_w:.1f}" height="{h_ret:.1f}" fill="{color2}" rx="1" opacity="0.90"><title>{bar_tooltip}</title></rect>
+        </g>"""
+        bars_svg.append(bar_item)
+
+    latest_new = new_values[-1]
+    latest_ret = ret_values[-1]
+    tot_l = latest_new + latest_ret
+    p_new_l = (latest_new / tot_l * 100.0) if tot_l > 0 else (latest_new if suffix == "%" else 0.0)
+    p_ret_l = (latest_ret / tot_l * 100.0) if tot_l > 0 else (latest_ret if suffix == "%" else 0.0)
+
+    avg_new = sum(new_values) / n
+    avg_ret = sum(ret_values) / n
+
+    tooltip_txt = f"7-Day Customer Mix: Today {p_new_l:.0f}% New vs {p_ret_l:.0f}% Ret | 7D Avg: {avg_new:.0f}% New / {avg_ret:.0f}% Ret"
+    bars_str = "\n".join(bars_svg)
+
+    svg_raw = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 30" preserveAspectRatio="none">
+        <title>{tooltip_txt}</title>
+        {bars_str}
+    </svg>"""
+
+    import base64
+    b64_svg = base64.b64encode(svg_raw.encode("utf-8")).decode("utf-8")
+
+    svg_html = f"""
+    <div class="metric-sparkline" title="{tooltip_txt}">
+        <img src="data:image/svg+xml;base64,{b64_svg}" style="width: 100%; height: 30px; display: block;" />
+    </div>
+    """
+
+    badge_html = f"""<div class="metric-detail-row" style="color:var(--text-color, #000000); font-weight:700; opacity:1;">
+        <span style="color:{color1};">🆕 7D New: <b>{avg_new:.0f}% avg</b></span>
+        <span style="color:{color2};">🔄 7D Ret: <b>{avg_ret:.0f}% avg</b></span>
+    </div>"""
+
+    return svg_html, badge_html
+
+
 def render_operational_metrics(
     m_df,
     c_df,
@@ -502,8 +588,8 @@ def render_operational_metrics(
 
                         t_new_vals = _trim_leading_zeros(t_new_vals)
                         t_ret_vals = _trim_leading_zeros(t_ret_vals)
-                        s_cust, d_cust = _generate_dual_sparkline_svg(
-                            t_new_vals, t_ret_vals, color1="#a855f7", color2="#f59e0b", prefix="", suffix="%"
+                        s_cust, d_cust = _generate_mini_bar_chart_svg(
+                            t_new_vals, t_ret_vals, color1="#a855f7", color2="#f59e0b", suffix="%"
                         )
             except Exception as e:
                 log_system_event("CUSTOMER_MIX_ERROR", f"Failed to compute customer mix: {e}")
