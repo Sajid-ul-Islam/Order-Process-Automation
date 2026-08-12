@@ -1110,9 +1110,99 @@
           "revenue": 1914.0
         }
       ]
+    },
+    {
+      "ts": "2026-08-12T14:31:24.871179+06:00",
+      "label": "Prev",
+      "revenue": 61535.0,
+      "orders": 31,
+      "qty": 62,
+      "aov": 1985.0,
+      "top_products": [
+        {
+          "name": "High-End Whisker Faded Jeans - Regular Fit - 38",
+          "revenue": 4482.0
+        },
+        {
+          "name": "Mako Embroidered Panjabi - 46",
+          "revenue": 3588.0
+        },
+        {
+          "name": "Dark Blue Denim Shirt- Double Pocket - XL",
+          "revenue": 2520.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 32",
+          "revenue": 2331.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Regular Fit - 32",
+          "revenue": 2331.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-12T14:31:34.910703+06:00",
+      "label": "Today",
+      "revenue": 46496.0,
+      "orders": 25,
+      "qty": 47,
+      "aov": 1859.84,
+      "top_products": [
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 32",
+          "revenue": 4980.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 34",
+          "revenue": 2490.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Regular Fit - 38",
+          "revenue": 2490.0
+        },
+        {
+          "name": "High-End Light Blue Jeans - Regular Fit - 34",
+          "revenue": 2390.0
+        },
+        {
+          "name": "Arrowtown Embroidered Panjabi - 44",
+          "revenue": 1914.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-12T14:47:17.506901+06:00",
+      "label": "Today",
+      "revenue": 46496.0,
+      "orders": 25,
+      "qty": 47,
+      "aov": 1859.84,
+      "top_products": [
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 32",
+          "revenue": 4980.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Slim Fit - 34",
+          "revenue": 2490.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Regular Fit - 38",
+          "revenue": 2490.0
+        },
+        {
+          "name": "High-End Light Blue Jeans - Regular Fit - 34",
+          "revenue": 2390.0
+        },
+        {
+          "name": "Arrowtown Embroidered Panjabi - 44",
+          "revenue": 1914.0
+        }
+      ]
     }
   ],
-  "daily_revenue": 1198728.0,
-  "daily_orders": 692,
-  "daily_qty": 1290
+  "daily_revenue": 1353255.0,
+  "daily_orders": 773,
+  "daily_qty": 1446
 }

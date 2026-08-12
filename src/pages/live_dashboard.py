@@ -146,6 +146,10 @@ def render_live_tab():
     # Force Operational Cycle in live dashboard
     st.session_state["wc_sync_mode"] = "Operational Cycle"
 
+    # Initialize session state for controls if they don't exist
+    if "perf_outlook_view" not in st.session_state:
+        st.session_state.perf_outlook_view = "Sub-Category"
+
     # ── Data Loading & Preparation (Moved to top for early access) ───────────
     try:
         live_res = load_live_source()
@@ -204,8 +208,10 @@ def render_live_tab():
     has_cashback = "Cashback Discount" in df_standard.columns and (df_standard["Cashback Discount"] > 0).any()
 
     # ── Header: Auto-Sync, Date Range, Cashback Toggle, Refresh button ───────
-    col_hdr1, col_hdr2, col_hdr3, col_hdr4 = st.columns([2.0, 1.8, 1.5, 0.7])
-    with col_hdr1:
+    c1, c2, c3, c4, c5, c6 = st.columns([1.5, 1.8, 1.5, 1.5, 1.5, 0.5])
+
+    # Column 1: Auto-Sync Label & Custom Range Indicator
+    with c1:
         # Auto-sync fragment (renders compact caption inline)
         order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
         if nav_mode == "Today" and order_view_mode == "Shipped Only":
@@ -226,7 +232,8 @@ def render_live_tab():
                     del st.session_state["wc_sync_end_date"]
                 st.rerun()
 
-    with col_hdr2:
+    # Column 2: Date Range Picker
+    with c2:
         tz_bd = timezone(timedelta(hours=6))
         today_bd = datetime.now(tz_bd).date()
         curr_range = st.session_state.get("live_custom_range", (today_bd, today_bd))
@@ -255,7 +262,8 @@ def render_live_tab():
                 st.session_state["wc_sync_end_date"] = sel_dates[0]
                 st.rerun()
 
-    with col_hdr3:
+    # Column 3: Operational Mode & Cashback Toggle
+    with c3:
         if has_cashback:
             st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True) # Vertical alignment helper
             st.toggle(
@@ -265,12 +273,74 @@ def render_live_tab():
                 help="Toggle the Revenue vs Cashback/Fee breakdown section at the bottom of the page."
             )
 
-    with col_hdr4:
+    # Column 4 & 5: Main Dashboard Filters (Op Mode, View, Chart Type)
+    with c4:
+        st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
+        mode_options = ["Last Day", "Active", "Queue"]
+        mode_icons = {"Last Day": "⏳", "Active": "⚡", "Queue": "📥"}
+        mode_to_state = {"Last Day": "Prev", "Active": "Today", "Queue": "Backlog"}
+        state_to_mode = {v: k for k, v in mode_to_state.items()}
+        current_idx = mode_options.index(state_to_mode.get(nav_mode, "Active"))
+
+        if hasattr(st, "pills"):
+            selected_mode = st.pills(
+                "Op Mode", mode_options, default=mode_options[current_idx],
+                format_func=lambda x: f"{mode_icons.get(x, '')} {x}".strip(),
+                key="banner_op_mode_pills", label_visibility="collapsed"
+            )
+            if not selected_mode: selected_mode = mode_options[current_idx]
+        else: # Fallback for older Streamlit versions
+            selected_mode = st.radio(
+                "Op Mode", mode_options, index=current_idx, horizontal=True,
+                format_func=lambda x: f"{mode_icons.get(x, '')} {x}".strip(),
+                key="banner_op_mode_radio", label_visibility="collapsed"
+            )
+
+        new_nav = mode_to_state[selected_mode]
+        if new_nav != nav_mode:
+            st.session_state.wc_nav_mode = new_nav
+            st.rerun()
+
+    with c5:
+        st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
+        if nav_mode == "Today":
+            opts_filter = ["All Orders", "Shipped Only", "Processing Only"]
+            filter_icons = {"All Orders": "📦", "Shipped Only": "🚚", "Processing Only": "⚙️"}
+            curr_filter = st.session_state.get("live_order_filter", "All Orders")
+            if curr_filter not in opts_filter: curr_filter = "All Orders"
+
+            if hasattr(st, "pills"):
+                sel_filter = st.pills(
+                    "Shift View", opts_filter, default=curr_filter,
+                    format_func=lambda x: f"{filter_icons.get(x, '')} {x}".strip(),
+                    key="live_order_filter_pills", label_visibility="collapsed"
+                )
+            else:
+                sel_filter = st.radio("Shift View", opts_filter, index=opts_filter.index(curr_filter), horizontal=True, format_func=lambda x: f"{filter_icons.get(x, '')} {x}".strip(), key="live_order_filter_radio", label_visibility="collapsed")
+
+            if sel_filter and sel_filter != curr_filter:
+                st.session_state.live_order_filter = sel_filter
+                st.rerun()
+        else:
+            # Placeholder to maintain layout when not in "Today" mode
+            st.markdown('<div style="height: 38px;"></div>', unsafe_allow_html=True)
+
+    # Column 6: Refresh Button
+    with c6:
         st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True) # Vertical alignment helper
         if st.button("🔄", use_container_width=True, key="btn_refresh_newly_shipped", type="secondary", help="Force a manual data refresh"):
             load_live_source(force_refresh=True)
             st.toast("⚡ Data refreshed!")
             st.rerun()
+
+    # Chart View control now sits below the main header for better spacing
+    opts_view = ["Category", "Sub-Category"]
+    view_icons = {"Category": "🏷️", "Sub-Category": "📑"}
+    curr_view = st.session_state.get("perf_outlook_view", "Sub-Category")
+    sel_view = st.radio("Chart View", opts_view, index=opts_view.index(curr_view), horizontal=True, format_func=lambda x: f"{view_icons.get(x, '')} {x}".strip(), key="perf_outlook_view_radio", label_visibility="collapsed")
+    if sel_view and sel_view != curr_view:
+        st.session_state.perf_outlook_view = sel_view
+        st.rerun()
 
     # ── Final Data Filtering & Sanity Checks ──────────────────────────────────
     order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"

@@ -327,12 +327,11 @@ def _route_page(selected_nav: str) -> None:
     """Route to the correct page renderer based on sidebar selection."""
     # Lazy imports keep bootstrap resilient on cloud
     # when a module has runtime incompatibilities.
-    if selected_nav == "\U0001f4c8 Live Dashboard":
-        from src.components.layout.header import render_banner_mode_controls, render_app_banner
+    if selected_nav == "📈 Live Dashboard":
+        from src.components.layout.header import render_app_banner
         from src.pages.live_dashboard import render_live_tab
 
         safe_render(render_app_banner, fallback_msg="App banner unavailable.")
-        safe_render(render_banner_mode_controls, fallback_msg="Mode controls unavailable.")
         safe_render(render_live_tab, fallback_msg="Live Dashboard unavailable.")
     elif selected_nav in ["\U0001f4e6 Bulk Order Processer", "\U0001f4e6 Bulk Order Processor", "\U0001f4e6 Pathao Processor"]:
         from src.pages.pathao_orders import render_pathao_tab
