@@ -374,18 +374,24 @@ def render_operational_metrics(
                             else:
                                 m_new_cnt += 1
 
-                    # 7-Day New Customer Sparkline
+                    # 7-Day % New Customers Sparkline
                     if not f_df.empty:
                         f_df["_day"] = f_df["_dt"].dt.floor("D")
                         order_id_col = wc_raw_mapping.get("order_id", "Order ID")
                         if order_id_col not in f_df.columns:
                             order_id_col = next((c for c in ["Order ID", "Order Number"] if c in f_df.columns), f_df.columns[0])
 
+                        day_map_total = defaultdict(int)
                         day_map_new = defaultdict(int)
+
                         for d_key, d_grp in f_df.groupby("_day"):
-                            for _, drow in d_grp.drop_duplicates(subset=[order_id_col]).iterrows():
+                            d_uniq = d_grp.drop_duplicates(subset=[order_id_col])
+                            day_map_total[d_key] = len(d_uniq)
+
+                            for _, drow in d_uniq.iterrows():
                                 c_id = drow.get("_cust")
-                                first_dt = first_order_map.get(c_id)
+                                d_dt = drow.get("_dt")
+                                first_dt = first_order_map.get(c_id, d_dt)
                                 reg_dt_str = lifetime_registry.get(c_id)
                                 if reg_dt_str:
                                     reg_dt = pd.to_datetime(reg_dt_str, errors="coerce")
@@ -393,14 +399,28 @@ def render_operational_metrics(
                                         reg_dt = reg_dt.tz_localize(None)
                                     if pd.notna(reg_dt) and (pd.isna(first_dt) or reg_dt < first_dt):
                                         first_dt = reg_dt
-                                if pd.notna(first_dt) and first_dt >= d_key:
+
+                                if pd.isna(first_dt) or first_dt.floor("D") == d_key:
                                     day_map_new[d_key] += 1
 
                         today_dt = f_df["_day"].max()
                         all_7days = pd.date_range(end=today_dt, periods=7, freq="D")
-                        t_cust_vals = [float(day_map_new.get(d, 0)) for d in all_7days]
+
+                        t_cust_vals = []
+                        for d in all_7days:
+                            d_tot = day_map_total.get(d, 0)
+                            d_new = day_map_new.get(d, 0)
+
+                            # Override today's point with active shift live totals
+                            if d == today_dt and (m_new_cnt + m_ret_cnt) > 0:
+                                d_tot = m_new_cnt + m_ret_cnt
+                                d_new = m_new_cnt
+
+                            pct = (d_new / d_tot * 100.0) if d_tot > 0 else 0.0
+                            t_cust_vals.append(pct)
+
                         t_cust_vals = _trim_leading_zeros(t_cust_vals)
-                        s_cust, d_cust = _generate_sparkline_svg(t_cust_vals, theme_cfg.get("spark_qty", "#a855f7"), prefix="", suffix="")
+                        s_cust, d_cust = _generate_sparkline_svg(t_cust_vals, theme_cfg.get("spark_qty", "#a855f7"), prefix="", suffix="%")
             except Exception as e:
                 log_system_event("CUSTOMER_MIX_ERROR", f"Failed to compute customer mix: {e}")
         except Exception as e:
