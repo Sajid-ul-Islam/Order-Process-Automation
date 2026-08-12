@@ -146,66 +146,7 @@ def render_live_tab():
     # Force Operational Cycle in live dashboard
     st.session_state["wc_sync_mode"] = "Operational Cycle"
 
-    nav_mode = st.session_state.get("wc_nav_mode", "Today")
-    order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
-
-    # ── Header: Auto-Sync label + Date Range Selector + Refresh button ───────
-    col_hdr1, col_hdr2, col_hdr3 = st.columns([2.2, 2.2, 1.1])
-    with col_hdr1:
-        # Auto-sync fragment (renders compact caption inline)
-        if nav_mode == "Today" and order_view_mode == "Shipped Only":
-            _sync_60s()
-        else:
-            _sync_180s()
-
-        curr_r = st.session_state.get("live_custom_range")
-        tz_bd = timezone(timedelta(hours=6))
-        today_bd = datetime.now(tz_bd).date()
-        if curr_r and (curr_r[0] != today_bd or curr_r[1] != today_bd):
-            st.caption(f"🗓️ Custom Range: **{curr_r[0].strftime('%b %d')} – {curr_r[1].strftime('%b %d')}**")
-            if st.button("❌ Clear Custom Range", key="btn_clear_custom_range", type="secondary"):
-                st.session_state["live_custom_range"] = (today_bd, today_bd)
-                if "wc_sync_start_date" in st.session_state:
-                    del st.session_state["wc_sync_start_date"]
-                if "wc_sync_end_date" in st.session_state:
-                    del st.session_state["wc_sync_end_date"]
-                st.rerun()
-
-    with col_hdr2:
-        tz_bd = timezone(timedelta(hours=6))
-        today_bd = datetime.now(tz_bd).date()
-        curr_range = st.session_state.get("live_custom_range", (today_bd, today_bd))
-
-        sel_dates = st.date_input(
-            "📅 Date Range",
-            value=curr_range,
-            max_value=today_bd,
-            key="live_date_picker_widget",
-            label_visibility="collapsed",
-            help="Select custom start and end date range to filter orders.",
-        )
-
-        if isinstance(sel_dates, (list, tuple)) and len(sel_dates) == 2:
-            new_r = (sel_dates[0], sel_dates[1])
-            if st.session_state.get("live_custom_range") != new_r:
-                st.session_state["live_custom_range"] = new_r
-                st.session_state["wc_sync_start_date"] = sel_dates[0]
-                st.session_state["wc_sync_end_date"] = sel_dates[1]
-                st.rerun()
-        elif isinstance(sel_dates, (list, tuple)) and len(sel_dates) == 1:
-            new_r = (sel_dates[0], sel_dates[0])
-            if st.session_state.get("live_custom_range") != new_r:
-                st.session_state["live_custom_range"] = new_r
-                st.session_state["wc_sync_start_date"] = sel_dates[0]
-                st.session_state["wc_sync_end_date"] = sel_dates[0]
-                st.rerun()
-
-    with col_hdr3:
-        if st.button("🔄 Refresh", use_container_width=True, key="btn_refresh_newly_shipped", type="secondary"):
-            load_live_source(force_refresh=True)
-            st.toast("⚡ Data refreshed!")
-            st.rerun()
-
+    # ── Data Loading & Preparation (Moved to top for early access) ───────────
     try:
         live_res = load_live_source()
         if isinstance(live_res, dict):
@@ -247,22 +188,92 @@ def render_live_tab():
             st.info("💡 Use **Sales Data Ingestion** to upload a local CSV/Excel export as a fallback.")
             return
 
-    # ── Multi-Mode Shift Navigation ───────────────────────────────────────────
+    # ── Multi-Mode Shift Navigation & Filtering ───────────────────────────────
     nav_mode = st.session_state.get("wc_nav_mode", "Today")
     if nav_mode == "Offline":
         pass
     elif nav_mode == "Prev" and "wc_prev_df" in st.session_state:
         df_live = st.session_state.wc_prev_df
-        p_s, p_e = st.session_state.get("wc_prev_slot", (datetime.now(), datetime.now()))
-        source_name = f"PREV_SLOT_{p_s.strftime('%a_%d%b')}"
-        modified_at = "HISTORICAL_SNAPSHOT"
     elif nav_mode == "Backlog" and "wc_backlog_df" in st.session_state:
         df_live = st.session_state.wc_backlog_df
-        b_s, b_e = st.session_state.get("wc_backlog_slot", (datetime.now(), datetime.now()))
-        source_name = f"INCOMING_BATCH_{b_s.strftime('%H:%M')}"
-        modified_at = "BACKLOG_QUEUE"
     elif nav_mode == "Today" and "wc_curr_df" in st.session_state:
         df_live = st.session_state.wc_curr_df
+
+    # Prepare granular data early to check for cashback
+    df_standard, timeframe = prepare_granular_data(df_live, find_columns(df_live) if df_live is not None else {})
+    has_cashback = "Cashback Discount" in df_standard.columns and (df_standard["Cashback Discount"] > 0).any()
+
+    # ── Header: Auto-Sync, Date Range, Cashback Toggle, Refresh button ───────
+    col_hdr1, col_hdr2, col_hdr3, col_hdr4 = st.columns([2.0, 1.8, 1.5, 0.7])
+    with col_hdr1:
+        # Auto-sync fragment (renders compact caption inline)
+        order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
+        if nav_mode == "Today" and order_view_mode == "Shipped Only":
+            _sync_60s()
+        else:
+            _sync_180s()
+
+        curr_r = st.session_state.get("live_custom_range")
+        tz_bd = timezone(timedelta(hours=6))
+        today_bd = datetime.now(tz_bd).date()
+        if curr_r and (curr_r[0] != today_bd or curr_r[1] != today_bd):
+            st.caption(f"🗓️ Custom Range: **{curr_r[0].strftime('%b %d')} – {curr_r[1].strftime('%b %d')}**")
+            if st.button("❌ Clear Range", key="btn_clear_custom_range", type="secondary"):
+                st.session_state["live_custom_range"] = (today_bd, today_bd)
+                if "wc_sync_start_date" in st.session_state:
+                    del st.session_state["wc_sync_start_date"]
+                if "wc_sync_end_date" in st.session_state:
+                    del st.session_state["wc_sync_end_date"]
+                st.rerun()
+
+    with col_hdr2:
+        tz_bd = timezone(timedelta(hours=6))
+        today_bd = datetime.now(tz_bd).date()
+        curr_range = st.session_state.get("live_custom_range", (today_bd, today_bd))
+
+        sel_dates = st.date_input(
+            "📅 Date Range",
+            value=curr_range,
+            max_value=today_bd,
+            key="live_date_picker_widget",
+            label_visibility="collapsed",
+            help="Select custom start and end date range to filter orders.",
+        )
+
+        if isinstance(sel_dates, (list, tuple)) and len(sel_dates) == 2:
+            new_r = (sel_dates[0], sel_dates[1])
+            if st.session_state.get("live_custom_range") != new_r:
+                st.session_state["live_custom_range"] = new_r
+                st.session_state["wc_sync_start_date"] = sel_dates[0]
+                st.session_state["wc_sync_end_date"] = sel_dates[1]
+                st.rerun()
+        elif isinstance(sel_dates, (list, tuple)) and len(sel_dates) == 1:
+            new_r = (sel_dates[0], sel_dates[0])
+            if st.session_state.get("live_custom_range") != new_r:
+                st.session_state["live_custom_range"] = new_r
+                st.session_state["wc_sync_start_date"] = sel_dates[0]
+                st.session_state["wc_sync_end_date"] = sel_dates[0]
+                st.rerun()
+
+    with col_hdr3:
+        if has_cashback:
+            st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True) # Vertical alignment helper
+            st.toggle(
+                "⚖️ Cashback View",
+                value=st.session_state.get("live_compare_cashback", False),
+                key="live_compare_cashback",
+                help="Toggle the Revenue vs Cashback/Fee breakdown section at the bottom of the page."
+            )
+
+    with col_hdr4:
+        st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True) # Vertical alignment helper
+        if st.button("🔄", use_container_width=True, key="btn_refresh_newly_shipped", type="secondary", help="Force a manual data refresh"):
+            load_live_source(force_refresh=True)
+            st.toast("⚡ Data refreshed!")
+            st.rerun()
+
+    # ── Final Data Filtering & Sanity Checks ──────────────────────────────────
+    order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
 
     if df_live is None or df_live.empty:
         st.warning(f"No data found for the **{nav_mode}** slot.")
@@ -294,20 +305,7 @@ def render_live_tab():
         st.warning("⚠️ 'Order Status' column not found — cannot apply filter.")
 
     # ── Column Detection ──────────────────────────────────────────────────────
-    try:
-        auto_cols = find_columns(df_live)
-    except Exception as col_err:
-        log_system_event("LIVE_COLUMN_DETECT_ERROR", str(col_err))
-        st.error(f"Column detection failed: {col_err}")
-        st.dataframe(df_live.head(20), use_container_width=True)
-        return
-
-    missing_required = [k for k in ["name", "cost", "qty"] if k not in auto_cols]
-    if missing_required:
-        st.error(f"Cannot auto-map required columns: {', '.join(missing_required)}")
-        st.dataframe(df_live.head(20), use_container_width=True)
-        return
-
+    auto_cols = find_columns(df_live) if df_live is not None else {}
     live_mapping = {
         "name": auto_cols.get("name"),
         "cost": auto_cols.get("cost"),
@@ -316,7 +314,7 @@ def render_live_tab():
         "order_id": auto_cols.get("order_id"),
         "phone": auto_cols.get("phone"),
     }
-
+    # Re-assign df_standard with the finally filtered df_live
     df_standard, timeframe = prepare_granular_data(df_live, live_mapping)
     if df_standard.empty:
         st.warning("Data preparation returned empty results.")
@@ -331,15 +329,6 @@ def render_live_tab():
 
     # ── KPI Cards (30s auto-refresh) ─────────────────────────────────────────
     _refresh_core_metrics()
-
-    # ── Cashback Comparison Toggle (shown below KPIs, not in header) ──────────
-    has_cashback = "Cashback Discount" in df_standard.columns and (df_standard["Cashback Discount"] > 0).any()
-    if has_cashback:
-        compare_cashback = st.toggle(
-            "⚖️ Revenue vs Cashback/Fee breakdown",
-            value=st.session_state.get("live_compare_cashback", False),
-            key="live_compare_cashback",
-        )
 
     # ── Dashboard Output (charts, tables, AI briefing, export) ───────────────
     safe_render(

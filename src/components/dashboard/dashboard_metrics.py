@@ -697,7 +697,7 @@ def render_operational_metrics(
     else:
         range_sub = f"📊 {nav_mode} Shift Window (Asia/Dhaka)"
 
-    st.caption(range_sub)
+    # st.caption(range_sub)  # Hidden for clean screenshot view
 
     # ── Feature #3: Goal Threshold Alerts ──────────────────────────────────────
     goals = st.session_state.get("shift_goals", {})

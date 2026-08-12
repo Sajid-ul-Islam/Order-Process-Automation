@@ -71,39 +71,13 @@ def _render_ingestion_mode_metrics(granular_df, dummy_mapping, last_updated):
 
     if granular_df is not None and summ is not None:
         with st.container():
-            st.subheader("Core Metrics")
-            m_qty = summ['Total Qty'].sum()
-            m_ord = basket.get("total_orders", 0) if basket else 0
-            m_bv = basket.get('avg_customer_value', basket.get('avg_basket_value', 0)) if basket else 0
-            if pd.isna(m_bv):
-                m_bv = 0
-
-            # ── Cashback-adjusted revenue (same logic as live dashboard KPIs) ──
-            _df = active_df if (active_df is not None and not active_df.empty) else granular_df
-            m_gross_rev = float(_df["Gross Amount"].sum()) if (_df is not None and "Gross Amount" in _df.columns) else (
-                float(_df["Total Amount"].sum()) if (_df is not None and "Total Amount" in _df.columns) else
-                float(summ['Total Amount'].sum())
-            )
-            m_cashback_disc = float(_df["Cashback Discount"].sum()) if (_df is not None and "Cashback Discount" in _df.columns) else 0.0
-            m_net_rev = m_gross_rev - m_cashback_disc
-            m_loss_pct = (m_cashback_disc / m_gross_rev * 100) if m_gross_rev > 0 else 0.0
-            m_net_bv = (m_net_rev / m_ord) if m_ord > 0 else float(m_bv)
-            m_gross_bv = (m_gross_rev / m_ord) if m_ord > 0 else float(m_bv)
-
-            _badge_style = 'font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;'
-            rev_badge = f'<div style="{_badge_style}">Gross ৳{int(m_gross_rev):,} || Cashback ৳{int(m_cashback_disc):,}</div>' if m_cashback_disc > 0 else ''
-            bv_badge = f'<div style="{_badge_style}">Gross ৳{int(m_gross_bv):,} || Lost Revenue -{m_loss_pct:.0f}%</div>' if m_cashback_disc > 0 else ''
-
-            label1 = get_items_sold_label(last_updated).upper()
-            ingestion_html = (
-                '<div class="metric-container">'
-                f'<div class="metric-card"><div><div class="metric-label">{label1}</div><div class="metric-value">{m_qty:,.0f}</div></div><div class="metric-icon">📦</div></div>'
-                f'<div class="metric-card"><div><div class="metric-label">ACTUAL NET REVENUE</div><div class="metric-value">TK {int(m_net_rev):,}</div>{rev_badge}</div><div class="metric-icon">৳</div></div>'
-                f'<div class="metric-card"><div><div class="metric-label">NUMBER OF ORDERS</div><div class="metric-value">{m_ord:,.0f}</div></div><div class="metric-icon">🛒</div></div>'
-                f'<div class="metric-card"><div><div class="metric-label">BASKET SIZE</div><div class="metric-value">TK {int(m_net_bv):,}</div>{bv_badge}</div><div class="metric-icon">🛍️</div></div>'
-                '</div>'
-            )
-            st.markdown(ingestion_html, unsafe_allow_html=True)
+            st.subheader("Core Metrics") # This subheader is now rendered by render_operational_metrics
+            # Ingestion mode uses the same KPI card renderer as the live dashboard for consistency.
+            # We pass the filtered `active_df` as the main dataframe (`m_df`) and `None` for comparison (`c_df`).
+            # The `nav_mode` is set to a neutral value like "Ingestion" to avoid comparison logic.
+            from src.components.dashboard.dashboard_metrics import render_operational_metrics
+            wc_raw_mapping = {"name":"Item Name", "cost":"Item Cost", "qty":"Quantity", "date":"Order Date", "order_id":"Order ID", "phone":"Phone (Billing)", "sku":"SKU"}
+            render_operational_metrics(active_df, None, "Ingestion", dummy_mapping, wc_raw_mapping)
             st.divider()
 
     return drill, summ, top, basket, active_df
@@ -642,12 +616,11 @@ def render_dashboard_output(
     else:
         drill, summ, top, basket, active_df = _render_ingestion_mode_metrics(granular_df, dummy_mapping, last_updated)
 
-    # ── Executive Performance Hub (Category Share | Products Spotlight | SKU Report) ──
-    st.subheader("📊 Executive Performance Hub")
+    # ── Performance Hub: Category Share | Spotlight | SKU Report ─────────────
     tab_cat, tab_spot, tab_sku = st.tabs([
-        "📊 Category Share & Analytics",
-        "🔥 Products Spotlight",
-        "📦 Master SKU Sales Report",
+        "Category Share",
+        "Spotlight",
+        "SKU Report",
     ])
 
     with tab_cat:
