@@ -910,6 +910,22 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
     height: 30px;
 }
 
+.metric-detail-row {
+    font-size: 0.72rem;
+    color: #000000 !important;
+    opacity: 1 !important;
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 700;
+}
+
+[data-theme="dark"] .metric-detail-row,
+.stApp[data-theme="dark"] .metric-detail-row {
+    color: #ffffff !important;
+}
+
 @media (max-width: 1200px) {
     .metric-container {
         grid-template-columns: repeat(2, 1fr);

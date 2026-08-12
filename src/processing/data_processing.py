@@ -29,7 +29,13 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     if status_col is None:
         return df
 
-    shipped_mask = df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES)
+    has_consignment = pd.Series(False, index=df.index)
+    for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
+        if c_col in df.columns:
+            p_val = df[c_col].astype(str).str.strip().str.lower()
+            has_consignment = has_consignment | (~p_val.isin(["", "nan", "none", "n/a", "0", "null"]))
+
+    shipped_mask = df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES) | has_consignment
     shipped_df = df[shipped_mask]
 
     if shipped_df.empty:
@@ -195,9 +201,15 @@ def filter_all_orders_to_slot(df, nav_mode):
         mod_col  = "mod_dt_parsed" if "mod_dt_parsed" in df.columns else "Order Date Modified" if "Order Date Modified" in df.columns else None
         date_col = "dt_parsed" if "dt_parsed" in df.columns else "Order Date" if "Order Date" in df.columns else None
 
+        has_consignment = pd.Series(False, index=df.index)
+        for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
+            if c_col in df.columns:
+                p_val = df[c_col].astype(str).str.strip().str.lower()
+                has_consignment = has_consignment | (~p_val.isin(["", "nan", "none", "n/a", "0", "null"]))
+
         status_lower = df[status_col].astype(str).str.lower()
-        is_active  = status_lower.isin(ACTIVE_STATUSES)
-        is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
+        is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES]) | has_consignment
+        is_active  = status_lower.isin(ACTIVE_STATUSES) & (~has_consignment)
 
         # Active orders: scoped by creation date within slot
         if date_col:

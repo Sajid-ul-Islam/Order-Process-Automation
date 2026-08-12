@@ -374,7 +374,13 @@ def _apply_shipped_history(df_full):
             pass
 
     history_updated = False
-    is_shipped_mask = df_full["Order Status"].astype(str).str.lower().isin(SHIPPED_STATUSES)
+    has_consignment = pd.Series(False, index=df_full.index)
+    for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
+        if c_col in df_full.columns:
+            p_val = df_full[c_col].astype(str).str.strip().str.lower()
+            has_consignment = has_consignment | (~p_val.isin(["", "nan", "none", "n/a", "0", "null"]))
+
+    is_shipped_mask = df_full["Order Status"].astype(str).str.lower().isin(SHIPPED_STATUSES) | has_consignment
     
     for idx, row in df_full[is_shipped_mask].iterrows():
         oid = str(row["Order ID"])
@@ -413,7 +419,13 @@ def _partition_operational_data(df_full):
     tz_bd = timezone(timedelta(hours=6))
     cutoff_today, prev_cutoff, day_before_prev, shipped_limit = _compute_cutoff_times(tz_bd)
 
-    is_shipped = df_full["Order Status"].astype(str).str.lower().isin(SHIPPED_STATUSES)
+    has_consignment = pd.Series(False, index=df_full.index)
+    for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
+        if c_col in df_full.columns:
+            p_val = df_full[c_col].astype(str).str.strip().str.lower()
+            has_consignment = has_consignment | (~p_val.isin(["", "nan", "none", "n/a", "0", "null"]))
+
+    is_shipped = df_full["Order Status"].astype(str).str.lower().isin(SHIPPED_STATUSES) | has_consignment
     is_confirmed = df_full["Order Status"].astype(str).str.lower() == "confirmed"
     is_processing = df_full["Order Status"].astype(str).str.lower() == "processing"
     is_hold = df_full["Order Status"].astype(str).str.lower() == "on-hold"

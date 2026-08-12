@@ -10,7 +10,7 @@ import streamlit as st
 
 from src.processing.data_processing import aggregate_data, prepare_granular_data, safe_coerce_datetime_naive
 from src.utils.metric_history import save_shift_snapshot, load_snapshot_history
-from src.utils.customer_registry import load_customer_registry, update_customer_registry
+from src.utils.customer_registry import load_customer_registry, update_customer_registry, get_customer_first_order_date, normalize_phone_key
 from src.utils.logging import log_system_event
 
 
@@ -80,9 +80,92 @@ def _generate_sparkline_svg(
     </div>
     """
     
-    badge_html = f"""<div style="font-size:0.68rem;color:rgba(255,255,255,0.65);margin-top:4px;display:flex;justify-content:space-between;align-items:center;">
+    badge_html = f"""<div class="metric-detail-row" style="color:var(--text-color, #000000); font-weight:700; opacity:1;">
         <span>🔥 7D Peak: <b>{prefix}{max_v:,.0f}{suffix}</b></span>
         <span>📊 7D Avg: <b>{prefix}{avg_v:,.0f}{suffix}</b></span>
+    </div>"""
+
+    return svg_html, badge_html
+
+
+def _generate_dual_sparkline_svg(
+    new_values: list[float],
+    ret_values: list[float],
+    color1: str = "#a855f7",
+    color2: str = "#f59e0b",
+    prefix: str = "",
+    suffix: str = "",
+) -> tuple[str, str]:
+    """Generates a dual-trend SVG sparkline displaying New vs. Returning customer trends over 7 days."""
+    if not new_values or len(new_values) < 2:
+        return "", ""
+
+    all_vals = new_values + ret_values
+    min_v = 0.0
+    max_v = max(all_vals) if all_vals else 1.0
+    if max_v == min_v:
+        max_v += 1.0
+    rng = max_v - min_v
+
+    n = len(new_values)
+    width = 100.0
+    height = 30.0
+    step = width / (n - 1)
+
+    def _get_coords(vals):
+        coords = []
+        for i, v in enumerate(vals):
+            x = i * step
+            y = height - ((v - min_v) / rng * (height - 8)) - 4
+            coords.append((x, y))
+        return coords
+
+    def _coords_to_path(coords):
+        if len(coords) == 2:
+            return f"M {coords[0][0]:.1f},{coords[0][1]:.1f} L {coords[1][0]:.1f},{coords[1][1]:.1f}"
+        path_data = f"M {coords[0][0]:.1f},{coords[0][1]:.1f}"
+        for i in range(len(coords) - 1):
+            p0 = coords[i]
+            p1 = coords[i + 1]
+            cx = (p0[0] + p1[0]) / 2
+            path_data += f" C {cx:.1f},{p0[1]:.1f} {cx:.1f},{p1[1]:.1f} {p1[0]:.1f},{p1[1]:.1f}"
+        return path_data
+
+    coords_new = _get_coords(new_values)
+    coords_ret = _get_coords(ret_values)
+    path_new = _coords_to_path(coords_new)
+    path_ret = _coords_to_path(coords_ret)
+
+    latest_new = new_values[-1]
+    latest_ret = ret_values[-1]
+    avg_new = sum(new_values) / len(new_values)
+    avg_ret = sum(ret_values) / len(ret_values)
+
+    tooltip_txt = f"7D Trend: Today {prefix}{latest_new:,.0f}{suffix} New vs {prefix}{latest_ret:,.0f}{suffix} Ret | Avg: {prefix}{avg_new:,.0f}{suffix} New / {prefix}{avg_ret:,.0f}{suffix} Ret"
+
+    ex1, ey1 = coords_new[-1]
+    ex2, ey2 = coords_ret[-1]
+
+    svg_raw = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 30" preserveAspectRatio="none">
+        <title>{tooltip_txt}</title>
+        <path d="{path_new}" fill="none" stroke="{color1}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="{path_ret}" fill="none" stroke="{color2}" stroke-width="1.8" stroke-dasharray="3,2" stroke-linecap="round" stroke-linejoin="round" />
+        <circle cx="{ex1:.1f}" cy="{ey1:.1f}" r="2.5" fill="{color1}" stroke="#ffffff" stroke-width="1" />
+        <circle cx="{ex2:.1f}" cy="{ey2:.1f}" r="2.5" fill="{color2}" stroke="#ffffff" stroke-width="1" />
+    </svg>"""
+
+    import base64
+    b64_svg = base64.b64encode(svg_raw.encode("utf-8")).decode("utf-8")
+
+    svg_html = f"""
+    <div class="metric-sparkline" title="{tooltip_txt}">
+        <img src="data:image/svg+xml;base64,{b64_svg}" style="width: 100%; height: 30px; display: block;" />
+    </div>
+    """
+
+    badge_html = f"""<div class="metric-detail-row" style="color:var(--text-color, #000000); font-weight:700; opacity:1;">
+        <span style="color:{color1};">🆕 7D New: <b>{prefix}{avg_new:,.0f}{suffix} avg</b></span>
+        <span style="color:{color2};">🔄 7D Ret: <b>{prefix}{avg_ret:,.0f}{suffix} avg</b></span>
     </div>"""
 
     return svg_html, badge_html
@@ -339,16 +422,17 @@ def render_operational_metrics(
 
                     f_df = full_df.copy()
                     f_df["_dt"] = safe_coerce_datetime_naive(f_df[full_dt_col])
-                    f_df["_cust"] = f_df[cust_col].astype(str).str.strip().str.lower()
-                    f_df = f_df.dropna(subset=["_dt", "_cust"])
+                    f_df["_norm_cust"] = f_df[cust_col].apply(normalize_phone_key)
+                    f_df = f_df.dropna(subset=["_dt"])
+                    f_df = f_df[f_df["_norm_cust"] != ""]
 
-                    first_order_map = f_df.groupby("_cust")["_dt"].min().to_dict()
+                    first_order_map = f_df.groupby("_norm_cust")["_dt"].min().to_dict()
 
                     if not m_df.empty and cust_col in m_df.columns:
                         active_dt_col = "Date" if "Date" in m_df.columns else wc_raw_mapping.get("date", "Order Date")
                         t_act = m_df.copy()
                         t_act["_dt"] = safe_coerce_datetime_naive(t_act[active_dt_col])
-                        t_act["_cust"] = t_act[cust_col].astype(str).str.strip().str.lower()
+                        t_act["_norm_cust"] = t_act[cust_col].apply(normalize_phone_key)
 
                         order_id_col = wc_raw_mapping.get("order_id", "Order ID")
                         if order_id_col not in t_act.columns:
@@ -356,18 +440,14 @@ def render_operational_metrics(
 
                         act_uniq = t_act.drop_duplicates(subset=[order_id_col])
                         for _, urow in act_uniq.iterrows():
-                            c_id = urow.get("_cust")
+                            c_id = urow.get("_norm_cust")
                             o_dt = urow.get("_dt")
 
                             # Check session dataset min date AND persistent lifetime registry min date (from past 1-5 years)
                             first_dt = first_order_map.get(c_id, o_dt)
-                            reg_dt_str = lifetime_registry.get(c_id)
-                            if reg_dt_str:
-                                reg_dt = pd.to_datetime(reg_dt_str, errors="coerce")
-                                if pd.notna(reg_dt) and reg_dt.tzinfo is not None:
-                                    reg_dt = reg_dt.tz_localize(None)
-                                if pd.notna(reg_dt) and (pd.isna(first_dt) or reg_dt < first_dt):
-                                    first_dt = reg_dt
+                            reg_dt = get_customer_first_order_date(c_id, lifetime_registry)
+                            if reg_dt and (pd.isna(first_dt) or reg_dt < first_dt):
+                                first_dt = reg_dt
 
                             if pd.notna(first_dt) and pd.notna(o_dt) and first_dt < o_dt.floor("D"):
                                 m_ret_cnt += 1
@@ -389,16 +469,12 @@ def render_operational_metrics(
                             day_map_total[d_key] = len(d_uniq)
 
                             for _, drow in d_uniq.iterrows():
-                                c_id = drow.get("_cust")
+                                c_id = drow.get("_norm_cust")
                                 d_dt = drow.get("_dt")
                                 first_dt = first_order_map.get(c_id, d_dt)
-                                reg_dt_str = lifetime_registry.get(c_id)
-                                if reg_dt_str:
-                                    reg_dt = pd.to_datetime(reg_dt_str, errors="coerce")
-                                    if pd.notna(reg_dt) and reg_dt.tzinfo is not None:
-                                        reg_dt = reg_dt.tz_localize(None)
-                                    if pd.notna(reg_dt) and (pd.isna(first_dt) or reg_dt < first_dt):
-                                        first_dt = reg_dt
+                                reg_dt = get_customer_first_order_date(c_id, lifetime_registry)
+                                if reg_dt and (pd.isna(first_dt) or reg_dt < first_dt):
+                                    first_dt = reg_dt
 
                                 if pd.isna(first_dt) or first_dt.floor("D") == d_key:
                                     day_map_new[d_key] += 1
@@ -406,21 +482,29 @@ def render_operational_metrics(
                         today_dt = f_df["_day"].max()
                         all_7days = pd.date_range(end=today_dt, periods=7, freq="D")
 
-                        t_cust_vals = []
+                        t_new_vals = []
+                        t_ret_vals = []
                         for d in all_7days:
                             d_tot = day_map_total.get(d, 0)
                             d_new = day_map_new.get(d, 0)
 
-                            # Override today's point with active shift live totals
                             if d == today_dt and (m_new_cnt + m_ret_cnt) > 0:
                                 d_tot = m_new_cnt + m_ret_cnt
                                 d_new = m_new_cnt
 
-                            pct = (d_new / d_tot * 100.0) if d_tot > 0 else 0.0
-                            t_cust_vals.append(pct)
+                            d_ret = max(0, d_tot - d_new)
 
-                        t_cust_vals = _trim_leading_zeros(t_cust_vals)
-                        s_cust, d_cust = _generate_sparkline_svg(t_cust_vals, theme_cfg.get("spark_qty", "#a855f7"), prefix="", suffix="%")
+                            pct_new = (d_new / d_tot * 100.0) if d_tot > 0 else 0.0
+                            pct_ret = (d_ret / d_tot * 100.0) if d_tot > 0 else 0.0
+
+                            t_new_vals.append(pct_new)
+                            t_ret_vals.append(pct_ret)
+
+                        t_new_vals = _trim_leading_zeros(t_new_vals)
+                        t_ret_vals = _trim_leading_zeros(t_ret_vals)
+                        s_cust, d_cust = _generate_dual_sparkline_svg(
+                            t_new_vals, t_ret_vals, color1="#a855f7", color2="#f59e0b", prefix="", suffix="%"
+                        )
             except Exception as e:
                 log_system_event("CUSTOMER_MIX_ERROR", f"Failed to compute customer mix: {e}")
         except Exception as e:

@@ -216,7 +216,7 @@
     }
   },
   "DD110826QFCUPA": {
-    "timestamp": 1786446468.9581811,
+    "timestamp": 1786511106.302538,
     "data": {
       "type": "success",
       "code": 200,
@@ -224,15 +224,15 @@
         "consignment_id": "DD110826QFCUPA",
         "invoice_id": null,
         "merchant_order_id": "204106",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "Assigned For Delivery",
+        "order_status_slug": "Assigned_for_Delivery",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:55:33"
+        "updated_at": "2026-08-12 11:04:37"
       }
     }
   },
   "DD110826J363JS": {
-    "timestamp": 1786446470.3593736,
+    "timestamp": 1786511107.6314142,
     "data": {
       "type": "success",
       "code": 200,
@@ -240,15 +240,15 @@
         "consignment_id": "DD110826J363JS",
         "invoice_id": null,
         "merchant_order_id": "204107",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "In Transit",
+        "order_status_slug": "In_Transit",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:55:10"
+        "updated_at": "2026-08-12 07:14:59"
       }
     }
   },
   "DD110826QYR9C7": {
-    "timestamp": 1786446725.0892391,
+    "timestamp": 1786511108.8354638,
     "data": {
       "type": "success",
       "code": 200,
@@ -256,15 +256,15 @@
         "consignment_id": "DD110826QYR9C7",
         "invoice_id": null,
         "merchant_order_id": "204109",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "On the Way To Delivery Hub",
+        "order_status_slug": "On_the_way_to_Sorting HUB",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:55:28"
+        "updated_at": "2026-08-12 10:32:27"
       }
     }
   },
   "DD110826PFD4PZ": {
-    "timestamp": 1786446726.2797115,
+    "timestamp": 1786511110.0900664,
     "data": {
       "type": "success",
       "code": 200,
@@ -272,15 +272,15 @@
         "consignment_id": "DD110826PFD4PZ",
         "invoice_id": null,
         "merchant_order_id": "204110",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "Assigned For Delivery",
+        "order_status_slug": "Assigned_for_Delivery",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:55:28"
+        "updated_at": "2026-08-12 09:38:22"
       }
     }
   },
   "DD110826J3ZC4N": {
-    "timestamp": 1786446727.4326031,
+    "timestamp": 1786511111.3150785,
     "data": {
       "type": "success",
       "code": 200,
@@ -288,15 +288,15 @@
         "consignment_id": "DD110826J3ZC4N",
         "invoice_id": null,
         "merchant_order_id": "204111",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "Assigned For Delivery",
+        "order_status_slug": "Assigned_for_Delivery",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:55:28"
+        "updated_at": "2026-08-12 10:57:28"
       }
     }
   },
   "DD110826WYSPPU": {
-    "timestamp": 1786446728.5485806,
+    "timestamp": 1786511112.6099226,
     "data": {
       "type": "success",
       "code": 200,
@@ -304,15 +304,15 @@
         "consignment_id": "DD110826WYSPPU",
         "invoice_id": null,
         "merchant_order_id": "204112",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "At Delivery Hub",
+        "order_status_slug": "Received_at_Last_Mile_HUB",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:55:28"
+        "updated_at": "2026-08-12 10:37:02"
       }
     }
   },
   "DD110826AAUX6D": {
-    "timestamp": 1786446729.8298602,
+    "timestamp": 1786511113.864191,
     "data": {
       "type": "success",
       "code": 200,
@@ -320,15 +320,15 @@
         "consignment_id": "DD110826AAUX6D",
         "invoice_id": null,
         "merchant_order_id": "204113",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "At Delivery Hub",
+        "order_status_slug": "Received_at_Last_Mile_HUB",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:55:10"
+        "updated_at": "2026-08-12 10:50:10"
       }
     }
   },
   "DD110826GWAFUJ": {
-    "timestamp": 1786446731.163553,
+    "timestamp": 1786511114.9568996,
     "data": {
       "type": "success",
       "code": 200,
@@ -336,15 +336,15 @@
         "consignment_id": "DD110826GWAFUJ",
         "invoice_id": null,
         "merchant_order_id": "204114 c",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "In Transit",
+        "order_status_slug": "In_Transit",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:10:57"
+        "updated_at": "2026-08-12 06:34:49"
       }
     }
   },
   "DD1108263HLS7U": {
-    "timestamp": 1786446732.3868861,
+    "timestamp": 1786511115.8911433,
     "data": {
       "type": "success",
       "code": 200,
@@ -352,15 +352,15 @@
         "consignment_id": "DD1108263HLS7U",
         "invoice_id": null,
         "merchant_order_id": "204115",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "Assigned For Delivery",
+        "order_status_slug": "Assigned_for_Delivery",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:55:05"
+        "updated_at": "2026-08-12 09:40:16"
       }
     }
   },
   "DD110826N3PWHD": {
-    "timestamp": 1786446733.8437858,
+    "timestamp": 1786511116.9615808,
     "data": {
       "type": "success",
       "code": 200,
@@ -368,15 +368,15 @@
         "consignment_id": "DD110826N3PWHD",
         "invoice_id": null,
         "merchant_order_id": "204116",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "In Transit",
+        "order_status_slug": "In_Transit",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:55:05"
+        "updated_at": "2026-08-12 04:17:46"
       }
     }
   },
   "DD110826CA93ZM": {
-    "timestamp": 1786446734.9858851,
+    "timestamp": 1786511117.6870112,
     "data": {
       "type": "success",
       "code": 200,
@@ -384,15 +384,15 @@
         "consignment_id": "DD110826CA93ZM",
         "invoice_id": null,
         "merchant_order_id": "204117",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "Assigned For Delivery",
+        "order_status_slug": "Assigned_for_Delivery",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:54:36"
+        "updated_at": "2026-08-12 09:31:59"
       }
     }
   },
   "DD110826YBQ6EL": {
-    "timestamp": 1786446736.199599,
+    "timestamp": 1786511118.4163053,
     "data": {
       "type": "success",
       "code": 200,
@@ -400,15 +400,15 @@
         "consignment_id": "DD110826YBQ6EL",
         "invoice_id": null,
         "merchant_order_id": "204119",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "On the Way To Delivery Hub",
+        "order_status_slug": "On_the_way_to_Sorting HUB",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:53:31"
+        "updated_at": "2026-08-12 09:28:47"
       }
     }
   },
   "DD1108267T5LAG": {
-    "timestamp": 1786446737.4494493,
+    "timestamp": 1786511119.2850797,
     "data": {
       "type": "success",
       "code": 200,
@@ -416,15 +416,15 @@
         "consignment_id": "DD1108267T5LAG",
         "invoice_id": null,
         "merchant_order_id": "204120 c",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "On the Way To Delivery Hub",
+        "order_status_slug": "On_the_way_to_Sorting HUB",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:10:52"
+        "updated_at": "2026-08-11 22:27:40"
       }
     }
   },
   "DD1108268VMEQY": {
-    "timestamp": 1786446738.5574725,
+    "timestamp": 1786511120.001203,
     "data": {
       "type": "success",
       "code": 200,
@@ -432,15 +432,15 @@
         "consignment_id": "DD1108268VMEQY",
         "invoice_id": null,
         "merchant_order_id": "204121",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "Assigned For Delivery",
+        "order_status_slug": "Assigned_for_Delivery",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:52:42"
+        "updated_at": "2026-08-12 10:26:17"
       }
     }
   },
   "DD110826WTWNZ6": {
-    "timestamp": 1786446739.6121488,
+    "timestamp": 1786511120.7582054,
     "data": {
       "type": "success",
       "code": 200,
@@ -448,10 +448,42 @@
         "consignment_id": "DD110826WTWNZ6",
         "invoice_id": null,
         "merchant_order_id": "204122",
-        "order_status": "Pickup Requested",
-        "order_status_slug": "Pickup_Requested",
+        "order_status": "On the Way To Delivery Hub",
+        "order_status_slug": "On_the_way_to_Sorting HUB",
         "payment_status": "",
-        "updated_at": "2026-08-11 16:52:13"
+        "updated_at": "2026-08-12 09:12:21"
+      }
+    }
+  },
+  "DD120826PZDZAL": {
+    "timestamp": 1786511087.7364385,
+    "data": {
+      "type": "success",
+      "code": 200,
+      "data": {
+        "consignment_id": "DD120826PZDZAL",
+        "invoice_id": null,
+        "merchant_order_id": "204149",
+        "order_status": "Pending",
+        "order_status_slug": "pending",
+        "payment_status": "",
+        "updated_at": "2026-08-12 11:01:27"
+      }
+    }
+  },
+  "DD1208264GUALJ": {
+    "timestamp": 1786511089.0393412,
+    "data": {
+      "type": "success",
+      "code": 200,
+      "data": {
+        "consignment_id": "DD1208264GUALJ",
+        "invoice_id": null,
+        "merchant_order_id": "204150",
+        "order_status": "Pending",
+        "order_status_slug": "pending",
+        "payment_status": "",
+        "updated_at": "2026-08-12 10:50:36"
       }
     }
   }
