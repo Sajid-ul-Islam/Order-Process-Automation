@@ -401,13 +401,16 @@ def _apply_shipped_history(df_full):
     os.makedirs(RESOURCES_DIR, exist_ok=True)
     history_file = os.path.join(RESOURCES_DIR, "shipped_history.json")
     
-    shipped_history = {}
-    if os.path.exists(history_file):
-        try:
-            with open(history_file, "r") as f:
-                shipped_history = json.load(f)
-        except Exception:
-            pass
+    # Use session-state cache to avoid repeated disk reads within the same Streamlit run
+    shipped_history = st.session_state.get("_shipped_history_cache")
+    if shipped_history is None:
+        shipped_history = {}
+        if os.path.exists(history_file):
+            try:
+                with open(history_file, "r") as f:
+                    shipped_history = json.load(f)
+            except Exception:
+                pass
 
     history_updated = False
     has_consignment = pd.Series(False, index=df_full.index)
@@ -436,6 +439,8 @@ def _apply_shipped_history(df_full):
                 df_full.at[idx, "mod_dt_parsed"] = stored_dt
 
     if history_updated:
+        # Cache in session state for subsequent calls within the same run
+        st.session_state["_shipped_history_cache"] = shipped_history
         try:
             with open(history_file, "w") as f:
                 json.dump(shipped_history, f)
@@ -511,7 +516,7 @@ def _build_result_payload(df_to_return, slot_label, modified_at, partitions, slo
 # ── Main public functions ────────────────────────────────────────────────────
 
 
-@st.cache_data(show_spinner=False, ttl=60)
+@st.cache_data(show_spinner=False)
 def load_from_woocommerce():
     """Loads live data from WooCommerce REST API orders."""
     wc_info = get_woocommerce_config(required=False)
@@ -641,7 +646,7 @@ def fetch_specific_woocommerce_orders(order_ids: list):
 
 def _should_autorefresh() -> bool:
     """Check if the refresh interval has elapsed since last sync."""
-    interval = st.session_state.get("wc_refresh_interval", 60)
+    interval = st.session_state.get("wc_refresh_interval", 30)
     if interval <= 0:
         return False  # Manual mode
     last_sync = st.session_state.get("live_sync_time")

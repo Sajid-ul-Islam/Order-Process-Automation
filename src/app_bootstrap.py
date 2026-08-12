@@ -182,8 +182,8 @@ def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> N
             "15s": 15, "30s": 30, "60s": 60,
             "2m": 120, "5m": 300, "Manual": 0,
         }
-        current_val = st.session_state.get("wc_refresh_interval", 60)
-        current_label = next((k for k, v in refresh_opts.items() if v == current_val), "60s")
+        current_val = st.session_state.get("wc_refresh_interval", 30)
+        current_label = next((k for k, v in refresh_opts.items() if v == current_val), "30s")
         chosen_label = st.selectbox(
             "Auto-refresh interval",
             options=list(refresh_opts.keys()),
