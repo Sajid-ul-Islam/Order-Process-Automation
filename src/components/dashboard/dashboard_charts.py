@@ -20,6 +20,8 @@ def get_short_category_label(name: str) -> str:
         return "Denim"
     if "flannel" in lower_n:
         return "Flannel"
+    if "casual" in lower_n:
+        return "Casual"
     if "corduroy" in lower_n:
         return "Corduroy"
     if "cuban" in lower_n:
@@ -104,6 +106,12 @@ def render_category_charts(
 
         if len(top_p) < len(name_totals):
             others_mask = ~pie_display["Pie_Name"].isin(top_p)
+            others_rev = pie_display.loc[others_mask, "Total Amount"].sum()
+
+            # Merge any category whose revenue share is lower than Others total share into Others
+            if others_rev > 0:
+                smaller_than_others = (pie_display["Total Amount"] < others_rev) & (pie_display["Pie_Name"] != "Others")
+                others_mask = others_mask | smaller_than_others
 
             others_row = pd.DataFrame([{
                 "Pie_Name": "Others",
@@ -216,7 +224,7 @@ def render_category_charts(
         bar_axis = "Sub-Category" if "Sub-Category" in summ.columns else display_col
         bar_display = summ_display.copy()
         
-        bar_display["Bar_X"] = bar_display[bar_axis]
+        bar_display["Bar_X"] = bar_display[bar_axis].apply(get_short_category_label)
         
         if display_col == "Sub-Category" and len(bar_display) > 12 and "Category" in bar_display.columns:
             jeans_mask = bar_display["Category"] == "Jeans"
@@ -238,7 +246,7 @@ def render_category_charts(
         bar_display["Avg_Unit_Price"] = bar_display.apply(lambda r: (r["Total Amount"] / r["Total Qty"]) if r["Total Qty"] > 0 else 0, axis=1)
         
         unique_bars = pd.DataFrame({"Bar_X": sorted_bars})
-        unique_bars["Bar_Label"] = unique_bars["Bar_X"].apply(lambda x: truncate_label(x, max_len=15))
+        unique_bars["Bar_Label"] = unique_bars["Bar_X"].apply(lambda x: truncate_label(get_short_category_label(x), max_len=15))
         
         fig_bar = px.bar(
             bar_display,

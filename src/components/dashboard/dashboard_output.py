@@ -642,10 +642,18 @@ def render_dashboard_output(
     else:
         drill, summ, top, basket, active_df = _render_ingestion_mode_metrics(granular_df, dummy_mapping, last_updated)
 
-    # ── Charts (Performance Outlook) ──
-    color_map = _render_charts(summ)
+    # ── Executive Performance Hub (Category Share | Products Spotlight | SKU Report) ──
+    st.subheader("📊 Executive Performance Hub")
+    tab_cat, tab_spot, tab_sku = st.tabs([
+        "📊 Category Share & Analytics",
+        "🔥 Products Spotlight",
+        "📦 Master SKU Sales Report",
+    ])
 
-    # ── Executive Briefing (Placed right after Performance Outlook) ──
+    with tab_cat:
+        color_map = _render_charts(summ)
+
+    # ── Executive Briefing ──
     today_qty = summ['Total Qty'].sum() if summ is not None else 0
     today_orders = basket.get('total_orders', 0) if basket else 0
     today_aov = basket.get('avg_customer_value', basket.get('avg_basket_value', 0)) if basket else 0
@@ -654,7 +662,6 @@ def render_dashboard_output(
     final_report_text = ""
     today_rev = float(summ['Total Amount'].sum()) if summ is not None else 0.0  # default; overridden below for operational mode
     if is_operational:
-        st.subheader("📱 Executive Briefing")
         dm = get_dispatch_metrics(active_df, today_orders)
 
         # ── Safe gross/cashback computation (active_df may be None when no orders match filter) ──
@@ -680,15 +687,28 @@ def render_dashboard_output(
 
         final_report_text = st.session_state.get("ai_report_text", report_text)
 
-        # Pass net_aov (post-cashback basket value) to AI briefing so it aligns with KPI cards
         _render_ai_briefing_section(
             is_operational, summ, top, active_df,
             today_rev, today_qty, today_orders, net_aov,
             dm, current_data_fingerprint, final_report_text
         )
 
-    # ── Products Spotlight & SKU-Wise Report ──
-    _render_spotlight_and_sku_report(top, color_map, wc_raw_mapping)
+    with tab_spot:
+        prev_top = None
+        if st.session_state.get("wc_sync_mode") == "Operational Cycle":
+            nav_mode = st.session_state.get("wc_nav_mode", "Today")
+            comp_df = st.session_state.get("wc_prev_df") if nav_mode == "Today" else st.session_state.get("wc_curr_df") if nav_mode == "Prev" else None
+
+            if comp_df is not None and not comp_df.empty:
+                from src.processing.data_processing import prepare_granular_data, aggregate_data
+                comp_df_std, _ = prepare_granular_data(comp_df, wc_raw_mapping)
+                if not comp_df_std.empty:
+                    _, _, prev_top, _ = aggregate_data(comp_df_std, wc_raw_mapping)
+
+        render_spotlight(top, color_map, prev_top=prev_top)
+
+    with tab_sku:
+        _render_sku_report(top)
 
     # ── Revenue & Cashback Impact Analysis (Ingestion mode) ──────────────────
     if not is_operational and active_df is not None and not active_df.empty:

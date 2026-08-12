@@ -326,33 +326,62 @@ def _merge_deduplicated_orders(main_rows: list, extra_rows: list) -> list:
 # ── Operational partitioning ─────────────────────────────────────────────────
 
 
+def _is_off_day(d, holiday_list: list[str]) -> bool:
+    """Return True if the given date is an off day (Friday or manual holiday)."""
+    return d.weekday() == 4 or d.strftime("%Y-%m-%d") in holiday_list
+
+
+def _prev_working_day_cutoff(from_cutoff: datetime, holiday_list: list[str], shift_h: int, shift_m: int) -> datetime:
+    """Walk backwards from `from_cutoff` skipping all consecutive off days.
+
+    Each step goes back one calendar day and skips it if it is a Friday or
+    listed in the manual holiday list.  Stops at the first working day.
+
+    Example:
+        If today is Saturday and yesterday (Friday) is off, this returns the
+        cutoff for the THURSDAY operational shift (i.e., Thursday at shift_h:shift_m).
+    """
+    candidate = from_cutoff - timedelta(days=1)
+    while True:
+        # The operational "day" for this cutoff is the calendar date immediately
+        # before the cutoff hour (e.g. cutoff Thu 18:00 → operational day = Thu)
+        op_date = candidate.date()
+        if not _is_off_day(op_date, holiday_list):
+            break
+        candidate -= timedelta(days=1)
+    return candidate
+
+
 def _compute_cutoff_times(tz_bd):
     """Compute cutoff boundaries for operational cycle partitioning.
-    
+
+    Logic:
+        - cutoff_today   : next shift-end boundary (today or tomorrow at shift_h:shift_m)
+        - prev_cutoff    : shift-end of the most recent WORKING day before today
+        - day_before_prev: shift-end of the working day before prev_cutoff
+
+    Off days (Fridays + manual holidays) are completely skipped so the "previous
+    shift" always refers to the last actual operational day, regardless of how
+    many consecutive holidays are in between.
+
     Returns (cutoff_today, prev_cutoff, day_before_prev, shipped_limit).
     """
     now_bd = datetime.now(tz_bd)
     ref_now = now_bd.replace(tzinfo=None)
     shift_h = st.session_state.get("shift_cutoff_hour", 18)
     shift_m = st.session_state.get("shift_cutoff_minute", 0)
+    holiday_list = st.session_state.get("operational_holidays", [])
+
+    # Next shift boundary: today at shift_h:shift_m, or tomorrow if already past it
     cutoff_today = ref_now.replace(hour=shift_h, minute=shift_m, second=0, microsecond=0)
     if ref_now >= cutoff_today:
         cutoff_today = cutoff_today + timedelta(days=1)
 
-    holiday_list = st.session_state.get("operational_holidays", [])
+    # Walk backwards past consecutive off days to find the previous working cutoff
+    prev_cutoff = _prev_working_day_cutoff(cutoff_today, holiday_list, shift_h, shift_m)
 
-    def _is_holiday(d):
-        return d.weekday() == 4 or d.strftime("%Y-%m-%d") in holiday_list
-
-    prev_cutoff = cutoff_today - timedelta(days=1)
-    day_ending_today = (cutoff_today - timedelta(days=1)).date()
-    if st.session_state.get("override_merge_current") or (_is_holiday(day_ending_today) and not st.session_state.get("override_24h_current")):
-        prev_cutoff = cutoff_today - timedelta(days=2)
-
-    day_before_prev = prev_cutoff - timedelta(days=1)
-    day_ending_prev = (prev_cutoff - timedelta(days=1)).date()
-    if st.session_state.get("override_merge_previous") or (_is_holiday(day_ending_prev) and not st.session_state.get("override_24h_previous")):
-        day_before_prev = prev_cutoff - timedelta(days=2)
+    # Walk backwards again for the shift before that
+    day_before_prev = _prev_working_day_cutoff(prev_cutoff, holiday_list, shift_h, shift_m)
 
     shipped_limit = max(cutoff_today, ref_now + timedelta(hours=12))
     return cutoff_today, prev_cutoff, day_before_prev, shipped_limit
@@ -461,13 +490,12 @@ def _partition_operational_data(df_full):
     now_bd = datetime.now(tz_bd)
     slot_label = "Today"
 
-    # Today's slot extends until 6 AM next morning
-    next_day_6am = (now_bd.replace(hour=6, minute=0, second=0, microsecond=0) + timedelta(days=1)) if now_bd.hour >= 6 else now_bd.replace(hour=6, minute=0, second=0, microsecond=0)
-
+    # curr_slot: from start of today's shift (prev_cutoff) to end of today's shift (cutoff_today)
+    # e.g. yesterday 6 PM → today 6 PM (the full operational day window)
     slot_boundaries = {
-        "wc_curr_slot": (prev_cutoff, next_day_6am.replace(tzinfo=None)),
+        "wc_curr_slot": (prev_cutoff, cutoff_today),
         "wc_prev_slot": (day_before_prev, prev_cutoff),
-        "wc_backlog_slot": (next_day_6am.replace(tzinfo=None), next_day_6am.replace(tzinfo=None) + timedelta(days=1)),
+        "wc_backlog_slot": (cutoff_today, cutoff_today + timedelta(days=1)),
     }
 
     return df_live, df_prev, df_backlog, slot_label, slot_boundaries
@@ -628,12 +656,35 @@ def _should_autorefresh() -> bool:
 
 
 def load_live_source(force_refresh=False):
-    """Stateless fetch with stateful session update."""
+    """Stateless fetch with stateful session update and automatic offline snapshot fallback."""
     if force_refresh or _should_autorefresh():
         load_from_woocommerce.clear()
-    results = load_from_woocommerce()
+
+    results = None
+    try:
+        results = load_from_woocommerce()
+    except Exception as api_err:
+        log_system_event("WC_API_DOWN_ERROR", f"WooCommerce REST API failed: {api_err}")
+        results = None
 
     if results and isinstance(results, dict):
+        df_new = results.get("df_to_return")
+
+        # ── New-Order Detection: compare Order IDs vs last sync ──────────────
+        new_order_count = 0
+        if df_new is not None and not df_new.empty:
+            id_col = next((c for c in ["Order ID", "order_id", "ID", "id"] if c in df_new.columns), None)
+            if id_col:
+                current_ids = set(df_new[id_col].dropna().astype(str).unique())
+                prev_ids = st.session_state.get("wc_last_order_ids", set())
+                new_ids = current_ids - prev_ids
+                new_order_count = len(new_ids)
+                st.session_state["wc_last_order_ids"] = current_ids
+                if new_order_count > 0 and prev_ids:  # only notify on subsequent syncs, not first load
+                    st.session_state["wc_new_order_count"] = new_order_count
+                else:
+                    st.session_state["wc_new_order_count"] = 0
+
         # 1. Update Partitioned State
         partitions = results.get("partitions", {})
         for key, df in partitions.items():
@@ -650,25 +701,33 @@ def load_live_source(force_refresh=False):
         st.session_state.live_sync_time = datetime.now()
 
         # 4. Update Full Context for Forecasting
-        st.session_state["wc_full_df"] = results.get("df_to_return")
+        st.session_state["wc_full_df"] = df_new
 
-        # 4. Silent Autosave for Offline Mode Fallback
+        # 5. Silent Autosave for Offline Mode Fallback
         try:
             from src.utils.snapshots import save_sales_snapshot
-            if not results["df_to_return"].empty:
-                save_sales_snapshot(results["df_to_return"])
+            if df_new is not None and not df_new.empty:
+                save_sales_snapshot(df_new)
         except Exception:
             pass
 
-        # 5. Return tuple for legacy unpacking
-        return results["df_to_return"], results["sync_desc"], results["modified_at"]
+        # 6. Return tuple for legacy unpacking
+        return df_new, results["sync_desc"], results["modified_at"]
 
-    # Handle legacy return if any (for safety)
+    # Handle legacy return if any
     if results:
         st.session_state.live_sync_time = datetime.now()
         return results
 
-    raise ValueError("Failed to load WooCommerce live data.")
+    # Automatic Fallback: Load last saved snapshot when API is not working
+    from src.utils.snapshots import load_sales_snapshot
+    df_snap = load_sales_snapshot()
+    if df_snap is not None and not df_snap.empty:
+        st.session_state.live_sync_time = datetime.now()
+        st.session_state["wc_full_df"] = df_snap
+        return df_snap, "LOCAL_SNAPSHOT_FALLBACK", "API_OFFLINE"
+
+    raise ValueError("WooCommerce REST API is offline and no local saved snapshot is available.")
 
 
 def get_items_sold_label(last_updated):

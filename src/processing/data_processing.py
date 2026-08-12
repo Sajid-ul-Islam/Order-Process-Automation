@@ -8,7 +8,21 @@ from src.utils.logging import log_system_event
 
 
 def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
-    """Filters a DataFrame to shipped statuses, narrowing strictly to orders shipped today for Today mode.
+    """Filters a DataFrame to shipped orders for the relevant time window.
+
+    For Today mode (not comparison):
+        - An order is "shipped today" if its mod_dt_parsed (date_modified from WooCommerce,
+          converted to BD UTC+6) falls on today's calendar date.
+        - This is INDEPENDENT of slot boundaries — any order that transitioned from
+          hold/waiting/processing to a shipped status today is counted, regardless of when
+          it was originally placed.
+        - If mod_dt_parsed is null, falls back to dt_parsed (order creation date).
+
+    For Prev/comparison modes:
+        - Uses slot boundaries (wc_prev_slot / wc_curr_slot) to scope the date range.
+
+    For custom range:
+        - Uses user-selected start/end date range.
 
     Args:
         df: The order DataFrame to filter.
@@ -29,6 +43,7 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     if status_col is None:
         return df
 
+    # ── Step 1: Identify shipped orders (by status OR consignment ID) ──────────
     has_consignment = pd.Series(False, index=df.index)
     for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
         if c_col in df.columns:
@@ -41,12 +56,7 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     if shipped_df.empty:
         return shipped_df
 
-    mod_col = None
-    if "mod_dt_parsed" in shipped_df.columns:
-        mod_col = "mod_dt_parsed"
-    elif "Order Date Modified" in shipped_df.columns:
-        mod_col = "Order Date Modified"
-
+    # ── Step 2: Resolve date columns ─────────────────────────────────────────
     def _safe_tz_naive(series):
         return safe_coerce_datetime_naive(series)
 
@@ -54,65 +64,51 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
         dt_v = pd.to_datetime(val)
         return dt_v.tz_localize(None) if getattr(dt_v, "tz", None) is not None else dt_v
 
-    custom_range = st.session_state.get("live_custom_range")
+    mod_col = None
+    if "mod_dt_parsed" in shipped_df.columns:
+        mod_col = "mod_dt_parsed"
+    elif "Order Date Modified" in shipped_df.columns:
+        mod_col = "Order Date Modified"
+
+    date_col = "dt_parsed" if "dt_parsed" in shipped_df.columns else "Order Date" if "Order Date" in shipped_df.columns else None
+
+    dt_mod = _safe_tz_naive(shipped_df[mod_col]) if mod_col else pd.Series(pd.NaT, index=shipped_df.index)
+    dt_create = _safe_tz_naive(shipped_df[date_col]) if date_col else pd.Series(pd.NaT, index=shipped_df.index)
+
+    # mod_dt is the authoritative "when was it shipped" signal.
+    # Fall back to dt_create only when mod_dt is null.
+    dt_effective = dt_mod.fillna(dt_create)
+
     tz_bd = timezone(timedelta(hours=6))
     today_bd = datetime.now(tz_bd).date()
 
+    # ── Step 3: Custom date range (user-selected) ────────────────────────────
+    custom_range = st.session_state.get("live_custom_range")
     if not is_comparison and custom_range and isinstance(custom_range, (tuple, list)) and len(custom_range) == 2:
         start_d, end_d = custom_range[0], custom_range[1]
         if start_d != today_bd or end_d != today_bd:
-            dt_series = _safe_tz_naive(shipped_df[mod_col]) if mod_col else pd.Series(pd.NaT, index=shipped_df.index)
-            date_col = "dt_parsed" if "dt_parsed" in shipped_df.columns else "Order Date" if "Order Date" in shipped_df.columns else None
-            dt_create = _safe_tz_naive(shipped_df[date_col]) if date_col else pd.Series(pd.NaT, index=shipped_df.index)
-
-            mask = (
-                ((dt_series.dt.date >= start_d) & (dt_series.dt.date <= end_d))
-                | (dt_series.isna() & (dt_create.dt.date >= start_d) & (dt_create.dt.date <= end_d))
-            )
+            mask = (dt_effective.dt.date >= start_d) & (dt_effective.dt.date <= end_d)
             return shipped_df[mask]
 
+    # ── Step 4: TODAY MODE — calendar date match only, slot-independent ──────
+    # Rule: "shipped today" = mod_dt_parsed is today's BD date.
+    # Orders that were on-hold / waiting / processing and got status-changed to
+    # shipped today are captured here via mod_dt_parsed.
     if nav_mode == "Today" and not is_comparison:
-        # 1. First try filtering by operational shift slot boundaries if defined
-        slot = st.session_state.get("wc_curr_slot")
-        if slot:
-            slot_start, slot_end = _safe_dt_naive(slot[0]), _safe_dt_naive(slot[1])
-            dt_series = _safe_tz_naive(shipped_df[mod_col]) if mod_col else pd.Series(pd.NaT, index=shipped_df.index)
-            date_col = "dt_parsed" if "dt_parsed" in shipped_df.columns else "Order Date" if "Order Date" in shipped_df.columns else None
-            dt_create = _safe_tz_naive(shipped_df[date_col]) if date_col else pd.Series(pd.NaT, index=shipped_df.index)
+        today_mask = dt_effective.dt.date == today_bd
+        return shipped_df[today_mask]
 
-            # Match mod_dt within slot OR (mod_dt is NaT and dt_create is within slot)
-            in_slot_mask = (
-                ((dt_series >= slot_start) & (dt_series <= slot_end))
-                | (dt_series.isna() & (dt_create >= slot_start) & (dt_create <= slot_end))
-            )
-            shipped_in_slot = shipped_df[in_slot_mask]
-            return shipped_in_slot
-
-        # 2. Fallback to calendar date matching (BD Time UTC+6)
-        tz_bd = timezone(timedelta(hours=6))
-        today_bd = datetime.now(tz_bd).date()
-
-        dt_series = _safe_tz_naive(shipped_df[mod_col]) if mod_col else pd.Series(pd.NaT, index=shipped_df.index)
-        date_col = "dt_parsed" if "dt_parsed" in shipped_df.columns else "Order Date" if "Order Date" in shipped_df.columns else None
-        dt_create = _safe_tz_naive(shipped_df[date_col]) if date_col else pd.Series(pd.NaT, index=shipped_df.index)
-
-        dt_effective = dt_series.fillna(dt_create)
-        shipped_today = shipped_df[(dt_effective.dt.date == today_bd) | (dt_create.dt.date == today_bd)]
-        return shipped_today
-
-    # ── Operational slot boundaries for Prev mode or comparison slots ──
-    slot_key = "wc_curr_slot" if nav_mode == "Today" else "wc_prev_slot" if nav_mode == "Prev" else None
+    # ── Step 5: PREV / COMPARISON MODE — use slot boundaries ────────────────
+    slot_key = "wc_prev_slot" if nav_mode == "Prev" else None
     if is_comparison:
         slot_key = "wc_prev_slot" if nav_mode == "Today" else "wc_curr_slot" if nav_mode == "Prev" else None
 
     slot = st.session_state.get(slot_key) if slot_key else None
 
-    if slot and mod_col:
+    if slot:
         slot_start, slot_end = _safe_dt_naive(slot[0]), _safe_dt_naive(slot[1])
-        dt_series = _safe_tz_naive(shipped_df[mod_col])
         filtered = shipped_df[
-            (dt_series >= slot_start) &
-            (dt_series <= slot_end)
+            (dt_effective >= slot_start) & (dt_effective <= slot_end)
         ]
         return filtered
 

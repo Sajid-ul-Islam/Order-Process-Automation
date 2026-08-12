@@ -218,13 +218,21 @@ def render_live_tab():
             df_live = live_res
             source_name = "WooCommerce_API"
             modified_at = ""
+
+        if source_name == "LOCAL_SNAPSHOT_FALLBACK" or modified_at == "API_OFFLINE":
+            st.warning("⚠️ **WooCommerce REST API is currently offline or not responding.** Displaying the last saved sales snapshot. Live updates will resume once connection is restored.")
+
+        # ── New Order Notification Toast ──────────────────────────────────────
+        new_cnt = st.session_state.pop("wc_new_order_count", 0)
+        if new_cnt > 0:
+            st.toast(f"🆕 **{new_cnt} new order{'s' if new_cnt > 1 else ''} detected** since last sync!", icon="🔔")
     except Exception as api_err:
         log_system_event("LIVE_API_ERROR", f"Live sync failed, attempting fallback: {api_err}")
         from src.utils.snapshots import load_sales_snapshot
         df_snap = load_sales_snapshot()
 
         if df_snap is not None and not df_snap.empty:
-            st.warning("📡 **Offline Mode** — showing last saved snapshot. Data may not reflect live changes.")
+            st.warning("⚠️ **WooCommerce REST API is currently offline or not responding.** Displaying the last saved sales snapshot. Live updates will resume once connection is restored.")
             df_live = df_snap
             source_name = "LOCAL_SNAPSHOT_FALLBACK"
             modified_at = "OFFLINE_MODE"
