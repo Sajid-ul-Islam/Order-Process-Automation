@@ -398,7 +398,11 @@ def render_operational_metrics(
             pass
             
     # ── Last 7-Days KPI Sparkline Extraction ──
+    # Initialize all sparkline and customer mix variables to safe defaults
+    m_new_cnt, m_ret_cnt = 0, 0
+    s_cust, d_cust = "", ""
     s_qty, s_rev, s_ord, s_bv = "", "", "", ""
+    d_qty, d_rev, d_ord, d_bv, d_cust = "", "", "", "", ""
     if not m_df.empty and nav_mode != "Backlog":
         try:
             # 1. Fetch the multi-day source DataFrame from session state if available, fallback to m_df
@@ -490,8 +494,6 @@ def render_operational_metrics(
             s_bv, d_bv = _generate_sparkline_svg(t_bv_vals, theme_cfg.get("spark_bv", "#f59e0b"), prefix="৳", suffix="")
 
             # ── New vs Returning Customer Calculation (Lifetime Registry Integrated) ──
-            m_new_cnt, m_ret_cnt = 0, 0
-            s_cust, d_cust = "", ""
             try:
                 # Update persistent customer registry with full_df order history
                 update_customer_registry(full_df, wc_raw_mapping)
@@ -640,9 +642,11 @@ def render_operational_metrics(
     if extra_metric_label == "Basket Size" and m_cashback_disc > 0:
         extra_metric_value = f"TK {int(m_net_bv):,}"
 
-    cb_badge = f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">Gross ৳{int(m_gross_rev):,} || Cashback ৳{int(m_cashback_disc):,}</div>' if m_cashback_disc > 0 else ''
-    cb_basket_badge = f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">Gross ৳{int(m_gross_bv):,} || Lost Revenue -{m_loss_pct:.0f}%</div>' if (m_cashback_disc > 0 and extra_metric_label == "Basket Size") else ''
-    cb_orders_badge = f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">{m_cb_orders_pct:.0f}% cashbacked</div>' if m_cb_orders_pct > 0 else ''
+    show_cb_details = st.session_state.get("live_compare_cashback", False)
+
+    cb_badge = f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">Gross ৳{int(m_gross_rev):,} || Cashback ৳{int(m_cashback_disc):,}</div>' if (m_cashback_disc > 0 and show_cb_details) else ''
+    cb_basket_badge = f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">Gross ৳{int(m_gross_bv):,} || Lost Revenue -{m_loss_pct:.0f}%</div>' if (m_cashback_disc > 0 and extra_metric_label == "Basket Size" and show_cb_details) else ''
+    cb_orders_badge = f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">{m_cb_orders_pct:.0f}% cashbacked</div>' if (m_cb_orders_pct > 0 and show_cb_details) else ''
 
     tot_cust = m_new_cnt + m_ret_cnt
     pct_new = (m_new_cnt / tot_cust * 100) if tot_cust > 0 else 0
@@ -999,4 +1003,3 @@ def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.Da
                 show_excl_cols = [c for c in ["Order ID", "Order Status", "Item Name", "SKU", "Item Cost", "Quantity", "Gross Amount", "Total Amount", "Cashback Discount"] if c in excl_detail_df.columns]
                 st.caption("These orders are excluded from all analytics due to their status (pending, cancelled, failed, refunded, etc.)")
                 st.dataframe(excl_detail_df[show_excl_cols].head(200), use_container_width=True)
-

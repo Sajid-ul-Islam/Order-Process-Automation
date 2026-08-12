@@ -333,15 +333,6 @@ def render_live_tab():
             st.toast("⚡ Data refreshed!")
             st.rerun()
 
-    # Chart View control now sits below the main header for better spacing
-    opts_view = ["Category", "Sub-Category"]
-    view_icons = {"Category": "🏷️", "Sub-Category": "📑"}
-    curr_view = st.session_state.get("perf_outlook_view", "Sub-Category")
-    sel_view = st.radio("Chart View", opts_view, index=opts_view.index(curr_view), horizontal=True, format_func=lambda x: f"{view_icons.get(x, '')} {x}".strip(), key="perf_outlook_view_radio", label_visibility="collapsed")
-    if sel_view and sel_view != curr_view:
-        st.session_state.perf_outlook_view = sel_view
-        st.rerun()
-
     # ── Final Data Filtering & Sanity Checks ──────────────────────────────────
     order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
 

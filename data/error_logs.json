@@ -1,41 +1,5 @@
 [
     {
-        "timestamp": "2026-06-14 12:37:33",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-14 12:41:46",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-14 12:42:34",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
-        "timestamp": "2026-06-14 12:43:06",
-        "context": "safe_render",
-        "error": "division by zero",
-        "traceback": "Traceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\tests\\test_safe_ops.py\", line 64, in <lambda>\n    result = safe_render(lambda: 1 / 0, fallback_msg=\"Oops\")\n                                 ~~^~~\nZeroDivisionError: division by zero\n",
-        "details": {
-            "fallback_msg": "Oops"
-        }
-    },
-    {
         "timestamp": "2026-06-14 12:43:32",
         "context": "safe_render",
         "error": "'Total Outlet Stock'",
@@ -875,6 +839,42 @@
         "context": "safe_render",
         "error": "cannot access local variable 'd_qty' where it is not associated with a value",
         "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 121, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 635, in render_operational_metrics\n    f'<div class=\"metric-value\">{v_qty}</div>{html_dq}{s_qty}{d_qty}</div>'\n                                                              ^^^^^\nUnboundLocalError: cannot access local variable 'd_qty' where it is not associated with a value\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 331, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: cannot access local variable 'd_qty' where it is not associated with a value\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-12 14:58:18",
+        "context": "safe_render",
+        "error": "cannot access local variable 'd_qty' where it is not associated with a value",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 121, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 635, in render_operational_metrics\n    f'<div class=\"metric-value\">{v_qty}</div>{html_dq}{s_qty}{d_qty}</div>'\n                                                              ^^^^^\nUnboundLocalError: cannot access local variable 'd_qty' where it is not associated with a value\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 392, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: cannot access local variable 'd_qty' where it is not associated with a value\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-12 14:59:17",
+        "context": "safe_render",
+        "error": "cannot access local variable 'm_new_cnt' where it is not associated with a value",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 121, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 648, in render_operational_metrics\n    tot_cust = m_new_cnt + m_ret_cnt\n               ^^^^^^^^^\nUnboundLocalError: cannot access local variable 'm_new_cnt' where it is not associated with a value\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 392, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: cannot access local variable 'm_new_cnt' where it is not associated with a value\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-12 14:59:24",
+        "context": "safe_render",
+        "error": "cannot access local variable 'm_new_cnt' where it is not associated with a value",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 121, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 648, in render_operational_metrics\n    tot_cust = m_new_cnt + m_ret_cnt\n               ^^^^^^^^^\nUnboundLocalError: cannot access local variable 'm_new_cnt' where it is not associated with a value\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 392, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: cannot access local variable 'm_new_cnt' where it is not associated with a value\n",
+        "details": {
+            "fallback_msg": "Live Dashboard unavailable."
+        }
+    },
+    {
+        "timestamp": "2026-08-12 15:01:43",
+        "context": "safe_render",
+        "error": "cannot access local variable 'm_new_cnt' where it is not associated with a value",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 442, in wrapped_fragment\n    result = non_optional_func(*args, **kwargs)\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 121, in _refresh_core_metrics\n    render_operational_metrics(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_val=0, avg_proc_time=0\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"H:\\Repo\\DEEN-OPS\\src\\components\\dashboard\\dashboard_metrics.py\", line 648, in render_operational_metrics\n    tot_cust = m_new_cnt + m_ret_cnt\n               ^^^^^^^^^\nUnboundLocalError: cannot access local variable 'm_new_cnt' where it is not associated with a value\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"H:\\Repo\\DEEN-OPS\\src\\utils\\safe_ops.py\", line 81, in safe_render\n    return render_fn()\n  File \"H:\\Repo\\DEEN-OPS\\src\\pages\\live_dashboard.py\", line 392, in render_live_tab\n    _refresh_core_metrics()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 473, in wrap\n    return wrapped_fragment()\n  File \"C:\\Users\\deenb\\AppData\\Roaming\\Python\\Python314\\site-packages\\streamlit\\runtime\\fragment.py\", line 455, in wrapped_fragment\n    raise FragmentHandledException(e)\nstreamlit.errors.FragmentHandledException: cannot access local variable 'm_new_cnt' where it is not associated with a value\n",
         "details": {
             "fallback_msg": "Live Dashboard unavailable."
         }

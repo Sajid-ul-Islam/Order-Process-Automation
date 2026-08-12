@@ -85,14 +85,30 @@ def _render_ingestion_mode_metrics(granular_df, dummy_mapping, last_updated):
 
 def _render_charts(summ):
     """Render the Performance Outlook charts section with executive metric highlights."""
-    st.subheader("📊 Performance Outlook & Category Analytics")
-
     if summ is None or summ.empty:
         st.info("No category sales data available for current selection.")
         return {}
 
+    # Create a two-column layout to place the toggle next to the subheader
+    col_header, col_toggle = st.columns([3, 1])
+
+    with col_header:
+        st.subheader("📊 Performance Outlook & Category Analytics")
+
     chart_summ = summ.copy()
-    display_col = st.session_state.get("perf_outlook_view", "Sub-Category" if "Sub-Category" in chart_summ.columns else "Category")
+    
+    with col_toggle:
+        # Use a toggle for view selection, placed in the second column
+        show_sub_cat = st.toggle(
+            "Show Sub-Category View",
+            value=st.session_state.get("perf_outlook_view", "Sub-Category") == "Sub-Category",
+            key="perf_outlook_toggle",
+            help="Toggle between high-level Category view (off) and granular Sub-Category view (on)."
+        )
+    
+    new_view = "Sub-Category" if show_sub_cat else "Category"
+    st.session_state["perf_outlook_view"] = new_view
+    display_col = new_view
 
     if display_col == "Category" and "Category" in chart_summ.columns:
         chart_summ = chart_summ.groupby("Category", as_index=False).agg({"Total Qty": "sum", "Total Amount": "sum"})
