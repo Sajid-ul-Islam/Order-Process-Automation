@@ -7,8 +7,8 @@ from src.processing.column_detection import find_columns
 from src.processing.data_processing import (
     prepare_granular_data,
     aggregate_data,
-    filter_shipped_by_slot,
-    filter_all_orders_to_slot,
+    apply_order_view,
+    apply_order_view_comparison,
 )
 from src.components.dashboard.dashboard_output import render_dashboard_output
 from src.components.dashboard.dashboard_metrics import render_operational_metrics
@@ -32,16 +32,12 @@ def _compute_live_data_fingerprint(df):
     status_col = (
         "Order Status"
         if "Order Status" in df.columns
-        else "Status"
-        if "Status" in df.columns
-        else None
+        else "Status" if "Status" in df.columns else None
     )
     mod_col = (
         "mod_dt_parsed"
         if "mod_dt_parsed" in df.columns
-        else "Order Date Modified"
-        if "Order Date Modified" in df.columns
-        else None
+        else "Order Date Modified" if "Order Date Modified" in df.columns else None
     )
     oid_col = "Order ID" if "Order ID" in df.columns else None
 
@@ -85,62 +81,39 @@ def _sync_180s():
 # ── Live KPI Fragment (20s auto-refresh) ────────────────────────────────────
 @st.fragment(run_every=20)
 def _refresh_core_metrics():
-    """20-second auto-refresh of KPI cards — reads latest from session state."""
+    """20-second auto-refresh of KPI cards.
+
+    Reuses the already-filtered, granular ``live_df_standard`` /
+    ``live_cmp_standard`` stashed by ``render_live_tab`` so the cards always
+    show the exact same data as the charts beneath them (no second, divergent
+    filtering pass). Falls back to recomputing only when the stash is missing.
+    """
     nav_mode = st.session_state.get("wc_nav_mode", "Today")
-
-    if nav_mode == "Today":
-        m_df = st.session_state.get("wc_curr_df")
-    elif nav_mode == "Backlog":
-        m_df = st.session_state.get("wc_backlog_df")
-    else:
-        m_df = st.session_state.get("wc_prev_df")
-
-    c_df = (
-        st.session_state.get("wc_prev_df" if nav_mode == "Today" else "wc_curr_df")
-        if nav_mode != "Backlog"
-        else None
-    )
-
     order_view_mode = (
         st.session_state.get("live_order_filter", "All Orders")
         if nav_mode == "Today"
         else "All Orders"
     )
-    if order_view_mode == "All Orders" and nav_mode == "Today":
-        m_df = filter_all_orders_to_slot(m_df, nav_mode)
-        if c_df is not None and not c_df.empty:
-            c_df = filter_all_orders_to_slot(c_df, "Prev")
-    elif order_view_mode == "Shipped":
-        from src.processing.data_processing import filter_shipped_by_slot
 
-        m_df = filter_shipped_by_slot(m_df, nav_mode, is_comparison=False)
-        if c_df is not None and not c_df.empty:
-            c_df = filter_shipped_by_slot(c_df, nav_mode, is_comparison=True)
-    elif order_view_mode == "Processing":
-        if m_df is not None and not m_df.empty:
-            status_col_m = (
-                "Order Status"
-                if "Order Status" in m_df.columns
-                else "Status"
-                if "Status" in m_df.columns
-                else None
-            )
-            if status_col_m:
-                m_df = m_df[m_df[status_col_m].astype(str).str.lower() == "processing"]
-        if c_df is not None and not c_df.empty:
-            status_col_c = (
-                "Order Status"
-                if "Order Status" in c_df.columns
-                else "Status"
-                if "Status" in c_df.columns
-                else None
-            )
-            if status_col_c:
-                c_df = c_df[c_df[status_col_c].astype(str).str.lower() == "processing"]
+    m_df = st.session_state.get("live_df_standard")
+    c_df = st.session_state.get("live_cmp_standard")
 
     if m_df is None or m_df.empty:
-        st.caption("⏳ Waiting for data...")
-        return
+        # Fallback: nothing stashed yet (e.g. very first render before the
+        # main pipeline ran) — recompute from session state via the shared helper.
+        if nav_mode == "Today":
+            raw = st.session_state.get("wc_curr_df")
+        elif nav_mode == "Backlog":
+            raw = st.session_state.get("wc_backlog_df")
+        else:
+            raw = st.session_state.get("wc_prev_df")
+        if raw is None or raw.empty:
+            st.caption("⏳ Waiting for data...")
+            return
+        m_df = apply_order_view(raw, nav_mode, order_view_mode)
+        if m_df is None or m_df.empty:
+            return
+        m_df, _ = prepare_granular_data(m_df, wc_raw_mapping)
 
     dummy_mapping = {
         "name": "Product Name",
@@ -217,6 +190,7 @@ def _load_stale_events():
     ]
     df = pd.DataFrame(rows)
     from src.processing.data_processing import safe_coerce_datetime_naive
+
     df["ts"] = safe_coerce_datetime_naive(df["ts"])
     return df.dropna(subset=["ts"])
 
@@ -250,9 +224,11 @@ def render_staleness_monitor():
         c2.metric("Recovered via retry (7d)", len(recovered))
         c3.metric(
             "Recovery rate (7d)",
-            f"{100 * len(recovered) / len(detections):.0f}%"
-            if len(detections)
-            else "—",
+            (
+                f"{100 * len(recovered) / len(detections):.0f}%"
+                if len(detections)
+                else "—"
+            ),
         )
 
         last14 = df[df["ts"] >= now - pd.Timedelta(days=13)]
@@ -371,9 +347,11 @@ def render_live_tab():
             mod_col = (
                 "mod_dt_parsed"
                 if "mod_dt_parsed" in df_live.columns
-                else "Order Date Modified"
-                if "Order Date Modified" in df_live.columns
-                else None
+                else (
+                    "Order Date Modified"
+                    if "Order Date Modified" in df_live.columns
+                    else None
+                )
             )
             if df_live is not None and not df_live.empty and mod_col:
                 mods = _pd.to_datetime(
@@ -634,35 +612,25 @@ def render_live_tab():
             st.rerun()
         return
 
-    # ── Apply Order View Filter ───────────────────────────────────────────────
+    # ── Apply Order View Filter (single shared helper) ──────────────────────────
     status_col = (
         "Order Status"
         if "Order Status" in df_live.columns
-        else "Status"
-        if "Status" in df_live.columns
-        else None
+        else "Status" if "Status" in df_live.columns else None
     )
-
-    if status_col:
-        if order_view_mode == "All Orders" and nav_mode == "Today":
-            df_live = filter_all_orders_to_slot(df_live, nav_mode)
-            if df_live is None or df_live.empty:
-                st.info(f"📦 No active orders found in the **{nav_mode}** slot.")
-                return
-        elif order_view_mode == "Shipped":
-            df_live = filter_shipped_by_slot(df_live, nav_mode, is_comparison=False)
-            if df_live is None or df_live.empty:
-                st.info(f"📦 No shipped orders found in the **{nav_mode}** slot.")
-                return
-        elif order_view_mode == "Processing":
-            df_live = df_live[
-                df_live[status_col].astype(str).str.lower() == "processing"
-            ]
-            if df_live is None or df_live.empty:
-                st.info(f"📋 No processing orders found in the **{nav_mode}** slot.")
-                return
-    elif order_view_mode != "All Orders":
+    if status_col is None and order_view_mode != "All Orders":
         st.warning("⚠️ 'Order Status' column not found — cannot apply filter.")
+        return
+
+    df_live = apply_order_view(df_live, nav_mode, order_view_mode)
+    if df_live is None or df_live.empty:
+        if order_view_mode == "Shipped":
+            st.info(f"📦 No shipped orders found in the **{nav_mode}** slot.")
+        elif order_view_mode == "Processing":
+            st.info(f"📋 No processing orders found in the **{nav_mode}** slot.")
+        else:
+            st.info(f"📦 No active orders found in the **{nav_mode}** slot.")
+        return
 
     # ── Column Detection ──────────────────────────────────────────────────────
     auto_cols = find_columns(df_live) if df_live is not None else {}
@@ -676,6 +644,22 @@ def render_live_tab():
     }
     # Re-assign df_standard with the finally filtered df_live
     df_standard, timeframe = prepare_granular_data(df_live, live_mapping)
+
+    # Stash the granular frames so the auto-refresh KPI fragment renders the
+    # exact same data as the charts below (no second, divergent filtering pass).
+    st.session_state["live_df_standard"] = df_standard
+    _cmp_raw = (
+        st.session_state.get("wc_prev_df")
+        if nav_mode == "Today"
+        else st.session_state.get("wc_curr_df") if nav_mode == "Backlog" else None
+    )
+    _cmp_standard = None
+    if _cmp_raw is not None and not _cmp_raw.empty:
+        _cmp_f = apply_order_view_comparison(_cmp_raw, nav_mode, order_view_mode)
+        if _cmp_f is not None and not _cmp_f.empty:
+            _cmp_standard, _ = prepare_granular_data(_cmp_f, live_mapping)
+    st.session_state["live_cmp_standard"] = _cmp_standard
+
     if df_standard.empty:
         st.warning("Data preparation returned empty results.")
         st.dataframe(df_live.head(20), use_container_width=True)
@@ -723,6 +707,7 @@ def render_live_tab():
 def _render_dispatch_export():
     """Render today's full dispatch export: shipped + confirmed + waiting orders."""
     import pandas as pd
+
     raw_df = st.session_state.get("wc_curr_df")
     if raw_df is None or raw_df.empty:
         return
@@ -741,9 +726,7 @@ def _render_dispatch_export():
     status_col = (
         "Order Status"
         if "Order Status" in raw_df.columns
-        else "Status"
-        if "Status" in raw_df.columns
-        else None
+        else "Status" if "Status" in raw_df.columns else None
     )
     if status_col is None:
         return

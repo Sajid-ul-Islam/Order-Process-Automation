@@ -8,6 +8,8 @@ from src.config.constants import bd_now
 from src.processing.data_processing import (
     get_dispatch_metrics,
     generate_executive_briefing,
+    filter_all_orders_to_slot,
+    filter_shipped_by_slot,
 )
 from src.components.dashboard.dashboard_charts import (
     render_category_charts,
@@ -39,33 +41,25 @@ def _render_operational_cycle_metrics(
     status_col_m = (
         "Order Status"
         if "Order Status" in m_df.columns
-        else "Status"
-        if "Status" in m_df.columns
-        else None
+        else "Status" if "Status" in m_df.columns else None
     )
     status_col_c = None
     if c_df is not None:
         status_col_c = (
             "Order Status"
             if "Order Status" in c_df.columns
-            else "Status"
-            if "Status" in c_df.columns
-            else None
+            else "Status" if "Status" in c_df.columns else None
         )
 
     if order_view_mode == "All Orders" and nav_mode == "Today":
-        from src.processing.data_processing import filter_all_orders_to_slot
-
         m_df = filter_all_orders_to_slot(m_df, nav_mode)
         if c_df is not None and not c_df.empty:
             c_df = filter_all_orders_to_slot(c_df, "Prev")
-    elif order_view_mode == "Shipped Only":
-        from src.processing.data_processing import filter_shipped_by_slot
-
+    elif order_view_mode == "Shipped":
         m_df = filter_shipped_by_slot(m_df, nav_mode, is_comparison=False)
         if c_df is not None:
             c_df = filter_shipped_by_slot(c_df, nav_mode, is_comparison=True)
-    elif order_view_mode == "Processing Only":
+    elif order_view_mode == "Processing":
         if status_col_m:
             m_df = m_df[m_df[status_col_m].astype(str).str.lower() == "processing"]
         if c_df is not None and status_col_c:
@@ -242,9 +236,7 @@ def _render_spotlight_and_sku_report(top, color_map, wc_raw_mapping):
         comp_df = (
             st.session_state.get("wc_prev_df")
             if nav_mode == "Today"
-            else st.session_state.get("wc_curr_df")
-            if nav_mode == "Prev"
-            else None
+            else st.session_state.get("wc_curr_df") if nav_mode == "Prev" else None
         )
 
         if comp_df is not None and not comp_df.empty:
@@ -785,9 +777,7 @@ def _render_whatsapp_quicksend():
     status_col_wp = (
         "Order Status"
         if "Order Status" in src_df.columns
-        else "Status"
-        if "Status" in src_df.columns
-        else None
+        else "Status" if "Status" in src_df.columns else None
     )
     wp_df = src_df.copy()
     if status_col_wp:
@@ -975,9 +965,11 @@ def render_dashboard_output(
     today_orders = hero.get("orders", basket.get("total_orders", 0) if basket else 0)
     today_aov = hero.get(
         "net_aov",
-        basket.get("avg_customer_value", basket.get("avg_basket_value", 0))
-        if basket
-        else 0,
+        (
+            basket.get("avg_customer_value", basket.get("avg_basket_value", 0))
+            if basket
+            else 0
+        ),
     )
 
     dm = None
@@ -1088,9 +1080,7 @@ def render_dashboard_output(
             comp_df = (
                 st.session_state.get("wc_prev_df")
                 if nav_mode == "Today"
-                else st.session_state.get("wc_curr_df")
-                if nav_mode == "Prev"
-                else None
+                else st.session_state.get("wc_curr_df") if nav_mode == "Prev" else None
             )
 
             if comp_df is not None and not comp_df.empty:

@@ -62,36 +62,19 @@ def render_operational_metrics(
     )
 
     # ── Robust Gross Revenue, Cashback, and Net Revenue Calculation ──
-    if "Cashback Discount" in m_df.columns and (m_df["Cashback Discount"] > 0).any():
-        m_cashback_disc = float(m_df["Cashback Discount"].sum())
-    else:
-        cb_cols = [
-            c
-            for c in ["Order Discount Total", "Fee Discount Total", "Item Discount"]
-            if c in m_df.columns
-        ]
-        if cb_cols:
-            m_cashback_disc = float(m_df[cb_cols].sum().sum())
-        elif (
-            "Subtotal Cost" in m_df.columns
-            and "Item Cost" in m_df.columns
-            and "Quantity" in m_df.columns
-        ):
-            m_cashback_disc = float(
-                (
-                    (m_df["Subtotal Cost"] - m_df["Item Cost"]).clip(lower=0)
-                    * m_df["Quantity"]
-                ).sum()
-            )
-        else:
-            m_cashback_disc = 0.0
-
-    if "Gross Amount" in m_df.columns:
-        m_gross_rev = float(m_df["Gross Amount"].sum())
-    elif "Subtotal Cost" in m_df.columns and "Quantity" in m_df.columns:
-        m_gross_rev = float((m_df["Subtotal Cost"] * m_df["Quantity"]).sum())
-    else:
-        m_gross_rev = m_item_rev
+    # ``prepare_granular_data`` (called above) guarantees ``Cashback Discount``,
+    # ``Gross Amount`` and ``Total Amount`` columns already exist on ``m_df`` and
+    # ``c_df``, so these are the single source of truth (no secondary derivation).
+    m_cashback_disc = (
+        float(m_df["Cashback Discount"].sum())
+        if "Cashback Discount" in m_df.columns
+        else 0.0
+    )
+    m_gross_rev = (
+        float(m_df["Gross Amount"].sum())
+        if "Gross Amount" in m_df.columns
+        else m_item_rev
+    )
 
     # Net Revenue = Gross Revenue - Cashback/Discount Fees
     m_net_rev = max(0.0, m_gross_rev - m_cashback_disc)
@@ -209,13 +192,17 @@ def render_operational_metrics(
                 st.session_state.get("wc_full_df")
                 if st.session_state.get("wc_full_df") is not None
                 and not st.session_state.get("wc_full_df").empty
-                else st.session_state.get("granular_df")
-                if st.session_state.get("granular_df") is not None
-                and not st.session_state.get("granular_df").empty
-                else st.session_state.get("raw_df")
-                if st.session_state.get("raw_df") is not None
-                and not st.session_state.get("raw_df").empty
-                else m_df
+                else (
+                    st.session_state.get("granular_df")
+                    if st.session_state.get("granular_df") is not None
+                    and not st.session_state.get("granular_df").empty
+                    else (
+                        st.session_state.get("raw_df")
+                        if st.session_state.get("raw_df") is not None
+                        and not st.session_state.get("raw_df").empty
+                        else m_df
+                    )
+                )
             )
 
             date_col = (
@@ -514,12 +501,12 @@ def render_operational_metrics(
         l2 = "Backlog Rev"
         l3 = "Backlog Orders"
         icon_l3 = "🛒"
-    elif order_view_mode == "Shipped Only":
+    elif order_view_mode == "Shipped":
         l1 = "Shipped Items"
         l2 = "Shipped Net Revenue"
         l3 = "Shipped Orders"
         icon_l3 = "🚚"
-    elif order_view_mode == "Processing Only":
+    elif order_view_mode == "Processing":
         l1 = "Processing Items"
         l2 = "Processing Rev"
         l3 = "Processing Orders"
@@ -630,9 +617,7 @@ def render_operational_metrics(
                 color_o = (
                     "#10b981"
                     if pct_o >= 1.0
-                    else "#f59e0b"
-                    if pct_o >= 0.7
-                    else "#ef4444"
+                    else "#f59e0b" if pct_o >= 0.7 else "#ef4444"
                 )
                 label_o = (
                     "✅ Goal Reached!"
@@ -747,9 +732,7 @@ def render_revenue_cashback_comparison_section(
     id_col = (
         "Order ID"
         if "Order ID" in m_df.columns
-        else "Order Number"
-        if "Order Number" in m_df.columns
-        else None
+        else "Order Number" if "Order Number" in m_df.columns else None
     )
 
     if id_col:
@@ -782,9 +765,7 @@ def render_revenue_cashback_comparison_section(
         raw_status_col = (
             "Order Status"
             if "Order Status" in raw_df.columns
-            else "Status"
-            if "Status" in raw_df.columns
-            else None
+            else "Status" if "Status" in raw_df.columns else None
         )
         if raw_status_col:
             excl_mask = (
@@ -794,9 +775,7 @@ def render_revenue_cashback_comparison_section(
             raw_id_col = (
                 "Order ID"
                 if "Order ID" in excl_df.columns
-                else "Order Number"
-                if "Order Number" in excl_df.columns
-                else None
+                else "Order Number" if "Order Number" in excl_df.columns else None
             )
             if raw_id_col:
                 excl_orders_cnt = excl_df[raw_id_col].nunique()
@@ -1076,9 +1055,7 @@ def render_revenue_cashback_comparison_section(
         raw_status_col = (
             "Order Status"
             if "Order Status" in raw_df.columns
-            else "Status"
-            if "Status" in raw_df.columns
-            else None
+            else "Status" if "Status" in raw_df.columns else None
         )
         if raw_status_col:
             excl_mask = (

@@ -46,9 +46,7 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     status_col = (
         "Order Status"
         if "Order Status" in df.columns
-        else "Status"
-        if "Status" in df.columns
-        else None
+        else "Status" if "Status" in df.columns else None
     )
     if status_col is None:
         return df
@@ -87,9 +85,7 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     date_col = (
         "dt_parsed"
         if "dt_parsed" in shipped_df.columns
-        else "Order Date"
-        if "Order Date" in shipped_df.columns
-        else None
+        else "Order Date" if "Order Date" in shipped_df.columns else None
     )
 
     dt_mod = (
@@ -136,9 +132,7 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
         slot_key = (
             "wc_prev_slot"
             if nav_mode == "Today"
-            else "wc_curr_slot"
-            if nav_mode == "Prev"
-            else None
+            else "wc_curr_slot" if nav_mode == "Prev" else None
         )
 
     slot = st.session_state.get(slot_key) if slot_key else None
@@ -173,9 +167,7 @@ def filter_all_orders_to_slot(df, nav_mode):
     status_col = (
         "Order Status"
         if "Order Status" in df.columns
-        else "Status"
-        if "Status" in df.columns
-        else None
+        else "Status" if "Status" in df.columns else None
     )
     if status_col is None:
         return df
@@ -200,16 +192,16 @@ def filter_all_orders_to_slot(df, nav_mode):
             mod_col = (
                 "mod_dt_parsed"
                 if "mod_dt_parsed" in df.columns
-                else "Order Date Modified"
-                if "Order Date Modified" in df.columns
-                else None
+                else (
+                    "Order Date Modified"
+                    if "Order Date Modified" in df.columns
+                    else None
+                )
             )
             date_col = (
                 "dt_parsed"
                 if "dt_parsed" in df.columns
-                else "Order Date"
-                if "Order Date" in df.columns
-                else None
+                else "Order Date" if "Order Date" in df.columns else None
             )
 
             status_lower = df[status_col].astype(str).str.lower()
@@ -257,16 +249,12 @@ def filter_all_orders_to_slot(df, nav_mode):
         mod_col = (
             "mod_dt_parsed"
             if "mod_dt_parsed" in df.columns
-            else "Order Date Modified"
-            if "Order Date Modified" in df.columns
-            else None
+            else "Order Date Modified" if "Order Date Modified" in df.columns else None
         )
         date_col = (
             "dt_parsed"
             if "dt_parsed" in df.columns
-            else "Order Date"
-            if "Order Date" in df.columns
-            else None
+            else "Order Date" if "Order Date" in df.columns else None
         )
 
         has_consignment = pd.Series(False, index=df.index)
@@ -316,16 +304,12 @@ def filter_all_orders_to_slot(df, nav_mode):
         date_col = (
             "dt_parsed"
             if "dt_parsed" in df.columns
-            else "Order Date"
-            if "Order Date" in df.columns
-            else None
+            else "Order Date" if "Order Date" in df.columns else None
         )
         mod_col = (
             "mod_dt_parsed"
             if "mod_dt_parsed" in df.columns
-            else "Order Date Modified"
-            if "Order Date Modified" in df.columns
-            else None
+            else "Order Date Modified" if "Order Date Modified" in df.columns else None
         )
 
         has_consignment = pd.Series(False, index=df.index)
@@ -364,6 +348,66 @@ def filter_all_orders_to_slot(df, nav_mode):
         return df[active_mask | shipped_mask]
 
     # Prev/Backlog with no slot info — return status-filtered only
+    return df
+
+
+def apply_order_view(df, nav_mode, order_view):
+    """Filter an orders DataFrame to the selected order view within its slot.
+
+    Single source of truth for the Live Dashboard's "All Orders / Shipped /
+    Processing" selector. Replaces three previously duplicated implementations
+    (main render, the 20s KPI fragment, and dashboard_output).
+
+    - "All Orders" + Today  -> slot-scoped open + shipped-today (GOAL.md invariant 2)
+    - "Shipped"             -> shipped-by-slot (today = calendar day, else slot)
+    - "Processing"          -> status == processing (case-insensitive)
+    - anything else         -> returned unchanged
+    """
+    if df is None or df.empty:
+        return df
+
+    status_col = (
+        "Order Status"
+        if "Order Status" in df.columns
+        else "Status" if "Status" in df.columns else None
+    )
+    if status_col is None:
+        return df
+
+    if order_view == "All Orders" and nav_mode == "Today":
+        return filter_all_orders_to_slot(df, nav_mode)
+    if order_view == "Shipped":
+        return filter_shipped_by_slot(df, nav_mode, is_comparison=False)
+    if order_view == "Processing":
+        return df[df[status_col].astype(str).str.lower() == "processing"]
+    return df
+
+
+def apply_order_view_comparison(df, nav_mode, order_view):
+    """Filter the comparison (other-slot) DataFrame for KPI delta computation.
+
+    Mirrors the historical delta semantics:
+    - "All Orders" -> compared against the "Prev" slot window
+    - "Shipped"    -> compared with is_comparison=True (flips the slot used)
+    - "Processing" -> plain status filter
+    """
+    if df is None or df.empty:
+        return df
+
+    status_col = (
+        "Order Status"
+        if "Order Status" in df.columns
+        else "Status" if "Status" in df.columns else None
+    )
+    if status_col is None:
+        return df
+
+    if order_view == "All Orders":
+        return filter_all_orders_to_slot(df, "Prev")
+    if order_view == "Shipped":
+        return filter_shipped_by_slot(df, nav_mode, is_comparison=True)
+    if order_view == "Processing":
+        return df[df[status_col].astype(str).str.lower() == "processing"]
     return df
 
 
@@ -753,16 +797,12 @@ def get_dispatch_metrics(active_df, total_orders=0):
         status_col = (
             "Order Status"
             if "Order Status" in active_df.columns
-            else "Status"
-            if "Status" in active_df.columns
-            else None
+            else "Status" if "Status" in active_df.columns else None
         )
         order_col = (
             "Order ID"
             if "Order ID" in active_df.columns
-            else "Order Number"
-            if "Order Number" in active_df.columns
-            else None
+            else "Order Number" if "Order Number" in active_df.columns else None
         )
 
         # Use modification date for sorting, as this reflects when an order was shipped.
@@ -770,9 +810,11 @@ def get_dispatch_metrics(active_df, total_orders=0):
         mod_date_col = (
             "mod_dt_parsed"
             if "mod_dt_parsed" in active_df.columns
-            else "Order Date Modified"
-            if "Order Date Modified" in active_df.columns
-            else None
+            else (
+                "Order Date Modified"
+                if "Order Date Modified" in active_df.columns
+                else None
+            )
         )
         date_col = (
             mod_date_col
@@ -780,9 +822,7 @@ def get_dispatch_metrics(active_df, total_orders=0):
             else (
                 "Date"
                 if "Date" in active_df.columns
-                else "Order Date"
-                if "Order Date" in active_df.columns
-                else None
+                else "Order Date" if "Order Date" in active_df.columns else None
             )
         )
         pmt_col = (
