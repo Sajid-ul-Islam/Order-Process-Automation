@@ -21,3 +21,11 @@ htmlcov/
 scratch/
 test.xlsx
 test2.xlsx
+
+# Volatile runtime artifacts (regenerated on each sync; never commit)
+resources/customer_registry.json
+resources/metric_snapshots/
+resources/sales_snapshot.csv
+resources/shipped_history.json
+resources/snapshots/
+*.snapshot.json
