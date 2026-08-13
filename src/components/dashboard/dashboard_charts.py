@@ -181,7 +181,6 @@ def render_category_charts(
         pie_display["Display_Label"] = pie_display["Pie_Name"].apply(
             lambda x: truncate_label(x, max_len=15)
         )
-        pie_display["Unique_ID"] = pie_display.index.astype(str)
 
         pie_display["Avg_Price"] = pie_display.apply(
             lambda r: (r["Total Amount"] / r["Total Qty"]) if r["Total Qty"] > 0 else 0,
@@ -191,12 +190,19 @@ def render_category_charts(
         fig_pie = px.pie(
             pie_display,
             values="Total Amount",
-            names="Unique_ID",
+            names="Pie_Name",
             color=display_col,
             hole=0.55,
             title="<b>💰 Revenue Share (TK)</b>",
             color_discrete_map=color_map,
-            hover_data=["Total Qty", "Display_Label", "Pie_Name", "Avg_Price"],
+        )
+        # Explicit customdata in a fixed, version-independent order so the
+        # texttemplate and hovertemplate indices always match:
+        # [0]=Total Qty  [1]=Display_Label  [2]=Pie_Name  [3]=Avg_Price
+        fig_pie.update_traces(
+            customdata=pie_display[
+                ["Total Qty", "Display_Label", "Pie_Name", "Avg_Price"]
+            ].values
         )
 
         center_annotation_text = (
@@ -330,13 +336,11 @@ def render_category_charts(
             text_auto=".0f",
             color_discrete_map=color_map,
             category_orders={"Bar_X": sorted_bars},
-            hover_data={
-                "Bar_X": False,
-                display_col: True,
-                "Total Qty": ":,.0f",
-                "Total Amount": ":,.0f",
-                "Avg_Unit_Price": ":,.0f",
-            },
+        )
+        # Explicit customdata in a fixed order so the hovertemplate indices are
+        # version-independent: [0]=Bar_X  [1]=Total Amount  [2]=Avg_Unit_Price
+        fig_bar.update_traces(
+            customdata=bar_display[["Bar_X", "Total Amount", "Avg_Unit_Price"]].values
         )
 
         avg_vol = bar_display["Total Qty"].mean() if not bar_display.empty else 0
