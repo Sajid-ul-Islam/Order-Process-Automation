@@ -15,8 +15,8 @@ from src.utils.safe_ops import safe_render, safe_filter
 # ── Auto-Sync Fragments ───────────────────────────────────────────────────────
 # Two stable module-level fragments — Streamlit keys fragment identity by the
 # function object, so they must NOT be created inside a factory per render.
-# _sync_60s  → Active + Shipped Only (high-frequency, catches new dispatches)
-# _sync_180s → All other modes (light background refresh)
+# _sync_60s  → Active + Shipped Only (high-frequency, catches new dispatches) — every 30s
+# _sync_180s → All other modes (light background refresh) — every 60s
 
 def _compute_live_data_fingerprint(df):
     """Compute deterministic MD5 fingerprint across Order IDs, Order Statuses, and Modified Dates."""
@@ -44,30 +44,30 @@ def _check_and_trigger_ui_rerun():
             st.rerun()
 
 
-@st.fragment(run_every=60)
-def _sync_60s():
-    """60-second background sync used in Shipped-Only / Active mode."""
-    try:
-        load_live_source(force_refresh=True)
-        _check_and_trigger_ui_rerun()
-    except Exception:
-        pass
-
-
-@st.fragment(run_every=180)
-def _sync_180s():
-    """3-minute background sync used for all other dashboard modes."""
-    try:
-        load_live_source(force_refresh=True)
-        _check_and_trigger_ui_rerun()
-    except Exception:
-        pass
-
-
-# ── Live KPI Fragment (30s auto-refresh) ────────────────────────────────────
 @st.fragment(run_every=30)
+def _sync_60s():
+    """30-second background sync used in Shipped-Only / Active mode."""
+    try:
+        load_live_source(force_refresh=True)
+        _check_and_trigger_ui_rerun()
+    except Exception:
+        pass
+
+
+@st.fragment(run_every=60)
+def _sync_180s():
+    """60-second background sync used for all other dashboard modes."""
+    try:
+        load_live_source(force_refresh=True)
+        _check_and_trigger_ui_rerun()
+    except Exception:
+        pass
+
+
+# ── Live KPI Fragment (20s auto-refresh) ────────────────────────────────────
+@st.fragment(run_every=20)
 def _refresh_core_metrics():
-    """30-second auto-refresh of KPI cards — reads latest from session state."""
+    """20-second auto-refresh of KPI cards — reads latest from session state."""
     nav_mode = st.session_state.get("wc_nav_mode", "Today")
 
     if nav_mode == "Today":
@@ -112,6 +112,131 @@ def _refresh_core_metrics():
     )
 
 
+# ── Staleness Monitor ────────────────────────────────────────────────────────
+# Graphs how often the store's REST API serves cached/older order data by
+# charting WC_STALE_DATA detection events (and their retry outcomes) from
+# data/feedback/system_logs.json over time.
+
+STALE_EVENT_TYPES = frozenset(
+    {
+        "WC_STALE_DATA",
+        "WC_STALE_RETRY",  # legacy detection event (pre-cache-buster naming)
+        "WC_STALE_RETRY_RECOVERED",
+        "WC_STALE_RETRY_UNRESOLVED",
+        "WC_STALE_RETRY_FAILED",
+        "WC_STALE_RENDER",
+    }
+)
+
+
+def _load_stale_events():
+    """Load staleness events from the system log file into a DataFrame."""
+    import json
+    import os
+
+    import pandas as pd
+    from src.config.constants import FEEDBACK_DIR
+
+    log_path = os.path.join(FEEDBACK_DIR, "system_logs.json")
+    if not os.path.exists(log_path):
+        return pd.DataFrame(columns=["ts", "type", "details"])
+    try:
+        with open(log_path, "r", encoding="utf-8") as f:
+            logs = json.load(f)
+    except Exception:
+        return pd.DataFrame(columns=["ts", "type", "details"])
+
+    rows = [
+        {
+            "ts": entry.get("timestamp", ""),
+            "type": entry.get("type", ""),
+            "details": str(entry.get("details", "")),
+        }
+        for entry in logs
+        if entry.get("type") in STALE_EVENT_TYPES
+    ]
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    df["ts"] = pd.to_datetime(df["ts"], errors="coerce")
+    return df.dropna(subset=["ts"])
+
+
+def render_staleness_monitor():
+    """Diagnostic panel: how often WooCommerce serves stale order data over time."""
+    import pandas as pd
+    import plotly.express as px
+
+    df = _load_stale_events()
+    with st.expander("🩺 WooCommerce Data Staleness Monitor", expanded=False):
+        st.caption(
+            "Tracks when the store's REST API serves cached/stale order data — syncs whose newest order "
+            "modification was older than 45 minutes at fetch time. Clear the site's cache/CDN to stop "
+            "these windows."
+        )
+        if df.empty:
+            st.info(
+                "No staleness events recorded yet. Events appear automatically when a sync returns stale "
+                "data (see the 'Possibly stale WooCommerce data' banner)."
+            )
+            return
+
+        now = pd.Timestamp.now().normalize()
+        last7 = df[df["ts"] >= now - pd.Timedelta(days=6)]
+        detections = last7[last7["type"].isin(["WC_STALE_DATA", "WC_STALE_RETRY"])]
+        recovered = last7[last7["type"] == "WC_STALE_RETRY_RECOVERED"]
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Stale syncs (7d)", len(detections))
+        c2.metric("Recovered via retry (7d)", len(recovered))
+        c3.metric(
+            "Recovery rate (7d)",
+            f"{100 * len(recovered) / len(detections):.0f}%" if len(detections) else "—",
+        )
+
+        last14 = df[df["ts"] >= now - pd.Timedelta(days=13)]
+        detect14 = last14[last14["type"].isin(["WC_STALE_DATA", "WC_STALE_RETRY"])].copy()
+        if not detect14.empty:
+            detect14["date"] = detect14["ts"].dt.date
+            daily = detect14.groupby("date").size().reset_index(name="Stale syncs")
+            fig = px.bar(
+                daily,
+                x="date",
+                y="Stale syncs",
+                title="Stale-data detections per day (last 14 days)",
+                labels={"date": "Date", "Stale syncs": "Syncs"},
+            )
+            fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        outcomes = last14[
+            last14["type"].isin(["WC_STALE_RETRY_RECOVERED", "WC_STALE_RETRY_UNRESOLVED", "WC_STALE_RETRY_FAILED"])
+        ].copy()
+        if not outcomes.empty:
+            outcomes["date"] = outcomes["ts"].dt.date
+            outcomes["Outcome"] = outcomes["type"].map(
+                {
+                    "WC_STALE_RETRY_RECOVERED": "Recovered (cache-buster)",
+                    "WC_STALE_RETRY_UNRESOLVED": "Still stale",
+                    "WC_STALE_RETRY_FAILED": "Retry failed",
+                }
+            )
+            out_daily = outcomes.groupby(["date", "Outcome"]).size().reset_index(name="Count")
+            fig2 = px.bar(
+                out_daily,
+                x="date",
+                y="Count",
+                color="Outcome",
+                title="Retry outcomes per day (last 14 days)",
+                labels={"date": "Date", "Count": "Events"},
+                barmode="stack",
+            )
+            fig2.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
+            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
+
+        st.caption(f"Latest event: {df.iloc[-1]['ts']:%Y-%m-%d %H:%M} · {df.iloc[-1]['type']}")
+
+
 def render_live_tab():
     def _reset_live_state():
         st.session_state.wc_curr_df = None
@@ -154,6 +279,39 @@ def render_live_tab():
 
         if source_name == "LOCAL_SNAPSHOT_FALLBACK" or modified_at == "API_OFFLINE":
             st.warning("⚠️ **WooCommerce REST API is currently offline or not responding.** Displaying the last saved sales snapshot. Live updates will resume once connection is restored.")
+
+        # ── Stale Data Warning ──────────────────────────────────────────────
+        # The store's REST API has been observed serving cached/older order data
+        # intermittently (the same query returns different states minutes apart).
+        # When the newest order modification in a live sync is much older than
+        # now, the dashboard is likely showing a stale snapshot — e.g. missing
+        # today's shipped orders — so surface it instead of silently hiding data.
+        try:
+            import pandas as _pd
+
+            mod_col = (
+                "mod_dt_parsed"
+                if "mod_dt_parsed" in df_live.columns
+                else "Order Date Modified"
+                if "Order Date Modified" in df_live.columns
+                else None
+            )
+            if df_live is not None and not df_live.empty and mod_col:
+                mods = _pd.to_datetime(df_live[mod_col].astype(str).str.replace("Z", "", regex=False), errors="coerce")
+                newest = mods.max()
+                if _pd.notnull(newest):
+                    now_bd = datetime.now(timezone(timedelta(hours=6))).replace(tzinfo=None)
+                    age_min = (now_bd - newest).total_seconds() / 60
+                    if age_min > 45:
+                        st.warning(
+                            f"⚠️ **Possibly stale WooCommerce data.** The newest order modification in this sync is "
+                            f"**{newest:%Y-%m-%d %H:%M}** ({age_min:.0f} min ago). The store's REST API appears to be "
+                            f"serving cached data — orders shipped recently may not show here. Clear the WordPress "
+                            f"cache (caching plugin / CDN) for `/wp-json/wc/v3/orders`, or wait for the next sync."
+                        )
+                        log_system_event("WC_STALE_RENDER", f"newest_mod={newest} age_min={age_min:.0f}")
+        except Exception:
+            pass
 
         # ── New Order Notification Toast ──────────────────────────────────────
         new_cnt = st.session_state.pop("wc_new_order_count", 0)
@@ -520,3 +678,6 @@ def _render_dispatch_export():
             use_container_width=True,
             key="dispatch_export_download",
         )
+
+    # ── Diagnostic: stale-data monitor ───────────────────────────────────────
+    render_staleness_monitor()

@@ -468,15 +468,19 @@ def _update_woocommerce_status(order_id, status, note=None):
         )
         res.raise_for_status()
         
+        # A note is best-effort — a failed note must not fail the status update itself.
         if note:
-            note_url = f"{url}/notes"
-            request_with_backoff(
-                "POST",
-                note_url,
-                json={"note": note, "customer_note": False},
-                auth=auth,
-                timeout=10,
-            )
+            try:
+                note_url = f"{url}/notes"
+                request_with_backoff(
+                    "POST",
+                    note_url,
+                    json={"note": note, "customer_note": False},
+                    auth=auth,
+                    timeout=10,
+                )
+            except Exception:
+                pass
             
         return True, "Success"
     except Exception as e:
@@ -948,6 +952,7 @@ def _render_auto_dispatch_tab():
         success_count = 0
         fail_count = 0
         fail_details = []
+        wc_status_fails = []
 
         with st.status(f"Dispatching {len(result_df)} orders to Pathao...", expanded=True) as dispatch_status:
             progress = st.progress(0)
@@ -987,6 +992,20 @@ def _render_auto_dispatch_tab():
                     res.raise_for_status()
                     resp_data = res.json().get("data", {})
                     consignment_id = resp_data.get("consignment_id", "Created")
+
+                    # Update the WooCommerce order status so the dispatched order
+                    # shows up in the dashboard's shipped views.
+                    wc_order_id = _extract_woocommerce_order_id(payload["merchant_order_id"])
+                    if wc_order_id:
+                        wc_ok, wc_msg = _update_woocommerce_status(
+                            wc_order_id,
+                            "confirmed",
+                            note=f"Dispatched via Pathao — Consignment {consignment_id}",
+                        )
+                        if not wc_ok:
+                            wc_status_fails.append({"Order": wc_order_id, "Consignment": consignment_id, "Error": wc_msg})
+                            st.write(f"⚠️ Order {wc_order_id} dispatched, but WooCommerce status update failed ({wc_msg})")
+
                     st.write(f"✅ Order {payload['merchant_order_id']} → Consignment: {consignment_id}")
                     success_count += 1
                 except Exception as exc:
@@ -1004,6 +1023,11 @@ def _render_auto_dispatch_tab():
         if fail_details:
             with st.expander(f"❌ {fail_count} Failed Orders"):
                 st.dataframe(pd.DataFrame(fail_details), use_container_width=True)
+
+        if wc_status_fails:
+            with st.expander(f"⚠️ {len(wc_status_fails)} WooCommerce Status Update Failures"):
+                st.caption("Orders were dispatched on Pathao, but their WooCommerce status could not be updated. Update them manually in WooCommerce Orders.")
+                st.dataframe(pd.DataFrame(wc_status_fails), use_container_width=True)
 
 
 def _render_delivery_health_tab():

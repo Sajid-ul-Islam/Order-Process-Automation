@@ -216,7 +216,7 @@ def get_woocommerce_shipped_orders_count(after_iso: str, before_iso: str) -> int
 # ── Sync parameter builders ─────────────────────────────────────────────────
 
 
-def _get_operational_sync_params() -> dict:
+def _get_operational_sync_params(cache_buster: str | None = None) -> dict:
     """Build API params for the Operational Cycle sync mode (3-day rolling window or user-selected custom date range)."""
     tz_bd = timezone(timedelta(hours=6))
     now_bd = datetime.now(tz_bd)
@@ -230,28 +230,34 @@ def _get_operational_sync_params() -> dict:
         if start_d != today_bd or end_d != today_bd:
             start_dt = datetime.combine(start_d, datetime.min.time()) - timedelta(hours=6)
             end_dt = datetime.combine(end_d, datetime.max.time()) - timedelta(hours=6)
-            return {
-                "per_page": 100,
-                "after": start_dt.strftime("%Y-%m-%dT%H:%M:%S"),
-                "before": end_dt.strftime("%Y-%m-%dT%H:%M:%S"),
-                "status": "any",
-                "orderby": "date",
-                "order": "desc",
-            }
+            return _apply_cache_buster(
+                {
+                    "per_page": 100,
+                    "after": start_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "before": end_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "status": "any",
+                    "orderby": "date",
+                    "order": "desc",
+                },
+                cache_buster,
+            )
 
     anchor_bd = now_bd.replace(hour=shift_h, minute=shift_m, second=0, microsecond=0) - timedelta(days=3)
     anchor_utc = anchor_bd - timedelta(hours=6)
 
-    return {
-        "per_page": 100,
-        "after": f"{anchor_utc.strftime('%Y-%m-%dT%H:%M:%S')}Z",
-        "status": "any",
-        "orderby": "date",
-        "order": "desc",
-    }
+    return _apply_cache_buster(
+        {
+            "per_page": 100,
+            "after": f"{anchor_utc.strftime('%Y-%m-%dT%H:%M:%S')}Z",
+            "status": "any",
+            "orderby": "date",
+            "order": "desc",
+        },
+        cache_buster,
+    )
 
 
-def _get_today_modified_shipped_params() -> dict:
+def _get_today_modified_shipped_params(cache_buster: str | None = None) -> dict:
     """Build API params to fetch orders modified during today's operational shift with shipped status.
 
     This catches old orders (placed before the 3-day window) that were shipped in current shift.
@@ -261,44 +267,53 @@ def _get_today_modified_shipped_params() -> dict:
     tz_bd = timezone(timedelta(hours=6))
     _, prev_cutoff, _, _ = _compute_cutoff_times(tz_bd)
     prev_cutoff_utc = prev_cutoff - timedelta(hours=6)
-    return {
-        "per_page": 100,
-        "modified_after": f"{prev_cutoff_utc.strftime('%Y-%m-%dT%H:%M:%S')}Z",
-        "status": "any",
-        "orderby": "modified",
-        "order": "desc",
-    }
+    return _apply_cache_buster(
+        {
+            "per_page": 100,
+            "modified_after": f"{prev_cutoff_utc.strftime('%Y-%m-%dT%H:%M:%S')}Z",
+            "status": "any",
+            "orderby": "modified",
+            "order": "desc",
+        },
+        cache_buster,
+    )
 
 
 
 
 
 
-def _get_global_open_params() -> dict:
+def _get_global_open_params(cache_buster: str | None = None) -> dict:
     """Build API params for fetching all open/hold/processing orders."""
-    return {
-        "per_page": 100,
-        "status": "on-hold,pending,waiting,confirmed,processing",
-        "orderby": "date",
-        "order": "desc",
-    }
+    return _apply_cache_buster(
+        {
+            "per_page": 100,
+            "status": "on-hold,pending,waiting,confirmed,processing",
+            "orderby": "date",
+            "order": "desc",
+        },
+        cache_buster,
+    )
 
 
-def _get_custom_range_params() -> dict:
+def _get_custom_range_params(cache_buster: str | None = None) -> dict:
     """Build API params for the Custom Range sync mode."""
     start_date = st.session_state.get("wc_sync_start_date", datetime.now().date())
     start_time = st.session_state.get("wc_sync_start_time", (datetime.now() - timedelta(hours=12)).time())
     end_date = st.session_state.get("wc_sync_end_date", datetime.now().date())
     end_time = st.session_state.get("wc_sync_end_time", datetime.now().time())
 
-    return {
-        "per_page": 100,
-        "after": f"{start_date}T{start_time.strftime('%H:%M:%S')}",
-        "before": f"{end_date}T{end_time.strftime('%H:%M:%S')}",
-        "status": "processing,completed,shipped,on-hold,pending,waiting,confirmed",
-        "orderby": "date",
-        "order": "desc",
-    }
+    return _apply_cache_buster(
+        {
+            "per_page": 100,
+            "after": f"{start_date}T{start_time.strftime('%H:%M:%S')}",
+            "before": f"{end_date}T{end_time.strftime('%H:%M:%S')}",
+            "status": "processing,completed,shipped,on-hold,pending,waiting,confirmed",
+            "orderby": "date",
+            "order": "desc",
+        },
+        cache_buster,
+    )
 
 
 # ── Order merging ────────────────────────────────────────────────────────────
@@ -520,8 +535,13 @@ def _build_result_payload(df_to_return, slot_label, modified_at, partitions, slo
 
 
 @st.cache_data(show_spinner=False)
-def load_from_woocommerce():
-    """Loads live data from WooCommerce REST API orders."""
+def load_from_woocommerce(cache_buster: str | None = None):
+    """Loads live data from WooCommerce REST API orders.
+
+    cache_buster: optional unique string appended as a query param (nocache=...)
+    so the request bypasses URL-keyed server caches (the store has been observed
+    serving stale cached order data intermittently).
+    """
     wc_info = get_woocommerce_config(required=False)
     wc_url = wc_info.get("store_url")
     wc_key = wc_info.get("consumer_key")
@@ -540,9 +560,9 @@ def load_from_woocommerce():
         sync_mode = st.session_state.get("wc_sync_mode", "Operational Cycle")
 
         if sync_mode == "Operational Cycle":
-            params = _get_operational_sync_params()
-            global_params = _get_global_open_params()
-            today_shipped_params = _get_today_modified_shipped_params()
+            params = _get_operational_sync_params(cache_buster)
+            global_params = _get_global_open_params(cache_buster)
+            today_shipped_params = _get_today_modified_shipped_params(cache_buster)
 
             from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=3) as executor:
@@ -557,7 +577,7 @@ def load_from_woocommerce():
             rows = _merge_deduplicated_orders(rows, global_rows)
             rows = _merge_deduplicated_orders(rows, today_shipped_rows)
         else:
-            params = _get_custom_range_params()
+            params = _get_custom_range_params(cache_buster)
             rows = _fetch_wc_batch(endpoint, params, auth)
 
         df_full = pd.DataFrame(rows)
@@ -647,6 +667,53 @@ def fetch_specific_woocommerce_orders(order_ids: list):
     return all_processed
 
 
+# Threshold (minutes): if the newest order modification in a sync is older than
+# this, the response is treated as possibly stale (cached) and retried once.
+WC_STALE_MAX_AGE_MIN = 45
+
+
+def _apply_cache_buster(params: dict, cache_buster: str | None) -> dict:
+    """Append a unique query param so the request bypasses URL-keyed server caches."""
+    if cache_buster:
+        params["nocache"] = cache_buster
+    return params
+
+
+def _staleness_info(df):
+    """Return (newest_mod, age_min) for the data, or (None, None) if unknown.
+
+    mod_dt_parsed (when present) is BD-local naive; the raw 'Order Date Modified'
+    column holds UTC/GMT values, so shift it +6h before comparing.
+    """
+    if df is None or df.empty:
+        return None, None
+    mod_col = (
+        "mod_dt_parsed"
+        if "mod_dt_parsed" in df.columns
+        else "Order Date Modified"
+        if "Order Date Modified" in df.columns
+        else None
+    )
+    if not mod_col:
+        return None, None
+    mods = pd.to_datetime(df[mod_col].astype(str).str.replace("Z", "", regex=False), errors="coerce")
+    if "mod_dt_parsed" not in df.columns:
+        # Raw column is UTC/GMT — convert to BD local for comparison.
+        mods = mods + pd.Timedelta(hours=6)
+    newest = mods.max()
+    if pd.isnull(newest):
+        return None, None
+    tz_bd = timezone(timedelta(hours=6))
+    now_bd = datetime.now(tz_bd).replace(tzinfo=None)
+    return newest, (now_bd - newest).total_seconds() / 60
+
+
+def _data_looks_stale(df, max_age_min: float = WC_STALE_MAX_AGE_MIN) -> bool:
+    """Heuristic staleness check: the newest order modification is much older than now."""
+    _, age_min = _staleness_info(df)
+    return age_min is not None and age_min > max_age_min
+
+
 def _should_autorefresh() -> bool:
     """Check if the refresh interval has elapsed since last sync."""
     interval = st.session_state.get("wc_refresh_interval", 30)
@@ -670,6 +737,29 @@ def load_live_source(force_refresh=False):
     except Exception as api_err:
         log_system_event("WC_API_DOWN_ERROR", f"WooCommerce REST API failed: {api_err}")
         results = None
+
+    # ── Stale-data retry ─────────────────────────────────────────────────────
+    # The store's REST API intermittently serves cached/older order data (the
+    # same query returns different states minutes apart). If the fetched data's
+    # newest order modification is much older than now, retry once with a
+    # cache-busting query param to force a fresh response from the origin.
+    if results and isinstance(results, dict) and _data_looks_stale(results.get("df_to_return")):
+        newest, age_min = _staleness_info(results.get("df_to_return"))
+        log_system_event(
+            "WC_STALE_DATA",
+            f"newest_mod={newest} age_min={age_min:.0f}" if newest is not None else "stale-detected",
+        )
+        load_from_woocommerce.clear()
+        cache_buster = str(int(datetime.now().timestamp() * 1000))
+        try:
+            retried = load_from_woocommerce(cache_buster=cache_buster)
+            if retried and isinstance(retried, dict) and not _data_looks_stale(retried.get("df_to_return")):
+                results = retried
+                log_system_event("WC_STALE_RETRY_RECOVERED", "cache-buster returned fresh data")
+            else:
+                log_system_event("WC_STALE_RETRY_UNRESOLVED", "data still stale after cache-buster retry")
+        except Exception as retry_err:
+            log_system_event("WC_STALE_RETRY_FAILED", str(retry_err))
 
     if results and isinstance(results, dict):
         df_new = results.get("df_to_return")

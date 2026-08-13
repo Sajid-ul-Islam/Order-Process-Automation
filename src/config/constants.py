@@ -18,6 +18,7 @@ METRIC_SNAPSHOT_DIR = os.path.join(RESOURCES_DIR, "metric_snapshots")
 SHIPPED_STATUSES = [
     "shipped",
     "completed",
+    "confirmed",
     "cashbacked",
     "cashback",
     "dispatched",
@@ -27,6 +28,7 @@ SHIPPED_STATUSES = [
     "delivered",
     "wc-shipped",
     "wc-completed",
+    "wc-confirmed",
     "wc-cashbacked",
     "wc-dispatched",
     "wc-in-transit",
