@@ -167,7 +167,9 @@ def filter_all_orders_to_slot(df, nav_mode):
             dt_mod = safe_coerce_datetime_naive(df[mod_col]) if mod_col else pd.Series(pd.NaT, index=df.index)
             dt_create = safe_coerce_datetime_naive(df[date_col]) if date_col else pd.Series(pd.NaT, index=df.index)
 
-            active_mask = is_active & (dt_create.dt.date >= start_d) & (dt_create.dt.date <= end_d)
+            # Open (active) orders are part of the current queue — keep them regardless of
+            # placement date, so processing orders placed before the selected range stay visible.
+            active_mask = is_active
             shipped_mask = is_shipped & (
                 ((dt_mod.dt.date >= start_d) & (dt_mod.dt.date <= end_d))
                 | (dt_mod.isna() & (dt_create.dt.date >= start_d) & (dt_create.dt.date <= end_d))
@@ -201,12 +203,10 @@ def filter_all_orders_to_slot(df, nav_mode):
         is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES]) | has_consignment
         is_active  = status_lower.isin(ACTIVE_STATUSES) & (~has_consignment)
 
-        # Active orders: scoped by creation date within slot
-        if date_col:
-            dt_create = safe_coerce_datetime_naive(df[date_col])
-            active_mask = is_active & (dt_create >= slot_start) & (dt_create <= slot_end)
-        else:
-            active_mask = is_active  # can't scope further without a date column
+        # Active orders are part of the current open queue — keep them regardless of
+        # creation date so orders placed before the shift start (but still open, e.g.
+        # still in `processing`) stay visible in the Today / All Orders view.
+        active_mask = is_active
 
         # Shipped orders: scoped by modification date within slot, falling back to creation date
         dt_mod = safe_coerce_datetime_naive(df[mod_col]) if mod_col else pd.Series(pd.NaT, index=df.index)
@@ -243,7 +243,9 @@ def filter_all_orders_to_slot(df, nav_mode):
         dt_mod = safe_coerce_datetime_naive(df[mod_col]) if mod_col else pd.Series(pd.NaT, index=df.index)
         dt_effective = dt_mod.fillna(dt_create)
 
-        active_mask = is_active & (dt_create.dt.date == today_bd) if date_col else is_active
+        # Open (active) orders are part of the current queue — keep them regardless of
+        # placement date, so processing orders placed before today stay visible.
+        active_mask = is_active
         shipped_mask = is_shipped & ((dt_effective.dt.date == today_bd) | (dt_create.dt.date == today_bd))
 
         return df[active_mask | shipped_mask]

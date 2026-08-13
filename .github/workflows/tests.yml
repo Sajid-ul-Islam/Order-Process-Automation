@@ -1,16 +1,33 @@
-name: Tests (disabled — tests removed)
+name: Tests
 
 on:
-  # Disabled: tests/ directory has been removed from the project
-  # workflow_dispatch: allow manual trigger if tests are re-added later
   push:
-    branches: [ never-run ]
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
 jobs:
   pytest:
+    name: Invariant & Smoke Tests
     runs-on: ubuntu-latest
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Tests disabled
-        run: echo "Tests directory has been removed. Re-enable by restoring tests/ and updating this workflow."
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements_dev.txt
+          pip install polars
+
+      - name: Verify sources compile
+        run: python -m compileall -q src app.py
+
+      - name: Run test suite
+        run: python -m pytest tests/ -q --disable-warnings

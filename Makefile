@@ -1,7 +1,10 @@
-.PHONY: run format audit
+.PHONY: run format audit test
 
 run:
 	streamlit run app.py
+
+test:
+	python -m pytest tests/ -q
 
 format:
 	black src/ app.py scripts/

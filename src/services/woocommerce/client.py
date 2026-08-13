@@ -478,7 +478,10 @@ def _partition_operational_data(df_full):
 
     # For the "Today" view, include ANY order created or modified within the current operational shift.
     # This is more inclusive and catches old orders that were shipped today.
-    df_live = df_full[created_recent | modified_recent].copy()
+    # Also keep orders that are still open in `processing` even if they were placed before the
+    # shift start — otherwise they would be invisible in every view (Prev only keeps shipped,
+    # Backlog only keeps on-hold/pending/waiting).
+    df_live = df_full[created_recent | modified_recent | is_processing].copy()
 
     df_prev = df_full[
         (df_full["mod_dt_parsed"] >= day_before_prev) & 

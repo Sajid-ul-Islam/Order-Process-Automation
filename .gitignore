@@ -17,6 +17,5 @@ data/raw/
 htmlcov/
 .mypy_cache/
 scratch/
-tests/
 test.xlsx
 test2.xlsx
