@@ -1,17 +1,15 @@
 # Live Operational Dashboard
 import streamlit as st
 
-from src.config.constants import bd_now, bd_today
-from src.components.ui.widgets import render_reset_confirm
-from src.processing.column_detection import find_columns
-from src.processing.data_processing import (
-    prepare_granular_data,
-    aggregate_data,
-    apply_order_view,
-    apply_order_view_comparison,
-)
+from src.components.dashboard.dashboard_metrics import \
+    render_operational_metrics
 from src.components.dashboard.dashboard_output import render_dashboard_output
-from src.components.dashboard.dashboard_metrics import render_operational_metrics
+from src.components.ui.widgets import render_reset_confirm
+from src.config.constants import bd_now, bd_today
+from src.processing.column_detection import find_columns
+from src.processing.data_processing import (aggregate_data, apply_order_view,
+                                            apply_order_view_comparison,
+                                            prepare_granular_data)
 from src.services.woocommerce.client import load_live_source
 from src.utils.logging import log_system_event
 from src.utils.safe_ops import safe_render
@@ -168,6 +166,7 @@ def _load_stale_events():
     import os
 
     import pandas as pd
+
     from src.config.constants import FEEDBACK_DIR
 
     log_path = os.path.join(FEEDBACK_DIR, "system_logs.json")
@@ -490,7 +489,7 @@ def render_live_tab():
             )  # Vertical alignment helper
             st.toggle(
                 "⚖️ Cashback",
-                value=st.session_state.get("live_compare_cashback", False),
+                value=st.session_state.get("live_compare_cashback", True),
                 key="live_compare_cashback",
                 help="Toggle the Revenue vs Cashback/Fee breakdown section at the bottom of the page.",
             )
@@ -693,9 +692,8 @@ def render_live_tab():
     # ── Revenue vs. Cashback Impact Analysis ─────────────────────────────────
     if has_cashback and st.session_state.get("live_compare_cashback", False):
         st.divider()
-        from src.components.dashboard.dashboard_metrics import (
-            render_revenue_cashback_comparison_section,
-        )
+        from src.components.dashboard.dashboard_metrics import \
+            render_revenue_cashback_comparison_section
 
         render_revenue_cashback_comparison_section(df_standard, raw_df=df_live)
 

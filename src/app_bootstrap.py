@@ -174,7 +174,7 @@ def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> N
         st.divider()
         st.session_state.show_animation = st.toggle(
             "Show motion effects",
-            value=st.session_state.get("show_animation", True),
+            value=st.session_state.get("show_animation", False),
         )
 
         # ── Auto-refresh interval ──────────────────────────────────────────

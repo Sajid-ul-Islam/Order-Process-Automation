@@ -3,13 +3,11 @@ import polars as pl
 import streamlit as st
 
 from src.config.constants import bd_now, bd_today
+from src.processing.categorization import (get_category_for_sales,
+                                           get_sub_category_for_sales)
 from src.processing.column_detection import find_columns, scrub_raw_dataframe
-from src.processing.categorization import (
-    get_category_for_sales,
-    get_sub_category_for_sales,
-)
-from src.utils.product import get_base_product_name, get_size_from_name
 from src.utils.logging import log_system_event
+from src.utils.product import get_base_product_name, get_size_from_name
 
 
 def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
@@ -38,6 +36,7 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
         Filtered DataFrame containing only shipped orders within the relevant window.
     """
     import streamlit as st
+
     from src.config.constants import SHIPPED_STATUSES
 
     if df is None or df.empty:

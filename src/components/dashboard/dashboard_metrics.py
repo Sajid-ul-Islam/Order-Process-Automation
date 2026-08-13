@@ -8,23 +8,17 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from src.processing.data_processing import (
-    aggregate_data,
-    prepare_granular_data,
-    safe_coerce_datetime_naive,
-)
-from src.utils.metric_history import save_shift_snapshot, load_snapshot_history
-from src.utils.customer_registry import (
-    load_customer_registry,
-    update_customer_registry,
-    get_customer_first_order_date,
-    normalize_phone_key,
-)
+from src.components.dashboard.svg import (_generate_mini_bar_chart_svg,
+                                          _generate_sparkline_svg)
+from src.processing.data_processing import (aggregate_data,
+                                            prepare_granular_data,
+                                            safe_coerce_datetime_naive)
+from src.utils.customer_registry import (get_customer_first_order_date,
+                                         load_customer_registry,
+                                         normalize_phone_key,
+                                         update_customer_registry)
 from src.utils.logging import log_system_event
-from src.components.dashboard.svg import (
-    _generate_mini_bar_chart_svg,
-    _generate_sparkline_svg,
-)
+from src.utils.metric_history import load_snapshot_history, save_shift_snapshot
 
 
 def render_operational_metrics(
@@ -707,23 +701,49 @@ def render_revenue_cashback_comparison_section(
         st.info("No active order data for cashback/fee comparison.")
         return
 
-    # Compute calculations
-    gross_rev = (
-        float(m_df["Gross Amount"].sum())
-        if "Gross Amount" in m_df.columns
-        else float((m_df["Quantity"] * m_df["Item Cost"]).sum())
-    )
-    total_cashback = (
-        float(m_df["Cashback Discount"].sum())
-        if "Cashback Discount" in m_df.columns
-        else 0.0
-    )
-    net_rev = (
-        float(m_df["Total Amount"].sum())
-        if "Total Amount" in m_df.columns
-        else (gross_rev - total_cashback)
-    )
+    # Source of truth: reuse the Hero Metrics published by render_operational_metrics
+    # so this analysis can never diverge from the KPI cards. Fall back to the granular
+    # DataFrame ONLY if the hero metrics are not yet available (e.g. standalone call).
+    hero = st.session_state.get("hero_metrics", {}) or {}
 
+    if {"gross_rev", "cashback_disc", "net_rev", "orders"} <= set(hero.keys()):
+        gross_rev = float(hero["gross_rev"])
+        total_cashback = float(hero["cashback_disc"])
+        net_rev = float(hero["net_rev"])
+        tot_orders = int(hero["orders"])
+    else:
+        gross_rev = (
+            float(m_df["Gross Amount"].sum())
+            if "Gross Amount" in m_df.columns
+            else float((m_df["Quantity"] * m_df["Item Cost"]).sum())
+        )
+        total_cashback = (
+            float(m_df["Cashback Discount"].sum())
+            if "Cashback Discount" in m_df.columns
+            else 0.0
+        )
+        net_rev = (
+            float(m_df["Total Amount"].sum())
+            if "Total Amount" in m_df.columns
+            else (gross_rev - total_cashback)
+        )
+        id_col = (
+            "Order ID"
+            if "Order ID" in m_df.columns
+            else "Order Number" if "Order Number" in m_df.columns else None
+        )
+        tot_orders = len(m_df.drop_duplicates(subset=[id_col])) if id_col else len(m_df)
+
+    pct_rev_lost = (total_cashback / gross_rev * 100) if gross_rev > 0 else 0.0
+
+    # Basket level metrics (per-order values, consistent with KPI "Basket Size")
+    gross_basket = (gross_rev / tot_orders) if tot_orders > 0 else 0.0
+    net_basket = (net_rev / tot_orders) if tot_orders > 0 else 0.0
+    cb_per_basket = (total_cashback / tot_orders) if tot_orders > 0 else 0.0
+    pct_basket_lost = (cb_per_basket / gross_basket * 100) if gross_basket > 0 else 0.0
+
+    # Per-order cashback distribution (used by tier/filler/cashback-orders logic below).
+    # Independent of the hero-metrics branch above — always derived from the granular frame.
     cb_orders_mask = (
         (m_df["Cashback Discount"] > 0)
         if "Cashback Discount" in m_df.columns
@@ -734,10 +754,8 @@ def render_revenue_cashback_comparison_section(
         if "Order ID" in m_df.columns
         else "Order Number" if "Order Number" in m_df.columns else None
     )
-
     if id_col:
         unique_df = m_df.drop_duplicates(subset=[id_col])
-        tot_orders = len(unique_df)
         cb_orders_cnt = (
             unique_df[unique_df[id_col].isin(m_df[cb_orders_mask][id_col])][
                 id_col
@@ -746,16 +764,7 @@ def render_revenue_cashback_comparison_section(
             else 0
         )
     else:
-        tot_orders = len(m_df)
         cb_orders_cnt = int(cb_orders_mask.sum())
-
-    pct_rev_lost = (total_cashback / gross_rev * 100) if gross_rev > 0 else 0.0
-
-    # Basket level metrics
-    gross_basket = (gross_rev / tot_orders) if tot_orders > 0 else 0.0
-    net_basket = (net_rev / tot_orders) if tot_orders > 0 else 0.0
-    cb_per_basket = (total_cashback / tot_orders) if tot_orders > 0 else 0.0
-    pct_basket_lost = (cb_per_basket / gross_basket * 100) if gross_basket > 0 else 0.0
 
     # ── Excluded Orders (raw_df-based) ───────────────────────────────────────
     excl_orders_cnt = 0
@@ -837,7 +846,7 @@ def render_revenue_cashback_comparison_section(
         st.metric("🛒 Gross Basket Value (Pre-Discount)", f"TK {gross_basket:,.0f}")
     with b3:
         st.metric(
-            "🎁 Cashback per Basket",
+            "🎁 Cashback per Order",
             f"-TK {cb_per_basket:,.0f}",
             delta="Avg cashback/order",
             delta_color="inverse",
@@ -1019,9 +1028,8 @@ def render_revenue_cashback_comparison_section(
         filler_df = pd.DataFrame(filler_rows)
         st.dataframe(filler_df.head(15), use_container_width=True, hide_index=True)
 
-    from src.components.dashboard.dashboard_charts import (
-        render_revenue_cashback_comparison_chart,
-    )
+    from src.components.dashboard.dashboard_charts import \
+        render_revenue_cashback_comparison_chart
 
     render_revenue_cashback_comparison_chart(m_df)
 
