@@ -1,0 +1,181 @@
+"""Fast customer identity resolution against the full 3-bucket registry.
+
+The registry (resources/customer_registry_full.json) is built offline from all
+WooCommerce orders and split into:
+  - registered_customers  : customer_id > 0
+  - guest_with_email      : guest checkout with a billing email
+  - guest_without_email   : guest checkout keyed by phone only
+
+When a NEW order arrives we resolve identity with the priority the business
+asked for:
+  1. email        (if present)         -> guest/registered bucket match
+  2. phone        (multi-format alias) -> guest_without_email / any bucket
+  3. name|city    (normalized)         -> loose secondary signal
+
+The function returns the matched record, its bucket, the match method, and the
+record's earliest known `first_seen` so callers can decide new vs returning.
+
+This file is the read/lookup layer. Building the JSON is done by
+scripts/build_customer_registry.py (run periodically).
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from typing import Optional
+
+import pandas as pd
+
+from src.config.constants import RESOURCES_DIR
+from src.utils.text import normalize_city_name, normalize_phone_number
+
+FULL_REGISTRY_PATH = os.path.join(RESOURCES_DIR, "customer_registry_full.json")
+
+_BUCKETS = ("registered_customers", "guest_with_email", "guest_without_email")
+
+
+def _norm_text(v: str) -> str:
+    if not v:
+        return ""
+    return " ".join(str(v).strip().lower().split())
+
+
+def _norm_name(v: str) -> str:
+    s = _norm_text(v)
+    for ch in ".,-_/()":
+        s = s.replace(ch, " ")
+    return " ".join(s.split())
+
+
+def _phone_aliases(phone: str) -> list[str]:
+    """All normalized forms of a phone number for index lookup.
+
+    Keeps ONE canonical identical key (normalize_phone_number) plus the
+    880/+880/leading-zero variants so a new order can be matched regardless
+    of which format WooCommerce returns.
+    """
+    p = normalize_phone_number(phone)
+    if not p or "@" in p:
+        return []
+    out = [p]
+    digits = p
+    if digits.startswith("0"):
+        digits = "88" + digits[1:]  # 017... -> 88017...
+        out.append(digits)
+        out.append("+" + digits)  # +88017...
+        out.append(digits[2:])  # 17...
+    return out
+
+
+def load_full_registry() -> dict:
+    if not os.path.exists(FULL_REGISTRY_PATH):
+        return {}
+    try:
+        with open(FULL_REGISTRY_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _lookup_in_bucket(reg: dict, bucket: str, key: str) -> Optional[dict]:
+    b = reg.get(bucket) or {}
+    rec = b.get(key)
+    if rec is None:
+        return None
+    return {"bucket": bucket, "key": key, "record": rec}
+
+
+def find_customer(
+    billing: dict,
+    registry: Optional[dict] = None,
+) -> Optional[dict]:
+    """Resolve a customer from a WooCommerce `billing` dict.
+
+    Returns dict with keys: bucket, key, record, method, first_seen, last_seen,
+    or None if no identity could be matched.
+    """
+    if registry is None:
+        registry = load_full_registry()
+    if not registry:
+        return None
+
+    email = _norm_text(billing.get("email"))
+    phone = billing.get("phone")
+    first_name = _norm_name(billing.get("first_name", ""))
+    last_name = _norm_name(billing.get("last_name", ""))
+    name = f"{first_name} {last_name}".strip()
+    city = normalize_city_name(billing.get("city") or "")
+
+    # 1) EMAIL priority (registered or guest-with-email bucket)
+    if email and "@" in email:
+        for bucket in ("registered_customers", "guest_with_email"):
+            rec = _lookup_in_bucket(registry, bucket, email)
+            if rec:
+                rec["method"] = "email"
+                return rec
+
+    # 2) PHONE (multi-format alias) across all buckets
+    for alias in _phone_aliases(phone):
+        for bucket in _BUCKETS:
+            rec = _lookup_in_bucket(registry, bucket, alias)
+            if rec:
+                rec["method"] = "phone"
+                return rec
+
+    # 3) NAME|CITY loose secondary signal
+    if name and city:
+        nc = f"{name}|{_norm_text(city)}"
+        recs = []
+        for bucket in _BUCKETS:
+            for key, rec in (registry.get(bucket) or {}).items():
+                rn = _norm_name(rec.get("name", ""))
+                rc = _norm_text(rec.get("city", ""))
+                if rn and rc and f"{rn}|{rc}" == nc:
+                    recs.append({"bucket": bucket, "key": key, "record": rec})
+        if recs:
+            # pick the one seen earliest
+            recs.sort(key=lambda r: r["record"].get("first_seen", ""))
+            best = recs[0]
+            best["method"] = "name_city"
+            return best
+
+    return None
+
+
+def is_returning(billing: dict, order_date, registry: Optional[dict] = None) -> bool:
+    """True if this customer has a known order strictly before `order_date`."""
+    cls = classify_customer(billing, order_date, registry)
+    return cls == "returning"
+
+
+def classify_customer(
+    billing: dict,
+    order_date,
+    registry: Optional[dict] = None,
+) -> str:
+    """Return 'returning', 'new', or 'unknown' for a customer at `order_date`.
+
+    - 'returning' : matched a known identity whose first_seen < order_date
+    - 'new'       : matched a known identity whose first_seen >= order_date
+                     (this IS their first recorded order)
+    - 'unknown'   : no identity matched in the registry at all
+    """
+    match = find_customer(billing, registry)
+    if not match:
+        return "unknown"
+    fs = match["record"].get("first_seen")
+    if not fs:
+        return "unknown"
+    try:
+        first_dt = pd.to_datetime(fs, errors="coerce")
+        o_dt = pd.to_datetime(order_date, errors="coerce")
+    except Exception:
+        return "unknown"
+    if pd.isna(first_dt) or pd.isna(o_dt):
+        return "unknown"
+    if first_dt.tzinfo is not None:
+        first_dt = first_dt.tz_localize(None)
+    if o_dt.tzinfo is not None:
+        o_dt = o_dt.tz_localize(None)
+    return "returning" if first_dt < o_dt else "new"

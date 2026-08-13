@@ -111,7 +111,9 @@ def _refresh_core_metrics():
         m_df = apply_order_view(raw, nav_mode, order_view_mode)
         if m_df is None or m_df.empty:
             return
-        m_df, _ = prepare_granular_data(m_df, wc_raw_mapping)
+        m_df, _ = prepare_granular_data(
+            m_df, find_columns(m_df) if m_df is not None else {}
+        )
 
     dummy_mapping = {
         "name": "Product Name",

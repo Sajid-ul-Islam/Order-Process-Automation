@@ -1,6 +1,7 @@
-import streamlit as st
-import pandas as pd
 from datetime import datetime, timedelta
+
+import pandas as pd
+import streamlit as st
 from requests.auth import HTTPBasicAuth
 
 from src.config.constants import BD_TZ, SHIPPED_STATUSES, bd_now
@@ -8,7 +9,6 @@ from src.config.settings import get_woocommerce_config
 from src.processing.column_detection import scrub_raw_dataframe
 from src.utils.http import request_with_backoff
 from src.utils.logging import log_system_event
-
 
 # ── Data transformation helpers ──────────────────────────────────────────────
 
@@ -136,6 +136,7 @@ def _flatten_order(order: dict) -> list[dict]:
                 "Order Status": status,
                 "Full Name (Billing)": c_name,
                 "Phone (Billing)": bill.get("phone", ""),
+                "Billing Email": bill.get("email", ""),
                 "Shipping Address 1": ship.get("address_1", ""),
                 "Shipping City": ship.get("city", ""),
                 "State Name (Billing)": bill.get("state", ""),
@@ -455,8 +456,9 @@ def _apply_shipped_history(df_full):
         df_full["Order Date Modified"]
     )
 
-    import os
     import json
+    import os
+
     from src.config.constants import RESOURCES_DIR
 
     os.makedirs(RESOURCES_DIR, exist_ok=True)
@@ -588,9 +590,11 @@ def _build_result_payload(df_to_return, slot_label, modified_at, partitions, slo
     """Build the standard results dictionary returned by load_from_woocommerce."""
     return {
         "df_to_return": df_to_return,
-        "sync_desc": f"WooCommerce_{slot_label}_API_{len(df_to_return)}_Orders"
-        if not df_to_return.empty
-        else "woocommerce_api_empty",
+        "sync_desc": (
+            f"WooCommerce_{slot_label}_API_{len(df_to_return)}_Orders"
+            if not df_to_return.empty
+            else "woocommerce_api_empty"
+        ),
         "modified_at": modified_at,
         "partitions": partitions,
         "slots": slots,
@@ -767,9 +771,7 @@ def _staleness_info(df):
     mod_col = (
         "mod_dt_parsed"
         if "mod_dt_parsed" in df.columns
-        else "Order Date Modified"
-        if "Order Date Modified" in df.columns
-        else None
+        else "Order Date Modified" if "Order Date Modified" in df.columns else None
     )
     if not mod_col:
         return None, None
@@ -843,9 +845,11 @@ def load_live_source(force_refresh=False):
             newest, age_min = _staleness_info(results.get("df_to_return"))
             log_system_event(
                 "WC_STALE_DATA",
-                f"newest_mod={newest} age_min={age_min:.0f}"
-                if newest is not None
-                else "stale-detected",
+                (
+                    f"newest_mod={newest} age_min={age_min:.0f}"
+                    if newest is not None
+                    else "stale-detected"
+                ),
             )
             try:
                 retried = load_from_woocommerce(

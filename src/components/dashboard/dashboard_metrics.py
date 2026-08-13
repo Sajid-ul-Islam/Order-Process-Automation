@@ -891,28 +891,37 @@ def render_revenue_cashback_comparison_section(
     if id_col and cb_orders_cnt > 0:
         cb_df_all = m_df[cb_orders_mask] if cb_orders_mask.any() else m_df.copy()
         for _, grp in cb_df_all.groupby(id_col):
+            # Order-level cashback: sum across the order's line items (the store
+            # applies cashback as an order-level fee, split per line item by the
+            # flattener). Using iloc[0] would only see one item's split and
+            # undercount multi-item cashback orders.
             order_cb_amt = 0.0
             if "Cashback Discount" in grp.columns:
-                order_cb_amt = float(grp["Cashback Discount"].iloc[0])
+                order_cb_amt = float(grp["Cashback Discount"].sum())
             if (
                 order_cb_amt == 0
                 and "Gross Amount" in grp.columns
                 and "Total Amount" in grp.columns
             ):
                 order_cb_amt = float(
-                    grp["Gross Amount"].iloc[0] - grp["Total Amount"].iloc[0]
+                    grp["Gross Amount"].sum() - grp["Total Amount"].sum()
                 )
 
+            gross_sum = (
+                float(grp["Gross Amount"].sum())
+                if "Gross Amount" in grp.columns
+                else 0.0
+            )
             if 400 <= order_cb_amt < 650 or (
                 order_cb_amt == 0
                 and "Gross Amount" in grp.columns
-                and 2300 <= grp["Gross Amount"].iloc[0] < 2900
+                and 2300 <= gross_sum < 2900
             ):
                 cnt_500_tier += 1
             elif order_cb_amt >= 650 or (
                 order_cb_amt == 0
                 and "Gross Amount" in grp.columns
-                and grp["Gross Amount"].iloc[0] >= 2900
+                and gross_sum >= 2900
             ):
                 cnt_700_tier += 1
 
@@ -973,13 +982,13 @@ def render_revenue_cashback_comparison_section(
         st.metric(
             "💰 500 Cashback Tier",
             f"{cnt_500_tier} orders",
-            delta=f"{pct_500:.1f}% of cashback",
+            delta=f"{pct_500:.1f}% of cashback orders",
         )
     with t2:
         st.metric(
             "💜 700 Cashback Tier",
             f"{cnt_700_tier} orders",
-            delta=f"{pct_700:.1f}% of cashback",
+            delta=f"{pct_700:.1f}% of cashback orders",
         )
     with t3:
         st.metric(
