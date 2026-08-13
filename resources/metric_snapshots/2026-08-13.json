@@ -1,0 +1,98 @@
+{
+  "date": "2026-08-13",
+  "shifts": [
+    {
+      "ts": "2026-08-13T09:54:15.610613+06:00",
+      "label": "Today",
+      "revenue": 16338.0,
+      "orders": 12,
+      "qty": 17,
+      "aov": 1361.5,
+      "top_products": [
+        {
+          "name": "High-End Vintage Wash Jeans - Regular Fit - 34",
+          "revenue": 2490.0
+        },
+        {
+          "name": "High-End Light Blue Jeans - Regular Fit - 32",
+          "revenue": 2390.0
+        },
+        {
+          "name": "Artistic Semi Formal Panjabi - 40",
+          "revenue": 1494.0
+        },
+        {
+          "name": "Stone Grey Semi Formal Panjabi - 38",
+          "revenue": 1494.0
+        },
+        {
+          "name": "Paisley Printed Semi Formal Panjabi - 44",
+          "revenue": 1394.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-13T10:01:13.275590+06:00",
+      "label": "Today",
+      "revenue": 16338.0,
+      "orders": 12,
+      "qty": 17,
+      "aov": 1361.5,
+      "top_products": [
+        {
+          "name": "High-End Vintage Wash Jeans - Regular Fit - 34",
+          "revenue": 2490.0
+        },
+        {
+          "name": "High-End Light Blue Jeans - Regular Fit - 32",
+          "revenue": 2390.0
+        },
+        {
+          "name": "Stone Grey Semi Formal Panjabi - 38",
+          "revenue": 1494.0
+        },
+        {
+          "name": "Artistic Semi Formal Panjabi - 40",
+          "revenue": 1494.0
+        },
+        {
+          "name": "Paisley Printed Semi Formal Panjabi - 44",
+          "revenue": 1394.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-13T10:25:23.290361+06:00",
+      "label": "Today",
+      "revenue": 22956.0,
+      "orders": 16,
+      "qty": 23,
+      "aov": 1434.75,
+      "top_products": [
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 30",
+          "revenue": 2490.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Regular Fit - 34",
+          "revenue": 2490.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Regular Fit - 34",
+          "revenue": 2490.0
+        },
+        {
+          "name": "High-End Light Blue Jeans - Regular Fit - 32",
+          "revenue": 2390.0
+        },
+        {
+          "name": "Stone Grey Semi Formal Panjabi - 38",
+          "revenue": 1494.0
+        }
+      ]
+    }
+  ],
+  "daily_revenue": 55632.0,
+  "daily_orders": 40,
+  "daily_qty": 57
+}
