@@ -132,6 +132,8 @@ See [DEVELOPMENT.md](DEVELOPMENT.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [E
 
 ## CI
 
+[![Tests](https://github.com/Sajid-ul-Islam/Order-Process-Automation/actions/workflows/tests.yml/badge.svg)](https://github.com/Sajid-ul-Islam/Order-Process-Automation/actions/workflows/tests.yml)
+
 GitHub Actions runs the test suite from [.github/workflows/tests.yml](.github/workflows/tests.yml) using `requirements_dev.txt`, which is constrained by `requirements.lock`.
 
 ## Deployment Notes
