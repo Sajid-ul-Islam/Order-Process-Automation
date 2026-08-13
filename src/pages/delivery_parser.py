@@ -1,7 +1,6 @@
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from src.components.ui.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
 from datetime import datetime
 
 from src.state.persistence import clear_state_keys
@@ -15,9 +14,20 @@ def _style_deliveries_sheet(ws, _wb):
     """Apply delivery-specific formatting to the exported Excel sheet."""
     ws.freeze_panes = "A2"
     widths = {
-        "A": 18, "B": 10, "C": 12, "D": 18, "E": 20,
-        "F": 60, "G": 14, "H": 30, "I": 16, "J": 12,
-        "K": 10, "L": 10, "M": 14, "N": 14,
+        "A": 18,
+        "B": 10,
+        "C": 12,
+        "D": 18,
+        "E": 20,
+        "F": 60,
+        "G": 14,
+        "H": 30,
+        "I": 16,
+        "J": 12,
+        "K": 10,
+        "L": 10,
+        "M": 14,
+        "N": 14,
     }
     for col, width in widths.items():
         ws.column_dimensions[col].width = width
@@ -75,10 +85,7 @@ def render_visual_report(df: pd.DataFrame):
     # ── Delivery status bar ───────────────────────────────────────────────────
     with col_right:
         status_counts = (
-            df["Delivery Status"]
-            .replace("", "Unknown")
-            .value_counts()
-            .reset_index()
+            df["Delivery Status"].replace("", "Unknown").value_counts().reset_index()
         )
         status_counts.columns = ["Delivery Status", "Count"]
         fig_status = px.bar(
@@ -138,25 +145,10 @@ def render_visual_report(df: pd.DataFrame):
 
 def render_fuzzy_parser_tab():
     render_reset_confirm("Delivery Data Parser", "parser", _reset_parser_state)
-    sample = """Cons. ID
-DD040326KR9NUU
-Type:
-Parcel
-193252
-Deen Commerce
-Raafin
-House 10, Road 15, Sector 11, Uttara West, Dhaka
-01745166722
-At Delivery Hub
-Updated on 05/03/2026
-COD 0
-Charge 50
-Discount 10
-Unpaid
-View
-POD"""
 
-    tab1, tab2 = st.tabs([":material/rule: Standard Parser", ":material/psychology_alt: Fuzzy Parser"])
+    tab1, tab2 = st.tabs(
+        [":material/rule: Standard Parser", ":material/psychology_alt: Fuzzy Parser"]
+    )
 
     with tab1:
         raw_text = st.text_area(
@@ -187,7 +179,11 @@ POD"""
             render_visual_report(df_to_show)
             st.download_button(
                 "Download standard parser output",
-                to_excel_bytes(st.session_state.standard_parsed_df, sheet_name="Deliveries", style_fn=_style_deliveries_sheet),
+                to_excel_bytes(
+                    st.session_state.standard_parsed_df,
+                    sheet_name="Deliveries",
+                    style_fn=_style_deliveries_sheet,
+                ),
                 f"deliveries_{datetime.now().strftime('%d-%m-%Y')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
@@ -224,26 +220,39 @@ POD"""
                         except Exception:
                             parsed_df = pd.DataFrame()
                     else:
-                        parse_status.update(label="✅ Standard parsing succeeded", state="complete")
+                        parse_status.update(
+                            label="✅ Standard parsing succeeded", state="complete"
+                        )
                     if not parsed_df.empty:
-                        parse_status.update(label=f"✅ Parsed {len(parsed_df)} records", state="complete")
+                        parse_status.update(
+                            label=f"✅ Parsed {len(parsed_df)} records",
+                            state="complete",
+                        )
 
                 if parsed_df.empty:
                     st.error("No valid records found from fuzzy parser input.")
 
                 else:
                     st.session_state.fuzzy_parsed_df = parsed_df
-                    st.toast(f"✅ Parsed {len(parsed_df)} records using fuzzy fallback.")
+                    st.toast(
+                        f"✅ Parsed {len(parsed_df)} records using fuzzy fallback."
+                    )
 
         if st.session_state.get("fuzzy_parsed_df") is not None:
             df_to_show_fuzzy = st.session_state.fuzzy_parsed_df
             calc_height_fuzzy = min(800, max(400, len(df_to_show_fuzzy) * 35 + 43))
             search_fuzzy = render_dataframe_search(df_to_show_fuzzy, "delivery_fuzzy")
-            st.dataframe(search_fuzzy, use_container_width=True, height=calc_height_fuzzy)
+            st.dataframe(
+                search_fuzzy, use_container_width=True, height=calc_height_fuzzy
+            )
             render_visual_report(df_to_show_fuzzy)
             st.download_button(
                 "Download fuzzy parser output",
-                to_excel_bytes(st.session_state.fuzzy_parsed_df, sheet_name="Deliveries", style_fn=_style_deliveries_sheet),
+                to_excel_bytes(
+                    st.session_state.fuzzy_parsed_df,
+                    sheet_name="Deliveries",
+                    style_fn=_style_deliveries_sheet,
+                ),
                 f"fuzzy_deliveries_{datetime.now().strftime('%d-%m-%Y')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,

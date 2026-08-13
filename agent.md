@@ -27,12 +27,13 @@ The project follows a layered structure. Avoid circular imports. Pages should or
   - `stock_analytics.py`
   - `inventory_distribution.py`
   - `return_analytics.py`
-  - `pathao_orders.py`
+  - `pathao_orders/` (package: processing, tracking, dispatch, health tabs)
   - `data_pilot.py`
-  - `dashboard_output.py`
-  - `dashboard_metrics.py`
 - `src/components/`
-  Reusable UI widgets and styling helpers.
+  Reusable UI widgets and styling helpers:
+  - `dashboard/` (`dashboard_output.py`, `dashboard_metrics.py`, `dashboard_charts.py`, `dashboard_filters.py`)
+  - `layout/` (header, footer)
+  - `ui/` (styles, widgets, clock, snapshot, status, ...)
 - `src/services/`
   External integrations:
   - WooCommerce
@@ -105,9 +106,9 @@ Pathao-specific state currently used:
 ## 7. Operational Dashboard Rules
 The operational dashboard has behavior that should not drift accidentally.
 
-- `src/pages/dashboard_output.py`
+- `src/components/dashboard/dashboard_output.py`
   Owns the operational/integration flow for live dashboard rendering.
-- `src/pages/dashboard_metrics.py`
+- `src/components/dashboard/dashboard_metrics.py`
   Owns the operational KPI strip.
 
 Current KPI behavior:
@@ -118,7 +119,7 @@ Current KPI behavior:
 If you touch metric-card ordering or badge placement, verify that deltas still appear on the intended cards.
 
 ## 8. Pathao Processor Rules
-`src/pages/pathao_orders.py` and `src/processing/order_processor.py` now contain a few important conventions.
+`src/pages/pathao_orders/` and `src/processing/order_processor.py` now contain a few important conventions.
 
 ### Source modes
 The Pathao processor has two user-facing modes:

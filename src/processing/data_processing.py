@@ -1,8 +1,13 @@
 import pandas as pd
 import polars as pl
 import streamlit as st
+
+from src.config.constants import bd_now, bd_today
 from src.processing.column_detection import find_columns, scrub_raw_dataframe
-from src.processing.categorization import get_category_for_sales, get_sub_category_for_sales
+from src.processing.categorization import (
+    get_category_for_sales,
+    get_sub_category_for_sales,
+)
 from src.utils.product import get_base_product_name, get_size_from_name
 from src.utils.logging import log_system_event
 
@@ -33,13 +38,18 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
         Filtered DataFrame containing only shipped orders within the relevant window.
     """
     import streamlit as st
-    from datetime import datetime, timedelta, timezone
     from src.config.constants import SHIPPED_STATUSES
 
     if df is None or df.empty:
         return df
 
-    status_col = "Order Status" if "Order Status" in df.columns else "Status" if "Status" in df.columns else None
+    status_col = (
+        "Order Status"
+        if "Order Status" in df.columns
+        else "Status"
+        if "Status" in df.columns
+        else None
+    )
     if status_col is None:
         return df
 
@@ -48,9 +58,13 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
         if c_col in df.columns:
             p_val = df[c_col].astype(str).str.strip().str.lower()
-            has_consignment = has_consignment | (~p_val.isin(["", "nan", "none", "n/a", "0", "null"]))
+            has_consignment = has_consignment | (
+                ~p_val.isin(["", "nan", "none", "n/a", "0", "null"])
+            )
 
-    shipped_mask = df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES) | has_consignment
+    shipped_mask = (
+        df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES) | has_consignment
+    )
     shipped_df = df[shipped_mask]
 
     if shipped_df.empty:
@@ -70,21 +84,39 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     elif "Order Date Modified" in shipped_df.columns:
         mod_col = "Order Date Modified"
 
-    date_col = "dt_parsed" if "dt_parsed" in shipped_df.columns else "Order Date" if "Order Date" in shipped_df.columns else None
+    date_col = (
+        "dt_parsed"
+        if "dt_parsed" in shipped_df.columns
+        else "Order Date"
+        if "Order Date" in shipped_df.columns
+        else None
+    )
 
-    dt_mod = _safe_tz_naive(shipped_df[mod_col]) if mod_col else pd.Series(pd.NaT, index=shipped_df.index)
-    dt_create = _safe_tz_naive(shipped_df[date_col]) if date_col else pd.Series(pd.NaT, index=shipped_df.index)
+    dt_mod = (
+        _safe_tz_naive(shipped_df[mod_col])
+        if mod_col
+        else pd.Series(pd.NaT, index=shipped_df.index)
+    )
+    dt_create = (
+        _safe_tz_naive(shipped_df[date_col])
+        if date_col
+        else pd.Series(pd.NaT, index=shipped_df.index)
+    )
 
     # mod_dt is the authoritative "when was it shipped" signal.
     # Fall back to dt_create only when mod_dt is null.
     dt_effective = dt_mod.fillna(dt_create)
 
-    tz_bd = timezone(timedelta(hours=6))
-    today_bd = datetime.now(tz_bd).date()
+    today_bd = bd_today()
 
     # ── Step 3: Custom date range (user-selected) ────────────────────────────
     custom_range = st.session_state.get("live_custom_range")
-    if not is_comparison and custom_range and isinstance(custom_range, (tuple, list)) and len(custom_range) == 2:
+    if (
+        not is_comparison
+        and custom_range
+        and isinstance(custom_range, (tuple, list))
+        and len(custom_range) == 2
+    ):
         start_d, end_d = custom_range[0], custom_range[1]
         if start_d != today_bd or end_d != today_bd:
             mask = (dt_effective.dt.date >= start_d) & (dt_effective.dt.date <= end_d)
@@ -101,15 +133,19 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     # ── Step 5: PREV / COMPARISON MODE — use slot boundaries ────────────────
     slot_key = "wc_prev_slot" if nav_mode == "Prev" else None
     if is_comparison:
-        slot_key = "wc_prev_slot" if nav_mode == "Today" else "wc_curr_slot" if nav_mode == "Prev" else None
+        slot_key = (
+            "wc_prev_slot"
+            if nav_mode == "Today"
+            else "wc_curr_slot"
+            if nav_mode == "Prev"
+            else None
+        )
 
     slot = st.session_state.get(slot_key) if slot_key else None
 
     if slot:
         slot_start, slot_end = _safe_dt_naive(slot[0]), _safe_dt_naive(slot[1])
-        filtered = shipped_df[
-            (dt_effective >= slot_start) & (dt_effective <= slot_end)
-        ]
+        filtered = shipped_df[(dt_effective >= slot_start) & (dt_effective <= slot_end)]
         return filtered
 
     return shipped_df.iloc[0:0]
@@ -126,18 +162,19 @@ def filter_all_orders_to_slot(df, nav_mode):
 
     Returns a filtered DataFrame — never falls back to the full unscoped dataset.
     """
-    from datetime import datetime, timedelta, timezone
     from src.config.constants import SHIPPED_STATUSES
 
-    ACTIVE_STATUSES  = {"processing", "on-hold", "pending", "waiting"}
-    ALL_VALID        = ACTIVE_STATUSES | set(SHIPPED_STATUSES)
+    ACTIVE_STATUSES = {"processing", "on-hold", "pending", "waiting"}
+    ALL_VALID = ACTIVE_STATUSES | set(SHIPPED_STATUSES)
 
     if df is None or df.empty:
         return df
 
     status_col = (
-        "Order Status" if "Order Status" in df.columns
-        else "Status" if "Status" in df.columns
+        "Order Status"
+        if "Order Status" in df.columns
+        else "Status"
+        if "Status" in df.columns
         else None
     )
     if status_col is None:
@@ -151,28 +188,55 @@ def filter_all_orders_to_slot(df, nav_mode):
 
     # Check for custom date range selected by user
     custom_range = st.session_state.get("live_custom_range")
-    tz_bd = timezone(timedelta(hours=6))
-    today_bd = datetime.now(tz_bd).date()
+    today_bd = bd_today()
 
-    if custom_range and isinstance(custom_range, (tuple, list)) and len(custom_range) == 2:
+    if (
+        custom_range
+        and isinstance(custom_range, (tuple, list))
+        and len(custom_range) == 2
+    ):
         start_d, end_d = custom_range[0], custom_range[1]
         if start_d != today_bd or end_d != today_bd:
-            mod_col  = "mod_dt_parsed" if "mod_dt_parsed" in df.columns else "Order Date Modified" if "Order Date Modified" in df.columns else None
-            date_col = "dt_parsed" if "dt_parsed" in df.columns else "Order Date" if "Order Date" in df.columns else None
+            mod_col = (
+                "mod_dt_parsed"
+                if "mod_dt_parsed" in df.columns
+                else "Order Date Modified"
+                if "Order Date Modified" in df.columns
+                else None
+            )
+            date_col = (
+                "dt_parsed"
+                if "dt_parsed" in df.columns
+                else "Order Date"
+                if "Order Date" in df.columns
+                else None
+            )
 
             status_lower = df[status_col].astype(str).str.lower()
-            is_active  = status_lower.isin(ACTIVE_STATUSES)
+            is_active = status_lower.isin(ACTIVE_STATUSES)
             is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
 
-            dt_mod = safe_coerce_datetime_naive(df[mod_col]) if mod_col else pd.Series(pd.NaT, index=df.index)
-            dt_create = safe_coerce_datetime_naive(df[date_col]) if date_col else pd.Series(pd.NaT, index=df.index)
+            dt_mod = (
+                safe_coerce_datetime_naive(df[mod_col])
+                if mod_col
+                else pd.Series(pd.NaT, index=df.index)
+            )
+            dt_create = (
+                safe_coerce_datetime_naive(df[date_col])
+                if date_col
+                else pd.Series(pd.NaT, index=df.index)
+            )
 
             # Open (active) orders are part of the current queue — keep them regardless of
             # placement date, so processing orders placed before the selected range stay visible.
             active_mask = is_active
             shipped_mask = is_shipped & (
                 ((dt_mod.dt.date >= start_d) & (dt_mod.dt.date <= end_d))
-                | (dt_mod.isna() & (dt_create.dt.date >= start_d) & (dt_create.dt.date <= end_d))
+                | (
+                    dt_mod.isna()
+                    & (dt_create.dt.date >= start_d)
+                    & (dt_create.dt.date <= end_d)
+                )
             )
             return df[active_mask | shipped_mask]
 
@@ -188,20 +252,36 @@ def filter_all_orders_to_slot(df, nav_mode):
 
     if slot:
         slot_start = pd.to_datetime(slot[0])
-        slot_end   = pd.to_datetime(slot[1])
+        slot_end = pd.to_datetime(slot[1])
 
-        mod_col  = "mod_dt_parsed" if "mod_dt_parsed" in df.columns else "Order Date Modified" if "Order Date Modified" in df.columns else None
-        date_col = "dt_parsed" if "dt_parsed" in df.columns else "Order Date" if "Order Date" in df.columns else None
+        mod_col = (
+            "mod_dt_parsed"
+            if "mod_dt_parsed" in df.columns
+            else "Order Date Modified"
+            if "Order Date Modified" in df.columns
+            else None
+        )
+        date_col = (
+            "dt_parsed"
+            if "dt_parsed" in df.columns
+            else "Order Date"
+            if "Order Date" in df.columns
+            else None
+        )
 
         has_consignment = pd.Series(False, index=df.index)
         for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
             if c_col in df.columns:
                 p_val = df[c_col].astype(str).str.strip().str.lower()
-                has_consignment = has_consignment | (~p_val.isin(["", "nan", "none", "n/a", "0", "null"]))
+                has_consignment = has_consignment | (
+                    ~p_val.isin(["", "nan", "none", "n/a", "0", "null"])
+                )
 
         status_lower = df[status_col].astype(str).str.lower()
-        is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES]) | has_consignment
-        is_active  = status_lower.isin(ACTIVE_STATUSES) & (~has_consignment)
+        is_shipped = (
+            status_lower.isin([s.lower() for s in SHIPPED_STATUSES]) | has_consignment
+        )
+        is_active = status_lower.isin(ACTIVE_STATUSES) & (~has_consignment)
 
         # Active orders are part of the current open queue — keep them regardless of
         # creation date so orders placed before the shift start (but still open, e.g.
@@ -209,8 +289,16 @@ def filter_all_orders_to_slot(df, nav_mode):
         active_mask = is_active
 
         # Shipped orders: scoped by modification date within slot, falling back to creation date
-        dt_mod = safe_coerce_datetime_naive(df[mod_col]) if mod_col else pd.Series(pd.NaT, index=df.index)
-        dt_create = safe_coerce_datetime_naive(df[date_col]) if date_col else pd.Series(pd.NaT, index=df.index)
+        dt_mod = (
+            safe_coerce_datetime_naive(df[mod_col])
+            if mod_col
+            else pd.Series(pd.NaT, index=df.index)
+        )
+        dt_create = (
+            safe_coerce_datetime_naive(df[date_col])
+            if date_col
+            else pd.Series(pd.NaT, index=df.index)
+        )
         dt_effective = dt_mod.fillna(dt_create)
 
         shipped_mask = is_shipped & (
@@ -223,36 +311,60 @@ def filter_all_orders_to_slot(df, nav_mode):
 
     # No slot boundaries — fall back to calendar day (BD UTC+6) for Today mode
     if nav_mode == "Today":
-        tz_bd    = timezone(timedelta(hours=6))
-        today_bd = datetime.now(tz_bd).date()
+        today_bd = bd_today()
 
-        date_col = "dt_parsed" if "dt_parsed" in df.columns else "Order Date" if "Order Date" in df.columns else None
-        mod_col  = "mod_dt_parsed" if "mod_dt_parsed" in df.columns else "Order Date Modified" if "Order Date Modified" in df.columns else None
+        date_col = (
+            "dt_parsed"
+            if "dt_parsed" in df.columns
+            else "Order Date"
+            if "Order Date" in df.columns
+            else None
+        )
+        mod_col = (
+            "mod_dt_parsed"
+            if "mod_dt_parsed" in df.columns
+            else "Order Date Modified"
+            if "Order Date Modified" in df.columns
+            else None
+        )
 
         has_consignment = pd.Series(False, index=df.index)
         for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
             if c_col in df.columns:
                 p_val = df[c_col].astype(str).str.strip().str.lower()
-                has_consignment = has_consignment | (~p_val.isin(["", "nan", "none", "n/a", "0", "null"]))
+                has_consignment = has_consignment | (
+                    ~p_val.isin(["", "nan", "none", "n/a", "0", "null"])
+                )
 
         status_lower = df[status_col].astype(str).str.lower()
-        is_active  = status_lower.isin(ACTIVE_STATUSES) & (~has_consignment)
-        is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES]) | has_consignment
+        is_active = status_lower.isin(ACTIVE_STATUSES) & (~has_consignment)
+        is_shipped = (
+            status_lower.isin([s.lower() for s in SHIPPED_STATUSES]) | has_consignment
+        )
 
-        dt_create = safe_coerce_datetime_naive(df[date_col]) if date_col else pd.Series(pd.NaT, index=df.index)
-        dt_mod = safe_coerce_datetime_naive(df[mod_col]) if mod_col else pd.Series(pd.NaT, index=df.index)
+        dt_create = (
+            safe_coerce_datetime_naive(df[date_col])
+            if date_col
+            else pd.Series(pd.NaT, index=df.index)
+        )
+        dt_mod = (
+            safe_coerce_datetime_naive(df[mod_col])
+            if mod_col
+            else pd.Series(pd.NaT, index=df.index)
+        )
         dt_effective = dt_mod.fillna(dt_create)
 
         # Open (active) orders are part of the current queue — keep them regardless of
         # placement date, so processing orders placed before today stay visible.
         active_mask = is_active
-        shipped_mask = is_shipped & ((dt_effective.dt.date == today_bd) | (dt_create.dt.date == today_bd))
+        shipped_mask = is_shipped & (
+            (dt_effective.dt.date == today_bd) | (dt_create.dt.date == today_bd)
+        )
 
         return df[active_mask | shipped_mask]
 
     # Prev/Backlog with no slot info — return status-filtered only
     return df
-
 
 
 def process_data(df, selected_cols):
@@ -262,6 +374,7 @@ def process_data(df, selected_cols):
         return None, None, None, "", {}
     drill, summ, top, basket = aggregate_data(df_standard, selected_cols)
     return drill, summ, top, timeframe, basket
+
 
 def safe_coerce_datetime_naive(series: pd.Series) -> pd.Series:
     """Safely converts a pandas Series to timezone-naive datetime64[ns].
@@ -311,18 +424,27 @@ def prepare_granular_data(df, selected_cols):
             return df, ""
 
         # Mapping to Standard Names for easier internal logic
-        df["Product Name"] = df[selected_cols["name"]].fillna("Unknown Product").astype(str)
+        df["Product Name"] = (
+            df[selected_cols["name"]].fillna("Unknown Product").astype(str)
+        )
         df = df[~df["Product Name"].str.contains("Choose Any", case=False, na=False)]
 
-        df["Item Cost"] = pd.to_numeric(df[selected_cols["cost"]].astype(str).str.replace(r"[^\d.]", "", regex=True), errors="coerce").fillna(0)
-        df["Quantity"] = pd.to_numeric(df[selected_cols["qty"]].astype(str).str.replace(r"[^\d.]", "", regex=True), errors="coerce").fillna(0)
+        df["Item Cost"] = pd.to_numeric(
+            df[selected_cols["cost"]]
+            .astype(str)
+            .str.replace(r"[^\d.]", "", regex=True),
+            errors="coerce",
+        ).fillna(0)
+        df["Quantity"] = pd.to_numeric(
+            df[selected_cols["qty"]].astype(str).str.replace(r"[^\d.]", "", regex=True),
+            errors="coerce",
+        ).fillna(0)
 
         # v10.4 Standardized SKU support
         if "sku" in selected_cols and selected_cols["sku"] in df.columns:
-             df["SKU"] = df[selected_cols["sku"]].fillna("N/A").astype(str)
+            df["SKU"] = df[selected_cols["sku"]].fillna("N/A").astype(str)
         else:
-             df["SKU"] = "N/A"
-
+            df["SKU"] = "N/A"
 
         timeframe_suffix = ""
         if "date" in selected_cols and selected_cols["date"] in df.columns:
@@ -335,13 +457,18 @@ def prepare_granular_data(df, selected_cols):
                     else:
                         timeframe_suffix = f"{dates_valid.min().strftime('%d%b')}_to_{dates_valid.max().strftime('%d%b_%y')}"
                 else:
-                    log_system_event("DATE_PARSE_WARN", "No valid dates parsed from date column; proceeding without date filtering.")
+                    log_system_event(
+                        "DATE_PARSE_WARN",
+                        "No valid dates parsed from date column; proceeding without date filtering.",
+                    )
             except Exception as date_err:
-                log_system_event("DATE_PARSE_ERROR", f"Date parsing failed: {date_err}; proceeding without date column.")
+                log_system_event(
+                    "DATE_PARSE_ERROR",
+                    f"Date parsing failed: {date_err}; proceeding without date column.",
+                )
                 non_null = df[selected_cols["date"]].dropna()
                 val = str(non_null.iloc[0]) if not non_null.empty else ""
                 timeframe_suffix = val.replace("/", "-").replace(" ", "_")[:20]
-
 
         if (df["Quantity"] < 0).any():
             log_system_event("DATA_ISSUE", "Found negative quantities, converted to 0.")
@@ -369,11 +496,16 @@ def prepare_granular_data(df, selected_cols):
         df["Sub-Category"] = df["Product Name"].map(name_subcat_map)
         df["Size"] = df["Product Name"].map(name_size_map)
         df["Clean_Product"] = df["Product Name"].map(name_clean_map)
-        df["Filter_Identity"] = df["Clean_Product"].astype(str) + " [" + df["SKU"].astype(str) + "]"
+        df["Filter_Identity"] = (
+            df["Clean_Product"].astype(str) + " [" + df["SKU"].astype(str) + "]"
+        )
         df["Is_Bundle_Combo"] = df["Product Name"].map(name_bundle_map)
 
         if "Subtotal Cost" in df.columns:
-            df["Subtotal Cost"] = pd.to_numeric(df["Subtotal Cost"].astype(str).str.replace(r"[^\d.]", "", regex=True), errors="coerce").fillna(df["Item Cost"])
+            df["Subtotal Cost"] = pd.to_numeric(
+                df["Subtotal Cost"].astype(str).str.replace(r"[^\d.]", "", regex=True),
+                errors="coerce",
+            ).fillna(df["Item Cost"])
         else:
             df["Subtotal Cost"] = df["Item Cost"]
 
@@ -381,43 +513,75 @@ def prepare_granular_data(df, selected_cols):
         df["Total Amount"] = df["Item Cost"] * df["Quantity"]
 
         if "Cashback Discount" in df.columns:
-            df["Cashback Discount"] = pd.to_numeric(df["Cashback Discount"].astype(str).str.replace(r"[^\d.]", "", regex=True), errors="coerce").fillna(0)
+            df["Cashback Discount"] = pd.to_numeric(
+                df["Cashback Discount"]
+                .astype(str)
+                .str.replace(r"[^\d.]", "", regex=True),
+                errors="coerce",
+            ).fillna(0)
         else:
-            df["Cashback Discount"] = (df["Gross Amount"] - df["Total Amount"]).clip(lower=0)
+            df["Cashback Discount"] = (df["Gross Amount"] - df["Total Amount"]).clip(
+                lower=0
+            )
 
         # Handle negative fee lines (if negative sign '-' is present, it is a fee discount/cashback)
-        fee_cols = [c for c in df.columns if c.lower() in ["extra fee", "fee", "fees", "fee discount total"]]
+        fee_cols = [
+            c
+            for c in df.columns
+            if c.lower() in ["extra fee", "fee", "fees", "fee discount total"]
+        ]
         for f_c in fee_cols:
-            raw_fees = pd.to_numeric(df[f_c].astype(str).str.replace(r"[^\d.-]", "", regex=True), errors="coerce").fillna(0)
+            raw_fees = pd.to_numeric(
+                df[f_c].astype(str).str.replace(r"[^\d.-]", "", regex=True),
+                errors="coerce",
+            ).fillna(0)
             neg_fees = raw_fees < 0
             if neg_fees.any():
-                df.loc[neg_fees, "Cashback Discount"] = df.loc[neg_fees, "Cashback Discount"] + raw_fees[neg_fees].abs()
+                df.loc[neg_fees, "Cashback Discount"] = (
+                    df.loc[neg_fees, "Cashback Discount"] + raw_fees[neg_fees].abs()
+                )
 
         df["Net Amount"] = df["Total Amount"]
-
 
         # Ensure Order Status and other operational columns are present
         if "Order Status" not in df.columns:
             # Try to map status if not present (useful for manual uploads)
             status_col = find_columns(df).get("status")
             if status_col:
-                df["Order Status"] = df[status_col].fillna("completed").astype(str).str.lower()
+                df["Order Status"] = (
+                    df[status_col].fillna("completed").astype(str).str.lower()
+                )
             else:
                 df["Order Status"] = "completed"
 
         # Exclude pending payments, cancelled, and failed orders from all analytics
-        df = df[~df["Order Status"].astype(str).str.lower().isin(["pending", "pending payment", "cancelled", "failed", "refunded", "trash"])]
+        df = df[
+            ~df["Order Status"]
+            .astype(str)
+            .str.lower()
+            .isin(
+                [
+                    "pending",
+                    "pending payment",
+                    "cancelled",
+                    "failed",
+                    "refunded",
+                    "trash",
+                ]
+            )
+        ]
 
         return df, timeframe_suffix
     except Exception as e:
         log_system_event("PREPARE_ERROR", str(e))
         return pd.DataFrame(), ""
 
+
 def aggregate_data(df, selected_cols):
     """Generates dashboard aggregates from granular standardized data using Polars."""
     try:
         lazy_df = pl.from_pandas(df).lazy()
-        
+
         # 1. Summary
         group_keys = ["Category"]
         if "Sub-Category" in df.columns:
@@ -425,10 +589,12 @@ def aggregate_data(df, selected_cols):
 
         summary = (
             lazy_df.group_by(group_keys)
-            .agg([
-                pl.col("Quantity").sum().alias("Total Qty"),
-                pl.col("Total Amount").sum().alias("Total Amount")
-            ])
+            .agg(
+                [
+                    pl.col("Quantity").sum().alias("Total Qty"),
+                    pl.col("Total Amount").sum().alias("Total Amount"),
+                ]
+            )
             .collect()
             .to_pandas()
         )
@@ -436,23 +602,35 @@ def aggregate_data(df, selected_cols):
         total_rev = summary["Total Amount"].sum()
         total_qty = summary["Total Qty"].sum()
         if total_rev > 0:
-            summary["Revenue Share (%)"] = (summary["Total Amount"] / total_rev * 100).round(2)
+            summary["Revenue Share (%)"] = (
+                summary["Total Amount"] / total_rev * 100
+            ).round(2)
         if total_qty > 0:
-            summary["Quantity Share (%)"] = (summary["Total Qty"] / total_qty * 100).round(2)
+            summary["Quantity Share (%)"] = (
+                summary["Total Qty"] / total_qty * 100
+            ).round(2)
 
         # 2. Drilldown
         drill_keys = group_keys + ["Item Cost"]
         drilldown = (
             lazy_df.group_by(drill_keys)
-            .agg([
-                pl.col("Quantity").sum().alias("Total Qty"),
-                pl.col("Total Amount").sum().alias("Total Amount")
-            ])
+            .agg(
+                [
+                    pl.col("Quantity").sum().alias("Total Qty"),
+                    pl.col("Total Amount").sum().alias("Total Amount"),
+                ]
+            )
             .collect()
             .to_pandas()
         )
         if "Sub-Category" in drilldown.columns:
-            drilldown.columns = ["Category", "Sub-Category", "Price (TK)", "Total Qty", "Total Amount"]
+            drilldown.columns = [
+                "Category",
+                "Sub-Category",
+                "Price (TK)",
+                "Total Qty",
+                "Total Amount",
+            ]
         else:
             drilldown.columns = ["Category", "Price (TK)", "Total Qty", "Total Amount"]
 
@@ -461,7 +639,7 @@ def aggregate_data(df, selected_cols):
             pl.col("Quantity").sum().alias("Total Qty"),
             pl.col("Total Amount").sum().alias("Total Amount"),
             pl.col("Category").first().alias("Category"),
-            pl.col("Clean_Product").first().alias("Clean_Product")
+            pl.col("Clean_Product").first().alias("Clean_Product"),
         ]
         if "Sub-Category" in df.columns:
             top_aggs.append(pl.col("Sub-Category").first().alias("Sub-Category"))
@@ -475,7 +653,12 @@ def aggregate_data(df, selected_cols):
         top_items = top_items.sort_values("Total Amount", ascending=False)
 
         # 4. Basket Metrics
-        basket_metrics = {"avg_basket_qty": 0, "avg_basket_value": 0, "total_orders": 0, "attachment_rate": 0}
+        basket_metrics = {
+            "avg_basket_qty": 0,
+            "avg_basket_value": 0,
+            "total_orders": 0,
+            "attachment_rate": 0,
+        }
         group_cols = []
         if "order_id" in selected_cols and selected_cols["order_id"] in df.columns:
             group_cols.append(selected_cols["order_id"])
@@ -490,70 +673,64 @@ def aggregate_data(df, selected_cols):
         if group_cols:
             order_groups = (
                 lazy_df.group_by(group_cols)
-                .agg([
-                    pl.col("Quantity").sum().alias("Quantity"),
-                    pl.col("Total Amount").sum().alias("Total Amount"),
-                    pl.when(~pl.col("Is_Bundle_Combo")).then(1).otherwise(0).sum().alias("Item Count")
-                ])
+                .agg(
+                    [
+                        pl.col("Quantity").sum().alias("Quantity"),
+                        pl.col("Total Amount").sum().alias("Total Amount"),
+                        pl.when(~pl.col("Is_Bundle_Combo"))
+                        .then(1)
+                        .otherwise(0)
+                        .sum()
+                        .alias("Item Count"),
+                    ]
+                )
                 .collect()
                 .to_pandas()
             )
-            
+
             avg_qty = order_groups["Quantity"].mean()
             avg_val = order_groups["Total Amount"].mean()
-            basket_metrics["avg_basket_qty"] = float(avg_qty) if pd.notna(avg_qty) else 0
-            basket_metrics["avg_basket_value"] = float(avg_val) if pd.notna(avg_val) else 0
+            basket_metrics["avg_basket_qty"] = (
+                float(avg_qty) if pd.notna(avg_qty) else 0
+            )
+            basket_metrics["avg_basket_value"] = (
+                float(avg_val) if pd.notna(avg_val) else 0
+            )
             basket_metrics["total_orders"] = len(order_groups)
 
             multi_item_orders = len(order_groups[order_groups["Item Count"] > 1])
-            basket_metrics["attachment_rate"] = (multi_item_orders / len(order_groups) * 100) if len(order_groups) > 0 else 0
+            basket_metrics["attachment_rate"] = (
+                (multi_item_orders / len(order_groups) * 100)
+                if len(order_groups) > 0
+                else 0
+            )
 
         phone_col = None
         if "phone" in selected_cols and selected_cols["phone"] in df.columns:
             phone_col = selected_cols["phone"]
         elif "Phone (Billing)" in df.columns:
             phone_col = "Phone (Billing)"
-            
-        if phone_col:
-            order_col = group_cols[0] if group_cols else None
-            if order_col:
-                lazy_df = lazy_df.with_columns(
-                    pl.when(
-                        pl.col(phone_col).is_null() | 
-                        pl.col(phone_col).cast(pl.String).is_in(["", "nan", "NaN", "None", "N/A", "0"])
-                    )
-                    .then(pl.col(order_col).cast(pl.String))
-                    .otherwise(pl.col(phone_col).cast(pl.String))
-                    .alias("_clean_phone")
-                )
-            else:
-                lazy_df = lazy_df.with_columns(
-                    pl.when(
-                        pl.col(phone_col).is_null() | 
-                        pl.col(phone_col).cast(pl.String).is_in(["", "nan", "NaN", "None", "N/A", "0"])
-                    )
-                    .then(pl.lit("Unknown"))
-                    .otherwise(pl.col(phone_col).cast(pl.String))
-                    .alias("_clean_phone")
-                )
-                
-            customer_groups = (
-                lazy_df.group_by("_clean_phone")
-                .agg([pl.col("Total Amount").sum().alias("Total Amount")])
-                .collect()
-                .to_pandas()
-            )
-        else:
+
+        if not phone_col:
             basket_metrics["avg_customer_value"] = basket_metrics["avg_basket_value"]
             basket_metrics["unique_customers"] = basket_metrics["total_orders"]
-            
-        basket_metrics["total_gross_revenue"] = float(df["Gross Amount"].sum()) if "Gross Amount" in df.columns else float(df["Total Amount"].sum())
-        basket_metrics["total_cashback_discount"] = float(df["Cashback Discount"].sum()) if "Cashback Discount" in df.columns else 0.0
+
+        basket_metrics["total_gross_revenue"] = (
+            float(df["Gross Amount"].sum())
+            if "Gross Amount" in df.columns
+            else float(df["Total Amount"].sum())
+        )
+        basket_metrics["total_cashback_discount"] = (
+            float(df["Cashback Discount"].sum())
+            if "Cashback Discount" in df.columns
+            else 0.0
+        )
 
         return drilldown, summary, top_items, basket_metrics
     except Exception as e:
         log_system_event("AGGREGATE_ERROR", str(e))
         return None, None, None, {}
+
 
 def get_dispatch_metrics(active_df, total_orders=0):
     """Calculates dispatch, exchange, and freebie metrics from active shift data."""
@@ -569,41 +746,105 @@ def get_dispatch_metrics(active_df, total_orders=0):
         "other_count": 0,
         "pending": 0,
         "dispatched": 0,
-        "dispatch_rate": 0.0
+        "dispatch_rate": 0.0,
     }
-    
+
     if active_df is not None and not active_df.empty:
-        status_col = "Order Status" if "Order Status" in active_df.columns else "Status" if "Status" in active_df.columns else None
-        order_col = "Order ID" if "Order ID" in active_df.columns else "Order Number" if "Order Number" in active_df.columns else None
-        
+        status_col = (
+            "Order Status"
+            if "Order Status" in active_df.columns
+            else "Status"
+            if "Status" in active_df.columns
+            else None
+        )
+        order_col = (
+            "Order ID"
+            if "Order ID" in active_df.columns
+            else "Order Number"
+            if "Order Number" in active_df.columns
+            else None
+        )
+
         # Use modification date for sorting, as this reflects when an order was shipped.
         # Fall back to creation date if modification date is not available.
-        mod_date_col = "mod_dt_parsed" if "mod_dt_parsed" in active_df.columns else "Order Date Modified" if "Order Date Modified" in active_df.columns else None
-        date_col = mod_date_col if mod_date_col else ("Date" if "Date" in active_df.columns else "Order Date" if "Order Date" in active_df.columns else None)
-        pmt_col = "Payment Method Title" if "Payment Method Title" in active_df.columns else None
+        mod_date_col = (
+            "mod_dt_parsed"
+            if "mod_dt_parsed" in active_df.columns
+            else "Order Date Modified"
+            if "Order Date Modified" in active_df.columns
+            else None
+        )
+        date_col = (
+            mod_date_col
+            if mod_date_col
+            else (
+                "Date"
+                if "Date" in active_df.columns
+                else "Order Date"
+                if "Order Date" in active_df.columns
+                else None
+            )
+        )
+        pmt_col = (
+            "Payment Method Title"
+            if "Payment Method Title" in active_df.columns
+            else None
+        )
 
         if order_col:
             if status_col:
-                metrics["exchange_dispatch"] = active_df[active_df[status_col].astype(str).str.lower().str.contains("exchange", na=False)][order_col].nunique()
-                
-                outlet_mask = active_df[status_col].astype(str).str.lower().str.contains("outlet", na=False)
+                metrics["exchange_dispatch"] = active_df[
+                    active_df[status_col]
+                    .astype(str)
+                    .str.lower()
+                    .str.contains("exchange", na=False)
+                ][order_col].nunique()
+
+                outlet_mask = (
+                    active_df[status_col]
+                    .astype(str)
+                    .str.lower()
+                    .str.contains("outlet", na=False)
+                )
                 if pmt_col:
-                    outlet_mask = outlet_mask | active_df[pmt_col].astype(str).str.lower().str.contains("outlet", na=False)
+                    outlet_mask = outlet_mask | active_df[pmt_col].astype(
+                        str
+                    ).str.lower().str.contains("outlet", na=False)
                 metrics["outlet_dispatch"] = active_df[outlet_mask][order_col].nunique()
 
                 # Pending orders
-                pending_mask = active_df[status_col].astype(str).str.lower().isin(["processing", "on-hold", "pending", "waiting"])
+                pending_mask = (
+                    active_df[status_col]
+                    .astype(str)
+                    .str.lower()
+                    .isin(["processing", "on-hold", "pending", "waiting"])
+                )
                 metrics["pending"] = active_df[pending_mask][order_col].nunique()
 
                 # Dispatched orders using SHIPPED_STATUSES or consignment presence
                 has_consignment = pd.Series(False, index=active_df.index)
                 if "Pathao Consignment ID" in active_df.columns:
-                    p_col_check = active_df["Pathao Consignment ID"].astype(str).str.strip().str.lower()
-                    has_consignment = (p_col_check != "") & (p_col_check != "nan") & (p_col_check != "none") & (p_col_check != "n/a")
+                    p_col_check = (
+                        active_df["Pathao Consignment ID"]
+                        .astype(str)
+                        .str.strip()
+                        .str.lower()
+                    )
+                    has_consignment = (
+                        (p_col_check != "")
+                        & (p_col_check != "nan")
+                        & (p_col_check != "none")
+                        & (p_col_check != "n/a")
+                    )
 
-                shipped_mask = active_df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES) | has_consignment
+                shipped_mask = (
+                    active_df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES)
+                    | has_consignment
+                )
                 shipped_df = active_df[shipped_mask]
-                metrics["dispatched"] = shipped_df[order_col].nunique() if not shipped_df.empty else 0
+                metrics["dispatched"] = (
+                    shipped_df[order_col].nunique() if not shipped_df.empty else 0
+                )
             else:
                 metrics["dispatched"] = active_df[order_col].nunique()
                 shipped_df = active_df
@@ -611,29 +852,63 @@ def get_dispatch_metrics(active_df, total_orders=0):
             # Pathao Consignment ID check on shipped dataframe
             if not shipped_df.empty:
                 if "Pathao Consignment ID" in shipped_df.columns:
-                    p_col = shipped_df["Pathao Consignment ID"].astype(str).str.strip().str.lower()
-                    pathao_mask = (p_col != "") & (p_col != "nan") & (p_col != "none") & (p_col != "n/a")
-                    metrics["pathao_count"] = shipped_df[pathao_mask][order_col].nunique()
+                    p_col = (
+                        shipped_df["Pathao Consignment ID"]
+                        .astype(str)
+                        .str.strip()
+                        .str.lower()
+                    )
+                    pathao_mask = (
+                        (p_col != "")
+                        & (p_col != "nan")
+                        & (p_col != "none")
+                        & (p_col != "n/a")
+                    )
+                    metrics["pathao_count"] = shipped_df[pathao_mask][
+                        order_col
+                    ].nunique()
                 elif "Shipping Method Title" in shipped_df.columns:
                     p_col = shipped_df["Shipping Method Title"].astype(str).str.lower()
                     pathao_mask = p_col.str.contains("pathao", na=False)
-                    metrics["pathao_count"] = shipped_df[pathao_mask][order_col].nunique()
+                    metrics["pathao_count"] = shipped_df[pathao_mask][
+                        order_col
+                    ].nunique()
                 else:
                     metrics["pathao_count"] = metrics["dispatched"]
             else:
                 metrics["pathao_count"] = 0
 
-            metrics["other_count"] = max(0, metrics["dispatched"] - metrics["pathao_count"])
+            metrics["other_count"] = max(
+                0, metrics["dispatched"] - metrics["pathao_count"]
+            )
 
             if not shipped_df.empty:
-                latest_shipped = shipped_df.sort_values(date_col, ascending=False).iloc[0] if date_col and date_col in shipped_df.columns else shipped_df.iloc[0]
+                latest_shipped = (
+                    shipped_df.sort_values(date_col, ascending=False).iloc[0]
+                    if date_col and date_col in shipped_df.columns
+                    else shipped_df.iloc[0]
+                )
                 metrics["last_shipped_order"] = str(latest_shipped[order_col])
-                
+
                 if "Pathao Consignment ID" in shipped_df.columns:
-                    p_col_s = shipped_df["Pathao Consignment ID"].astype(str).str.strip().str.lower()
-                    p_shipped = shipped_df[(p_col_s != "") & (p_col_s != "nan") & (p_col_s != "none") & (p_col_s != "n/a")]
+                    p_col_s = (
+                        shipped_df["Pathao Consignment ID"]
+                        .astype(str)
+                        .str.strip()
+                        .str.lower()
+                    )
+                    p_shipped = shipped_df[
+                        (p_col_s != "")
+                        & (p_col_s != "nan")
+                        & (p_col_s != "none")
+                        & (p_col_s != "n/a")
+                    ]
                     if not p_shipped.empty:
-                        latest_pathao = p_shipped.sort_values(date_col, ascending=False).iloc[0] if date_col and date_col in p_shipped.columns else p_shipped.iloc[0]
+                        latest_pathao = (
+                            p_shipped.sort_values(date_col, ascending=False).iloc[0]
+                            if date_col and date_col in p_shipped.columns
+                            else p_shipped.iloc[0]
+                        )
                         metrics["last_pathao_print"] = str(latest_pathao[order_col])
                     else:
                         metrics["last_pathao_print"] = str(latest_shipped[order_col])
@@ -642,20 +917,35 @@ def get_dispatch_metrics(active_df, total_orders=0):
 
     if total_orders > 0:
         metrics["dispatch_rate"] = (metrics["dispatched"] / total_orders) * 100.0
-    metrics["ecom_dispatch"] = max(0, total_orders - metrics["outlet_dispatch"] - metrics["exchange_dispatch"])
+    metrics["ecom_dispatch"] = max(
+        0, total_orders - metrics["outlet_dispatch"] - metrics["exchange_dispatch"]
+    )
     return metrics
 
 
-def generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, dm, top, prev_rev=None, prev_orders=None, forecast_str="", gross_rev=None, cashback_disc=None, new_customers=None, returning_customers=None):
+def generate_executive_briefing(
+    today_rev,
+    today_qty,
+    today_orders,
+    today_aov,
+    dm,
+    top,
+    prev_rev=None,
+    prev_orders=None,
+    forecast_str="",
+    gross_rev=None,
+    cashback_disc=None,
+    new_customers=None,
+    returning_customers=None,
+):
     """Generates the single source of truth narrative for the Executive Briefing."""
-    from datetime import datetime, timedelta, timezone
-    
+
     dm = dm or {}
-    
+
     rev_trend = ""
     if prev_rev is not None:
         rev_trend = " 📈" if today_rev >= prev_rev else " 📉"
-        
+
     net_rev = today_rev
     g_rev = gross_rev if gross_rev is not None else net_rev
     cb_disc = cashback_disc if cashback_disc is not None else max(0.0, g_rev - net_rev)
@@ -666,32 +956,42 @@ def generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, d
     cb_per_basket = (cb_disc / today_orders) if today_orders > 0 else 0.0
     pct_basket_lost = (cb_per_basket / gross_aov * 100) if gross_aov > 0 else 0.0
 
-    rev_line = f"💵 *NET REALIZED REVENUE (After Cashback):* ৳{net_rev:,.0f}{rev_trend}" if prev_rev is not None else f"💵 *NET REALIZED REVENUE (After Cashback):* ৳{net_rev:,.0f}"
+    rev_line = (
+        f"💵 *NET REALIZED REVENUE (After Cashback):* ৳{net_rev:,.0f}{rev_trend}"
+        if prev_rev is not None
+        else f"💵 *NET REALIZED REVENUE (After Cashback):* ৳{net_rev:,.0f}"
+    )
 
     report_lines = [
-        f"📊 *DEEN-OPS Executive Briefing*",
-        f"📅 {datetime.now(timezone(timedelta(hours=6))).strftime('%A, %d %B %Y')}",
+        "📊 *DEEN-OPS Executive Briefing*",
+        f"📅 {bd_now().strftime('%A, %d %B %Y')}",
         "",
         rev_line,
         f"🏷️ *Gross Revenue (Pre-Discount):* ৳{g_rev:,.0f}",
     ]
 
     if cb_disc > 0:
-        report_lines.extend([
-            f"💸 *Total Cashback & Fee Discounts:* -৳{cb_disc:,.0f} ({loss_pct:.1f}% revenue lost)",
-        ])
+        report_lines.extend(
+            [
+                f"💸 *Total Cashback & Fee Discounts:* -৳{cb_disc:,.0f} ({loss_pct:.1f}% revenue lost)",
+            ]
+        )
 
-    report_lines.extend([
-        "",
-        f"📦 *Shipped Items:* {today_qty:,.0f}",
-        f"🛍️ *Net Basket Value (Post-Cashback):* ৳{net_aov:,.0f}",
-    ])
+    report_lines.extend(
+        [
+            "",
+            f"📦 *Shipped Items:* {today_qty:,.0f}",
+            f"🛍️ *Net Basket Value (Post-Cashback):* ৳{net_aov:,.0f}",
+        ]
+    )
 
     if cb_disc > 0:
-        report_lines.extend([
-            f"🛒 *Gross Basket Value (Pre-Discount):* ৳{gross_aov:,.0f}",
-            f"📉 *Cashback Lost per Basket:* -৳{cb_per_basket:,.0f} ({pct_basket_lost:.1f}% lost/basket)",
-        ])
+        report_lines.extend(
+            [
+                f"🛒 *Gross Basket Value (Pre-Discount):* ৳{gross_aov:,.0f}",
+                f"📉 *Cashback Lost per Basket:* -৳{cb_per_basket:,.0f} ({pct_basket_lost:.1f}% lost/basket)",
+            ]
+        )
 
     dispatched_cnt = dm.get("dispatched", 0)
     pending_cnt = dm.get("pending", 0)
@@ -699,17 +999,19 @@ def generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, d
     other_cnt = dm.get("other_count", 0)
     dispatch_rate = dm.get("dispatch_rate", 0.0)
 
-    report_lines.extend([
-        "",
-        f"🚚 *Dispatched Orders (Actual):* {dispatched_cnt:,.0f} ({dispatch_rate:.1f}% fulfillment rate)",
-        f"  • Pathao Courier: {pathao_cnt:,.0f}",
-        f"  • Other / Self-Handover: {other_cnt:,.0f}",
-        f"⏳ *Pending / Processing:* {pending_cnt:,.0f}",
-        f"📋 *Last Shipped Order:* {dm.get('last_shipped_order', 'N/A')}",
-        f"🖨️ *Last Pathao Print:* {dm.get('last_pathao_print', 'N/A')}",
-        "",
-        f"🛒 *Total Shift Orders:* {today_orders:,.0f}",
-    ])
+    report_lines.extend(
+        [
+            "",
+            f"🚚 *Dispatched Orders (Actual):* {dispatched_cnt:,.0f} ({dispatch_rate:.1f}% fulfillment rate)",
+            f"  • Pathao Courier: {pathao_cnt:,.0f}",
+            f"  • Other / Self-Handover: {other_cnt:,.0f}",
+            f"⏳ *Pending / Processing:* {pending_cnt:,.0f}",
+            f"📋 *Last Shipped Order:* {dm.get('last_shipped_order', 'N/A')}",
+            f"🖨️ *Last Pathao Print:* {dm.get('last_pathao_print', 'N/A')}",
+            "",
+            f"🛒 *Total Shift Orders:* {today_orders:,.0f}",
+        ]
+    )
 
     if new_customers is not None or returning_customers is not None:
         n_c = int(new_customers or 0)
@@ -717,17 +1019,26 @@ def generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, d
         tot_c = n_c + r_c
         pct_n = (n_c / tot_c * 100) if tot_c > 0 else 0
         pct_r = (r_c / tot_c * 100) if tot_c > 0 else 0
-        report_lines.append(f"👥 *Customer Mix:* 🆕 {n_c:,} New ({pct_n:.0f}%) | 🔄 {r_c:,} Returning ({pct_r:.0f}%)")
+        report_lines.append(
+            f"👥 *Customer Mix:* 🆕 {n_c:,} New ({pct_n:.0f}%) | 🔄 {r_c:,} Returning ({pct_r:.0f}%)"
+        )
 
-    report_lines.extend([
-        f"🔄 *Exchange Orders:* {dm.get('exchange_dispatch', 0):,.0f}",
-        f"🚀 *Ecom Orders:* {dm.get('ecom_dispatch', 0):,.0f}",
-        f"🏪 *Outlet Orders:* {dm.get('outlet_dispatch', 0):,.0f}",
-    ])
+    report_lines.extend(
+        [
+            f"🔄 *Exchange Orders:* {dm.get('exchange_dispatch', 0):,.0f}",
+            f"🚀 *Ecom Orders:* {dm.get('ecom_dispatch', 0):,.0f}",
+            f"🏪 *Outlet Orders:* {dm.get('outlet_dispatch', 0):,.0f}",
+        ]
+    )
 
     if prev_rev is not None:
-        report_lines.extend(["", f"📉 *Yesterday's Net Shipped Revenue:* ৳{prev_rev:,.0f} ({prev_orders} orders)"])
-        
+        report_lines.extend(
+            [
+                "",
+                f"📉 *Yesterday's Net Shipped Revenue:* ৳{prev_rev:,.0f} ({prev_orders} orders)",
+            ]
+        )
+
     if forecast_str:
         report_lines.append(forecast_str)
 
@@ -735,13 +1046,24 @@ def generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, d
 
     if top is not None and not top.empty:
         if "Clean_Product" in top.columns:
-            group_cols = ["Clean_Product", "SKU"] if "SKU" in top.columns else ["Clean_Product"]
-            top_summary = top.groupby(group_cols, as_index=False).agg({"Total Qty": "sum", "Total Amount": "sum"})
+            group_cols = (
+                ["Clean_Product", "SKU"] if "SKU" in top.columns else ["Clean_Product"]
+            )
+            top_summary = top.groupby(group_cols, as_index=False).agg(
+                {"Total Qty": "sum", "Total Amount": "sum"}
+            )
             top_summary = top_summary.sort_values("Total Amount", ascending=False)
             top_3 = top_summary.head(3)
             for _, row in top_3.iterrows():
-                sku_str = f" [{row['SKU']}]" if "SKU" in top.columns and str(row['SKU']) not in ['N/A', '', 'None', 'nan'] else ""
-                report_lines.append(f"• {row['Clean_Product']}{sku_str} ({row['Total Qty']} pcs)")
+                sku_str = (
+                    f" [{row['SKU']}]"
+                    if "SKU" in top.columns
+                    and str(row["SKU"]) not in ["N/A", "", "None", "nan"]
+                    else ""
+                )
+                report_lines.append(
+                    f"• {row['Clean_Product']}{sku_str} ({row['Total Qty']} pcs)"
+                )
         else:
             top_3 = top.head(3)
             for _, row in top_3.iterrows():
@@ -749,6 +1071,11 @@ def generate_executive_briefing(today_rev, today_qty, today_orders, today_aov, d
     else:
         report_lines.append("No product data available.")
 
-    report_lines.extend(["", "💻 _Access the full dashboard at your DEEN-OPS Terminal: https://deen-ops.streamlit.app/_"])
-    
+    report_lines.extend(
+        [
+            "",
+            "💻 _Access the full dashboard at your DEEN-OPS Terminal: https://deen-ops.streamlit.app/_",
+        ]
+    )
+
     return "\n".join(report_lines)

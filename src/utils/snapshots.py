@@ -11,7 +11,7 @@ def load_stock_snapshot():
     for path in paths:
         if os.path.exists(path):
             try:
-                with open(path, 'r', encoding='utf-8') as f:
+                with open(path, "r", encoding="utf-8") as f:
                     first_line = f.readline()
 
                 if "Category" in first_line and "Current Stock" in first_line:
@@ -25,15 +25,29 @@ def load_stock_snapshot():
                     df = pd.read_csv(path)
 
                 col_map = {
-                    "Item Name": "Product", "name": "Product", "Title": "Product",
-                    "Quantity": "Stock", "item_stock": "Stock", "Inventory": "Stock"
+                    "Item Name": "Product",
+                    "name": "Product",
+                    "Title": "Product",
+                    "Quantity": "Stock",
+                    "item_stock": "Stock",
+                    "Inventory": "Stock",
                 }
-                df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+                df = df.rename(
+                    columns={k: v for k, v in col_map.items() if k in df.columns}
+                )
 
                 if not df.empty and "Stock" in df.columns:
-                    df["Stock"] = pd.to_numeric(df["Stock"], errors="coerce").fillna(0).astype(float)
+                    df["Stock"] = (
+                        pd.to_numeric(df["Stock"], errors="coerce")
+                        .fillna(0)
+                        .astype(float)
+                    )
                     if "Price" in df.columns:
-                        df["Price"] = pd.to_numeric(df["Price"], errors="coerce").fillna(0).astype(float)
+                        df["Price"] = (
+                            pd.to_numeric(df["Price"], errors="coerce")
+                            .fillna(0)
+                            .astype(float)
+                        )
 
                     if "Product" in df.columns:
                         df["Base_Product"] = df["Product"].apply(get_base_product_name)

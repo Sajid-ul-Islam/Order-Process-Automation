@@ -12,11 +12,13 @@ def read_sales_file(file_obj, file_name):
 
 
 def read_uploaded(uploaded_file):
-    """Generic file reader for uploaded files."""
-    if not uploaded_file:
+    """Generic file reader for uploaded files (CSV/XLSX or an already-loaded DataFrame)."""
+    if uploaded_file is None:
         return None
+    if isinstance(uploaded_file, pd.DataFrame):
+        return uploaded_file
     uploaded_file.seek(0)
-    if uploaded_file.name.lower().endswith(".csv"):
+    if getattr(uploaded_file, "name", "").lower().endswith(".csv"):
         return pd.read_csv(uploaded_file)
     return pd.read_excel(uploaded_file)
 

@@ -4,6 +4,8 @@ from typing import Dict, Optional
 import urllib.parse
 import re
 
+from src.utils.text import normalize_phone_number
+
 
 class WhatsAppOrderProcessor:
     def __init__(self, config: Optional[Dict] = None):
@@ -23,15 +25,10 @@ class WhatsAppOrderProcessor:
         }
 
     def clean_phone_number(self, phone: str) -> str:
-        """Clean and format phone number for WhatsApp."""
+        """Clean and format phone number for WhatsApp (shared canonicalizer)."""
         if pd.isna(phone):
             return ""
-        phone = "".join(filter(str.isdigit, str(phone)))
-        if phone.startswith("0"):
-            return "0" + phone[1:]
-        elif not phone.startswith(("88", "+88")):
-            return "0" + phone
-        return phone
+        return normalize_phone_number(phone)
 
     def format_text(self, text: str) -> str:
         """Standardize text formatting (capitalization, spacing)."""
@@ -204,7 +201,11 @@ class WhatsAppOrderProcessor:
 
         # Clean and standardize product names
         product_col = self.config["product_col"]
-        df[product_col] = df[product_col].astype(str).str.replace("Executive Formal Shirt", "Formal Shirt", regex=False)
+        df[product_col] = (
+            df[product_col]
+            .astype(str)
+            .str.replace("Executive Formal Shirt", "Formal Shirt", regex=False)
+        )
 
         # Format address columns
         for col_type in ["address_col", "city_col"]:
@@ -220,25 +221,35 @@ class WhatsAppOrderProcessor:
             # Vectorized SKU integration for better performance
             p_series = df[product_col].fillna("").astype(str)
             s_series = df[sku_col].fillna("").astype(str)
-            
+
             valid_sku = (s_series.str.strip() != "") & (s_series.str.lower() != "nan")
-            
-            df.loc[valid_sku, product_col] = p_series[valid_sku] + " - " + s_series[valid_sku]
+
+            df.loc[valid_sku, product_col] = (
+                p_series[valid_sku] + " - " + s_series[valid_sku]
+            )
             df.loc[~valid_sku, product_col] = p_series[~valid_sku]
 
         # Enforce string types for categorical columns to prevent Polars mixed-type errors
-        for col in [self.config["order_id_col"], product_col, self.config["quantity_col"], self.config["price_col"]]:
+        for col in [
+            self.config["order_id_col"],
+            product_col,
+            self.config["quantity_col"],
+            self.config["price_col"],
+        ]:
             if col in df.columns:
                 df[col] = df[col].astype(str)
-                
+
         # Clean order total amount for numeric aggregation
         total_col = self.config.get("order_total_col")
         if total_col and total_col in df.columns:
-            df[total_col] = pd.to_numeric(df[total_col].astype(str).str.replace(r"[^\d.]", "", regex=True), errors="coerce").fillna(0)
+            df[total_col] = pd.to_numeric(
+                df[total_col].astype(str).str.replace(r"[^\d.]", "", regex=True),
+                errors="coerce",
+            ).fillna(0)
 
         # Convert to Polars LazyFrame for optimized execution
         lazy_df = pl.from_pandas(df).lazy()
-        
+
         name_col = self.config["name_col"]
         order_id_col = self.config["order_id_col"]
         product_col = self.config["product_col"]
@@ -246,7 +257,11 @@ class WhatsAppOrderProcessor:
         price_col = self.config["price_col"]
 
         def _str_join(expr, sep):
-            return expr.str.join(sep) if hasattr(expr.str, "join") else expr.str.concat(sep)
+            return (
+                expr.str.join(sep)
+                if hasattr(expr.str, "join")
+                else expr.str.concat(sep)
+            )
 
         agg_exprs = [
             pl.col(name_col).first(),
@@ -333,7 +348,7 @@ class WhatsAppOrderProcessor:
             total_amount = float(row.get(order_total_col, 0.0))
             collectable_amount = total_amount
             is_paid = False
-            
+
             payment_method = row.get(payment_method_col)
             if payment_method and pd.notna(payment_method):
                 method = str(payment_method).lower()
@@ -358,7 +373,7 @@ class WhatsAppOrderProcessor:
                 )
             else:
                 lines = [
-                    f"*Order Verification From DEEN Commerce*",
+                    "*Order Verification From DEEN Commerce*",
                     "",
                     f"Assalamu Alaikum, {salutation}!",
                     "",
@@ -384,7 +399,7 @@ class WhatsAppOrderProcessor:
                     "Thank you for shopping with DEEN Commerce! Grab our latest collection on: https://deencommerce.com/",
                 ]
                 message = "\n".join(lines)
-            
+
             encoded_message = urllib.parse.quote(message)
             whatsapp_links.append(f"https://wa.me/+88{phone}?text={encoded_message}")
 

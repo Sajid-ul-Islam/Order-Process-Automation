@@ -11,7 +11,7 @@ from src.components.ui.clock import get_clock_html
 def render_header(right_slot_callback=None):
     """Modern command-center header with exact user-requested styling."""
     st.markdown(
-        f"""
+        """
         <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 0px; justify-content: space-between; width: 100%;">
             <h1 class="hub-title" id="deen-ops-terminal-v10-0" aria-labelledby=":r9:" style="margin: 0px;">
                 <span id=":r9:">DEEN OPS Terminal <span style="color: rgb(29, 78, 216);">v10.0</span></span>
@@ -19,7 +19,7 @@ def render_header(right_slot_callback=None):
         </div>
         <p style="color: var(--text-muted); margin-bottom: -10px; font-size: 1rem;">Operational Command & Business Intelligence Center</p>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
     if right_slot_callback:
         with st.container():
@@ -30,45 +30,42 @@ def render_app_banner():
     """Renders a premium visual banner for the application with integrated clock, title, and sync status."""
     banner_path = os.path.join("assets", "app_banner.png")
     clock_html = get_clock_html()
-    
+
     sync_label = "Checking status..."
     if st.session_state.get("live_sync_time"):
         diff = datetime.now() - st.session_state.live_sync_time
         mins = int(diff.total_seconds() / 60)
         sync_label = "Synced: Just now" if mins < 1 else f"Synced: {mins}m ago"
     elif st.session_state.get("wc_sync_mode") == "Operational Cycle":
-         sync_label = "Syncing with WooCommerce..."
+        sync_label = "Syncing with WooCommerce..."
 
     # v15.0: Dynamic Holiday Awareness Logic
     holiday_banner_html = ""
-    is_holiday_merge = False
-    
+
     # Check if we are in Operational Cycle and if a merge is active
     if st.session_state.get("wc_sync_mode") == "Operational Cycle":
         curr_slot = st.session_state.get("wc_curr_slot")
         if curr_slot and len(curr_slot) == 2:
             start, end = curr_slot
             # If the duration is more than 28 hours, it's likely a holiday merge (normal shift is ~24h)
-            if (end - start).total_seconds() > 100800: # 28 hours
-                is_holiday_merge = True
+            if (end - start).total_seconds() > 100800:  # 28 hours
                 merge_date = (start + timedelta(hours=12)).strftime("%a, %d %b")
                 holiday_banner_html = f'<div style="position: absolute; top: 15px; left: 40px; z-index: 10; display: flex; align-items: center; gap: 8px; background: rgba(59,130,246,0.2); backdrop-filter: blur(10px); padding: 6px 14px; border-radius: 20px; border: 1px solid rgba(59,130,246,0.4); animation: banner-pulse 2s infinite;"><span style="font-size: 0.9rem;">🌙</span><span style="color: #60a5fa; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;">Holiday Merge Active</span><span style="color: white; font-size: 0.7rem; font-weight: 600;">(Incl. {merge_date})</span></div>'
 
     # ── DEEN-OPS Banner Brand Colors (global, theme-independent) ──────────
     # These are fixed identity colors for the banner — they do NOT change
     # when the user switches the Chart Theme in the sidebar.
-    BRAND_PRIMARY   = "#10b981"   # emerald green
-    BRAND_SECONDARY = "#06b6d4"   # cyan
+    BRAND_PRIMARY = "#10b981"  # emerald green
+    BRAND_SECONDARY = "#06b6d4"  # cyan
     # ──────────────────────────────────────────────────────────────────────
 
     p_color = BRAND_PRIMARY
     s_color = BRAND_SECONDARY
-    p_08    = "rgba(16,185,129,0.08)"
-    p_20    = "rgba(16,185,129,0.20)"
-    p_35    = "rgba(16,185,129,0.35)"
-    p_glow  = "rgba(16,185,129,0.25)"
-    s_15    = "rgba(6,182,212,0.15)"
-    p_20b   = "rgba(16,185,129,0.20)"   # alias for badge bg
+    p_08 = "rgba(16,185,129,0.08)"
+    p_20 = "rgba(16,185,129,0.20)"
+    p_35 = "rgba(16,185,129,0.35)"
+    p_glow = "rgba(16,185,129,0.25)"
+    s_15 = "rgba(6,182,212,0.15)"
 
     img_html = ""
     if os.path.exists(banner_path):

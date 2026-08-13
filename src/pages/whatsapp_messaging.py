@@ -1,10 +1,8 @@
 import pandas as pd
 import streamlit as st
-from src.components.ui.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
 
 from src.utils.logging import log_error
 from src.state.persistence import clear_state_keys
-from src.components.ui.dataframe_search import render_dataframe_search
 from src.components.ui.widgets import (
     render_action_bar,
     render_file_summary,
@@ -27,12 +25,12 @@ def _reset_wp_state():
 def _has_fuzzy_column(columns: list[str], aliases: list[str]) -> bool:
     cols_lower = [str(col).strip().lower() for col in columns]
     for alias in aliases:
-        alias = alias.lower()
-        if alias in cols_lower:
+        alias_lower = alias.lower()
+        if alias_lower in cols_lower:
             return True
     for alias in aliases:
-        alias = alias.lower()
-        if any(alias in col for col in cols_lower):
+        alias_lower = alias.lower()
+        if any(alias_lower in col for col in cols_lower):
             return True
     return False
 
@@ -67,10 +65,18 @@ def render_wp_tab():
             key="wp_live",
         )
     with c_url:
-        url_input = st.text_input("Paste public CSV/XLSX URL", key="wp_url_input", label_visibility="collapsed", placeholder="Paste public CSV/XLSX URL...")
-        if url_input and st.button("Fetch URL", use_container_width=True, type="secondary", key="wp_url_fetch"):
+        url_input = st.text_input(
+            "Paste public CSV/XLSX URL",
+            key="wp_url_input",
+            label_visibility="collapsed",
+            placeholder="Paste public CSV/XLSX URL...",
+        )
+        if url_input and st.button(
+            "Fetch URL", use_container_width=True, type="secondary", key="wp_url_fetch"
+        ):
             try:
                 from src.utils.url_fetch import fetch_dataframe_from_url
+
                 with st.status("📡 Fetching from URL...", expanded=True) as url_status:
                     url_status.update(label="📥 Downloading data from URL...")
                     df_res = fetch_dataframe_from_url(url_input)
@@ -90,13 +96,22 @@ def render_wp_tab():
             if st.session_state.get("wc_curr_df") is not None:
                 df_live = st.session_state.wc_curr_df.copy()
                 source_name = "Dashboard_Live_Today"
-                st.info("⚡ Instant Pull: Using Today's Active Shift data from Dashboard.")
+                st.info(
+                    "⚡ Instant Pull: Using Today's Active Shift data from Dashboard."
+                )
             else:
                 from src.services.woocommerce.client import load_live_source
-                with st.status("🔌 Connecting to WooCommerce API...", expanded=True) as wc_status:
-                    wc_status.update(label="📡 Fetching live orders from WooCommerce...")
+
+                with st.status(
+                    "🔌 Connecting to WooCommerce API...", expanded=True
+                ) as wc_status:
+                    wc_status.update(
+                        label="📡 Fetching live orders from WooCommerce..."
+                    )
                     df_live, source_name, _ = load_live_source()
-                    wc_status.update(label="✅ WooCommerce data loaded", state="complete")
+                    wc_status.update(
+                        label="✅ WooCommerce data loaded", state="complete"
+                    )
 
             preview_df = df_live
             st.session_state.wp_preview_df = preview_df
@@ -153,7 +168,6 @@ def render_wp_tab():
         ) or not valid_file:
             st.warning(
                 "Upload a valid verification file or pull from live dash before generating links."
-
             )
         else:
             try:

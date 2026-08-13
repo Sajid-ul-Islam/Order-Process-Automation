@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import html
 import json
-import streamlit as st
 import streamlit.components.v1 as components
 
 
@@ -121,4 +120,3 @@ def render_copy_button(text: str, label: str = "Copy Data") -> None:
     </script>
     """
     components.html(js_html, height=36)
-

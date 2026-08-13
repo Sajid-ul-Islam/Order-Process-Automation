@@ -13,12 +13,12 @@ def _load_css_file(path: str, mtime: float) -> str:
 
 def inject_base_styles():
     css_path = os.path.join(PROJECT_ROOT, "assets", "styles.css")
-    
+
     if os.path.exists(css_path):
         # Get the file's last modified timestamp to act as a cache-buster
         file_version = os.path.getmtime(css_path)
         css_content = _load_css_file(css_path, file_version)
-        
+
         # Injecting additional UI-UX refinements for the Terminal experience
         extra_styles = """
         /* Terminal Glow Effects */
@@ -45,4 +45,7 @@ def inject_base_styles():
             overflow: hidden;
         }
         """
-        st.markdown(f"<style data-version='{file_version}'>\n{css_content}\n{extra_styles}\n</style>", unsafe_allow_html=True)
+        st.markdown(
+            f"<style data-version='{file_version}'>\n{css_content}\n{extra_styles}\n</style>",
+            unsafe_allow_html=True,
+        )

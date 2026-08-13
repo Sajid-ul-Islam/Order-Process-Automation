@@ -21,6 +21,7 @@ def get_size_from_name(name: str) -> str:
 def is_bundle_or_combo(name: str = "", sku: str = "", category: str = "") -> bool:
     """Checks if a product, SKU, or category represents a bundle or combo offer."""
     from src.config.constants import OFFER_KEYWORDS
+
     if category and str(category).strip().lower() in ["bundles", "bundle", "combo"]:
         return True
     s_name = str(name).lower() if name else ""

@@ -1,16 +1,20 @@
 # Live Operational Dashboard
 import streamlit as st
-from datetime import datetime, timedelta, timezone
 
+from src.config.constants import bd_now, bd_today
 from src.components.ui.widgets import render_reset_confirm
-from src.config.constants import SHIPPED_STATUSES
 from src.processing.column_detection import find_columns
-from src.processing.data_processing import prepare_granular_data, aggregate_data, filter_shipped_by_slot, filter_all_orders_to_slot
+from src.processing.data_processing import (
+    prepare_granular_data,
+    aggregate_data,
+    filter_shipped_by_slot,
+    filter_all_orders_to_slot,
+)
 from src.components.dashboard.dashboard_output import render_dashboard_output
 from src.components.dashboard.dashboard_metrics import render_operational_metrics
 from src.services.woocommerce.client import load_live_source
 from src.utils.logging import log_system_event
-from src.utils.safe_ops import safe_render, safe_filter
+from src.utils.safe_ops import safe_render
 
 # ── Auto-Sync Fragments ───────────────────────────────────────────────────────
 # Two stable module-level fragments — Streamlit keys fragment identity by the
@@ -18,13 +22,27 @@ from src.utils.safe_ops import safe_render, safe_filter
 # _sync_60s  → Active + Shipped Only (high-frequency, catches new dispatches) — every 30s
 # _sync_180s → All other modes (light background refresh) — every 60s
 
+
 def _compute_live_data_fingerprint(df):
     """Compute deterministic MD5 fingerprint across Order IDs, Order Statuses, and Modified Dates."""
     if df is None or df.empty:
         return ""
     import hashlib
-    status_col = "Order Status" if "Order Status" in df.columns else "Status" if "Status" in df.columns else None
-    mod_col = "mod_dt_parsed" if "mod_dt_parsed" in df.columns else "Order Date Modified" if "Order Date Modified" in df.columns else None
+
+    status_col = (
+        "Order Status"
+        if "Order Status" in df.columns
+        else "Status"
+        if "Status" in df.columns
+        else None
+    )
+    mod_col = (
+        "mod_dt_parsed"
+        if "mod_dt_parsed" in df.columns
+        else "Order Date Modified"
+        if "Order Date Modified" in df.columns
+        else None
+    )
     oid_col = "Order ID" if "Order ID" in df.columns else None
 
     cols = [c for c in [oid_col, status_col, mod_col] if c and c in df.columns]
@@ -77,25 +95,46 @@ def _refresh_core_metrics():
     else:
         m_df = st.session_state.get("wc_prev_df")
 
-    c_df = st.session_state.get("wc_prev_df" if nav_mode == "Today" else "wc_curr_df") if nav_mode != "Backlog" else None
+    c_df = (
+        st.session_state.get("wc_prev_df" if nav_mode == "Today" else "wc_curr_df")
+        if nav_mode != "Backlog"
+        else None
+    )
 
-    order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
+    order_view_mode = (
+        st.session_state.get("live_order_filter", "All Orders")
+        if nav_mode == "Today"
+        else "All Orders"
+    )
     if order_view_mode == "All Orders" and nav_mode == "Today":
         m_df = filter_all_orders_to_slot(m_df, nav_mode)
         if c_df is not None and not c_df.empty:
             c_df = filter_all_orders_to_slot(c_df, "Prev")
     elif order_view_mode == "Shipped":
         from src.processing.data_processing import filter_shipped_by_slot
+
         m_df = filter_shipped_by_slot(m_df, nav_mode, is_comparison=False)
         if c_df is not None and not c_df.empty:
             c_df = filter_shipped_by_slot(c_df, nav_mode, is_comparison=True)
     elif order_view_mode == "Processing":
         if m_df is not None and not m_df.empty:
-            status_col_m = "Order Status" if "Order Status" in m_df.columns else "Status" if "Status" in m_df.columns else None
+            status_col_m = (
+                "Order Status"
+                if "Order Status" in m_df.columns
+                else "Status"
+                if "Status" in m_df.columns
+                else None
+            )
             if status_col_m:
                 m_df = m_df[m_df[status_col_m].astype(str).str.lower() == "processing"]
         if c_df is not None and not c_df.empty:
-            status_col_c = "Order Status" if "Order Status" in c_df.columns else "Status" if "Status" in c_df.columns else None
+            status_col_c = (
+                "Order Status"
+                if "Order Status" in c_df.columns
+                else "Status"
+                if "Status" in c_df.columns
+                else None
+            )
             if status_col_c:
                 c_df = c_df[c_df[status_col_c].astype(str).str.lower() == "processing"]
 
@@ -103,12 +142,33 @@ def _refresh_core_metrics():
         st.caption("⏳ Waiting for data...")
         return
 
-    dummy_mapping = {"name":"Product Name", "cost":"Item Cost", "qty":"Quantity", "date":"Date", "order_id":"Order ID", "phone":"Phone", "sku":"SKU"}
-    wc_raw_mapping = {"name":"Item Name", "cost":"Item Cost", "qty":"Quantity", "date":"Order Date", "order_id":"Order ID", "phone":"Phone (Billing)", "sku":"SKU"}
+    dummy_mapping = {
+        "name": "Product Name",
+        "cost": "Item Cost",
+        "qty": "Quantity",
+        "date": "Date",
+        "order_id": "Order ID",
+        "phone": "Phone",
+        "sku": "SKU",
+    }
+    wc_raw_mapping = {
+        "name": "Item Name",
+        "cost": "Item Cost",
+        "qty": "Quantity",
+        "date": "Order Date",
+        "order_id": "Order ID",
+        "phone": "Phone (Billing)",
+        "sku": "SKU",
+    }
 
     render_operational_metrics(
-        m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping,
-        forecast_val=0, avg_proc_time=0
+        m_df,
+        c_df,
+        nav_mode,
+        dummy_mapping,
+        wc_raw_mapping,
+        forecast_val=0,
+        avg_proc_time=0,
     )
 
 
@@ -156,9 +216,8 @@ def _load_stale_events():
         if entry.get("type") in STALE_EVENT_TYPES
     ]
     df = pd.DataFrame(rows)
-    if df.empty:
-        return df
-    df["ts"] = pd.to_datetime(df["ts"], errors="coerce")
+    from src.processing.data_processing import safe_coerce_datetime_naive
+    df["ts"] = safe_coerce_datetime_naive(df["ts"])
     return df.dropna(subset=["ts"])
 
 
@@ -191,11 +250,15 @@ def render_staleness_monitor():
         c2.metric("Recovered via retry (7d)", len(recovered))
         c3.metric(
             "Recovery rate (7d)",
-            f"{100 * len(recovered) / len(detections):.0f}%" if len(detections) else "—",
+            f"{100 * len(recovered) / len(detections):.0f}%"
+            if len(detections)
+            else "—",
         )
 
         last14 = df[df["ts"] >= now - pd.Timedelta(days=13)]
-        detect14 = last14[last14["type"].isin(["WC_STALE_DATA", "WC_STALE_RETRY"])].copy()
+        detect14 = last14[
+            last14["type"].isin(["WC_STALE_DATA", "WC_STALE_RETRY"])
+        ].copy()
         if not detect14.empty:
             detect14["date"] = detect14["ts"].dt.date
             daily = detect14.groupby("date").size().reset_index(name="Stale syncs")
@@ -207,10 +270,18 @@ def render_staleness_monitor():
                 labels={"date": "Date", "Stale syncs": "Syncs"},
             )
             fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(
+                fig, use_container_width=True, config={"displayModeBar": False}
+            )
 
         outcomes = last14[
-            last14["type"].isin(["WC_STALE_RETRY_RECOVERED", "WC_STALE_RETRY_UNRESOLVED", "WC_STALE_RETRY_FAILED"])
+            last14["type"].isin(
+                [
+                    "WC_STALE_RETRY_RECOVERED",
+                    "WC_STALE_RETRY_UNRESOLVED",
+                    "WC_STALE_RETRY_FAILED",
+                ]
+            )
         ].copy()
         if not outcomes.empty:
             outcomes["date"] = outcomes["ts"].dt.date
@@ -221,7 +292,9 @@ def render_staleness_monitor():
                     "WC_STALE_RETRY_FAILED": "Retry failed",
                 }
             )
-            out_daily = outcomes.groupby(["date", "Outcome"]).size().reset_index(name="Count")
+            out_daily = (
+                outcomes.groupby(["date", "Outcome"]).size().reset_index(name="Count")
+            )
             fig2 = px.bar(
                 out_daily,
                 x="date",
@@ -232,9 +305,13 @@ def render_staleness_monitor():
                 barmode="stack",
             )
             fig2.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
-            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(
+                fig2, use_container_width=True, config={"displayModeBar": False}
+            )
 
-        st.caption(f"Latest event: {df.iloc[-1]['ts']:%Y-%m-%d %H:%M} · {df.iloc[-1]['type']}")
+        st.caption(
+            f"Latest event: {df.iloc[-1]['ts']:%Y-%m-%d %H:%M} · {df.iloc[-1]['type']}"
+        )
 
 
 def render_live_tab():
@@ -278,7 +355,9 @@ def render_live_tab():
             modified_at = ""
 
         if source_name == "LOCAL_SNAPSHOT_FALLBACK" or modified_at == "API_OFFLINE":
-            st.warning("⚠️ **WooCommerce REST API is currently offline or not responding.** Displaying the last saved sales snapshot. Live updates will resume once connection is restored.")
+            st.warning(
+                "⚠️ **WooCommerce REST API is currently offline or not responding.** Displaying the last saved sales snapshot. Live updates will resume once connection is restored."
+            )
 
         # ── Stale Data Warning ──────────────────────────────────────────────
         # The store's REST API has been observed serving cached/older order data
@@ -297,10 +376,13 @@ def render_live_tab():
                 else None
             )
             if df_live is not None and not df_live.empty and mod_col:
-                mods = _pd.to_datetime(df_live[mod_col].astype(str).str.replace("Z", "", regex=False), errors="coerce")
+                mods = _pd.to_datetime(
+                    df_live[mod_col].astype(str).str.replace("Z", "", regex=False),
+                    errors="coerce",
+                )
                 newest = mods.max()
                 if _pd.notnull(newest):
-                    now_bd = datetime.now(timezone(timedelta(hours=6))).replace(tzinfo=None)
+                    now_bd = bd_now().replace(tzinfo=None)
                     age_min = (now_bd - newest).total_seconds() / 60
                     if age_min > 45:
                         st.warning(
@@ -309,21 +391,32 @@ def render_live_tab():
                             f"serving cached data — orders shipped recently may not show here. Clear the WordPress "
                             f"cache (caching plugin / CDN) for `/wp-json/wc/v3/orders`, or wait for the next sync."
                         )
-                        log_system_event("WC_STALE_RENDER", f"newest_mod={newest} age_min={age_min:.0f}")
+                        log_system_event(
+                            "WC_STALE_RENDER",
+                            f"newest_mod={newest} age_min={age_min:.0f}",
+                        )
         except Exception:
             pass
 
         # ── New Order Notification Toast ──────────────────────────────────────
         new_cnt = st.session_state.pop("wc_new_order_count", 0)
         if new_cnt > 0:
-            st.toast(f"🆕 **{new_cnt} new order{'s' if new_cnt > 1 else ''} detected** since last sync!", icon="🔔")
+            st.toast(
+                f"🆕 **{new_cnt} new order{'s' if new_cnt > 1 else ''} detected** since last sync!",
+                icon="🔔",
+            )
     except Exception as api_err:
-        log_system_event("LIVE_API_ERROR", f"Live sync failed, attempting fallback: {api_err}")
+        log_system_event(
+            "LIVE_API_ERROR", f"Live sync failed, attempting fallback: {api_err}"
+        )
         from src.utils.snapshots import load_sales_snapshot
+
         df_snap = load_sales_snapshot()
 
         if df_snap is not None and not df_snap.empty:
-            st.warning("⚠️ **WooCommerce REST API is currently offline or not responding.** Displaying the last saved sales snapshot. Live updates will resume once connection is restored.")
+            st.warning(
+                "⚠️ **WooCommerce REST API is currently offline or not responding.** Displaying the last saved sales snapshot. Live updates will resume once connection is restored."
+            )
             df_live = df_snap
             source_name = "LOCAL_SNAPSHOT_FALLBACK"
             modified_at = "OFFLINE_MODE"
@@ -331,11 +424,18 @@ def render_live_tab():
         else:
             log_system_event("LIVE_FILE_ERROR", str(api_err))
             err_str = str(api_err).lower()
-            if any(kw in err_str for kw in ["connection", "timeout", "502", "503", "500", "resolve"]):
-                st.error("🌐 **Connection Error:** Cannot reach WooCommerce. Check your network or server status.")
+            if any(
+                kw in err_str
+                for kw in ["connection", "timeout", "502", "503", "500", "resolve"]
+            ):
+                st.error(
+                    "🌐 **Connection Error:** Cannot reach WooCommerce. Check your network or server status."
+                )
             else:
                 st.error(f"⚠️ **Sync Error:** {api_err}")
-            st.info("💡 Use **Sales Data Ingestion** to upload a local CSV/Excel export as a fallback.")
+            st.info(
+                "💡 Use **Sales Data Ingestion** to upload a local CSV/Excel export as a fallback."
+            )
             return
 
     # ── Multi-Mode Shift Navigation & Filtering ───────────────────────────────
@@ -350,16 +450,20 @@ def render_live_tab():
         df_live = st.session_state.wc_curr_df
 
     # Prepare granular data early to check for cashback
-    df_standard, timeframe = prepare_granular_data(df_live, find_columns(df_live) if df_live is not None else {})
-    has_cashback = "Cashback Discount" in df_standard.columns and (df_standard["Cashback Discount"] > 0).any()
+    df_standard, timeframe = prepare_granular_data(
+        df_live, find_columns(df_live) if df_live is not None else {}
+    )
+    has_cashback = (
+        "Cashback Discount" in df_standard.columns
+        and (df_standard["Cashback Discount"] > 0).any()
+    )
 
     # ── Header: Auto-Sync, Date Range, Cashback Toggle, Refresh button ───────
     c1, c2, c3, c4, c5, c6 = st.columns([1.1, 2.1, 2.1, 0.7, 1.0, 0.5])
 
     # Column 2: Date Range Picker
     with c1:
-        tz_bd = timezone(timedelta(hours=6))
-        today_bd = datetime.now(tz_bd).date()
+        today_bd = bd_today()
         curr_range = st.session_state.get("live_custom_range", (today_bd, today_bd))
 
         sel_dates = st.date_input(
@@ -387,7 +491,12 @@ def render_live_tab():
                 st.rerun()
 
         if curr_range and (curr_range[0] != today_bd or curr_range[1] != today_bd):
-            if st.button("❌ Clear Range", key="btn_clear_custom_range", type="secondary", use_container_width=True):
+            if st.button(
+                "❌ Clear Range",
+                key="btn_clear_custom_range",
+                type="secondary",
+                use_container_width=True,
+            ):
                 st.session_state["live_custom_range"] = (today_bd, today_bd)
                 if "wc_sync_start_date" in st.session_state:
                     del st.session_state["wc_sync_start_date"]
@@ -398,12 +507,14 @@ def render_live_tab():
     # Column 3: Operational Mode & Cashback Toggle
     with c4:
         if has_cashback:
-            st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True) # Vertical alignment helper
+            st.markdown(
+                '<div style="height: 5px;"></div>', unsafe_allow_html=True
+            )  # Vertical alignment helper
             st.toggle(
                 "⚖️ Cashback",
                 value=st.session_state.get("live_compare_cashback", False),
                 key="live_compare_cashback",
-                help="Toggle the Revenue vs Cashback/Fee breakdown section at the bottom of the page."
+                help="Toggle the Revenue vs Cashback/Fee breakdown section at the bottom of the page.",
             )
 
     # Column 4 & 5: Main Dashboard Filters (Op Mode, View, Chart Type)
@@ -417,16 +528,24 @@ def render_live_tab():
 
         if hasattr(st, "pills"):
             selected_mode = st.pills(
-                "Op Mode", mode_options, default=mode_options[current_idx],
+                "Op Mode",
+                mode_options,
+                default=mode_options[current_idx],
                 format_func=lambda x: f"{mode_icons.get(x, '')} {x}".strip(),
-                key="banner_op_mode_pills", label_visibility="collapsed"
+                key="banner_op_mode_pills",
+                label_visibility="collapsed",
             )
-            if not selected_mode: selected_mode = mode_options[current_idx]
-        else: # Fallback for older Streamlit versions
+            if not selected_mode:
+                selected_mode = mode_options[current_idx]
+        else:  # Fallback for older Streamlit versions
             selected_mode = st.radio(
-                "Op Mode", mode_options, index=current_idx, horizontal=True,
+                "Op Mode",
+                mode_options,
+                index=current_idx,
+                horizontal=True,
                 format_func=lambda x: f"{mode_icons.get(x, '')} {x}".strip(),
-                key="banner_op_mode_radio", label_visibility="collapsed"
+                key="banner_op_mode_radio",
+                label_visibility="collapsed",
             )
 
         new_nav = mode_to_state[selected_mode]
@@ -440,16 +559,28 @@ def render_live_tab():
             opts_filter = ["All Orders", "Shipped", "Processing"]
             filter_icons = {"All Orders": "📦", "Shipped": "🚚", "Processing": "⚙️"}
             curr_filter = st.session_state.get("live_order_filter", "All Orders")
-            if curr_filter not in opts_filter: curr_filter = "All Orders"
+            if curr_filter not in opts_filter:
+                curr_filter = "All Orders"
 
             if hasattr(st, "pills"):
                 sel_filter = st.pills(
-                    "Shift View", opts_filter, default=curr_filter,
+                    "Shift View",
+                    opts_filter,
+                    default=curr_filter,
                     format_func=lambda x: f"{filter_icons.get(x, '')} {x}".strip(),
-                    key="live_order_filter_pills", label_visibility="collapsed"
+                    key="live_order_filter_pills",
+                    label_visibility="collapsed",
                 )
             else:
-                sel_filter = st.radio("Shift View", opts_filter, index=opts_filter.index(curr_filter), horizontal=True, format_func=lambda x: f"{filter_icons.get(x, '')} {x}".strip(), key="live_order_filter_radio", label_visibility="collapsed")
+                sel_filter = st.radio(
+                    "Shift View",
+                    opts_filter,
+                    index=opts_filter.index(curr_filter),
+                    horizontal=True,
+                    format_func=lambda x: f"{filter_icons.get(x, '')} {x}".strip(),
+                    key="live_order_filter_radio",
+                    label_visibility="collapsed",
+                )
 
             if sel_filter and sel_filter != curr_filter:
                 st.session_state.live_order_filter = sel_filter
@@ -460,8 +591,14 @@ def render_live_tab():
 
     # Column 5: Auto-Sync Label
     with c5:
-        st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True) # Vertical alignment helper
-        order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
+        st.markdown(
+            '<div style="height: 5px;"></div>', unsafe_allow_html=True
+        )  # Vertical alignment helper
+        order_view_mode = (
+            st.session_state.get("live_order_filter", "All Orders")
+            if nav_mode == "Today"
+            else "All Orders"
+        )
         if nav_mode == "Today" and order_view_mode == "Shipped":
             _sync_60s()
         else:
@@ -469,14 +606,26 @@ def render_live_tab():
 
     # Column 6: Manual Refresh Button
     with c6:
-        st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True) # Vertical alignment helper
-        if st.button("🔄", use_container_width=True, key="btn_refresh_newly_shipped", type="secondary", help="Force a manual data refresh"):
+        st.markdown(
+            '<div style="height: 5px;"></div>', unsafe_allow_html=True
+        )  # Vertical alignment helper
+        if st.button(
+            "🔄",
+            use_container_width=True,
+            key="btn_refresh_newly_shipped",
+            type="secondary",
+            help="Force a manual data refresh",
+        ):
             load_live_source(force_refresh=True)
             st.toast("⚡ Data refreshed!")
             st.rerun()
 
     # ── Final Data Filtering & Sanity Checks ──────────────────────────────────
-    order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
+    order_view_mode = (
+        st.session_state.get("live_order_filter", "All Orders")
+        if nav_mode == "Today"
+        else "All Orders"
+    )
 
     if df_live is None or df_live.empty:
         st.warning(f"No data found for the **{nav_mode}** slot.")
@@ -486,7 +635,13 @@ def render_live_tab():
         return
 
     # ── Apply Order View Filter ───────────────────────────────────────────────
-    status_col = "Order Status" if "Order Status" in df_live.columns else "Status" if "Status" in df_live.columns else None
+    status_col = (
+        "Order Status"
+        if "Order Status" in df_live.columns
+        else "Status"
+        if "Status" in df_live.columns
+        else None
+    )
 
     if status_col:
         if order_view_mode == "All Orders" and nav_mode == "Today":
@@ -500,7 +655,9 @@ def render_live_tab():
                 st.info(f"📦 No shipped orders found in the **{nav_mode}** slot.")
                 return
         elif order_view_mode == "Processing":
-            df_live = df_live[df_live[status_col].astype(str).str.lower() == "processing"]
+            df_live = df_live[
+                df_live[status_col].astype(str).str.lower() == "processing"
+            ]
             if df_live is None or df_live.empty:
                 st.info(f"📋 No processing orders found in the **{nav_mode}** slot.")
                 return
@@ -544,7 +701,7 @@ def render_live_tab():
             str(source_name) if source_name is not None else None,
             str(modified_at) if modified_at is not None else None,
             granular_df=df_standard,
-            show_core_metrics=False
+            show_core_metrics=False,
         ),
         fallback_msg="Dashboard rendering encountered an error.",
     )
@@ -552,7 +709,10 @@ def render_live_tab():
     # ── Revenue vs. Cashback Impact Analysis ─────────────────────────────────
     if has_cashback and st.session_state.get("live_compare_cashback", False):
         st.divider()
-        from src.components.dashboard.dashboard_metrics import render_revenue_cashback_comparison_section
+        from src.components.dashboard.dashboard_metrics import (
+            render_revenue_cashback_comparison_section,
+        )
+
         render_revenue_cashback_comparison_section(df_standard, raw_df=df_live)
 
     # ── Dispatch Export (Shipped Only mode only) ──────────────────────────────
@@ -563,8 +723,6 @@ def render_live_tab():
 def _render_dispatch_export():
     """Render today's full dispatch export: shipped + confirmed + waiting orders."""
     import pandas as pd
-    from datetime import datetime, timedelta, timezone
-
     raw_df = st.session_state.get("wc_curr_df")
     if raw_df is None or raw_df.empty:
         return
@@ -572,30 +730,47 @@ def _render_dispatch_export():
     raw_df = raw_df.copy()
 
     from src.processing.data_processing import safe_coerce_datetime_naive
+
     if "mod_dt_parsed" in raw_df.columns:
         raw_df["mod_dt_parsed"] = safe_coerce_datetime_naive(raw_df["mod_dt_parsed"])
     if "dt_parsed" in raw_df.columns:
         raw_df["dt_parsed"] = safe_coerce_datetime_naive(raw_df["dt_parsed"])
 
-    tz_bd = timezone(timedelta(hours=6))
-    today_bd = datetime.now(tz_bd).date()
+    today_bd = bd_today()
 
-    status_col = "Order Status" if "Order Status" in raw_df.columns else "Status" if "Status" in raw_df.columns else None
+    status_col = (
+        "Order Status"
+        if "Order Status" in raw_df.columns
+        else "Status"
+        if "Status" in raw_df.columns
+        else None
+    )
     if status_col is None:
         return
 
     from src.processing.data_processing import filter_shipped_by_slot
-    shipped_today = filter_shipped_by_slot(raw_df, nav_mode="Today", is_comparison=False)
+
+    shipped_today = filter_shipped_by_slot(
+        raw_df, nav_mode="Today", is_comparison=False
+    )
 
     if shipped_today is None or shipped_today.empty:
         return
 
     keep_cols = [
-        c for c in [
-            "Order ID", "Full Name (Billing)", "Phone (Billing)",
-            status_col, "Pathao Consignment ID", "mod_dt_parsed", "dt_parsed",
-            "Shipping Address 1", "Shipping City",
-        ] if c in raw_df.columns
+        c
+        for c in [
+            "Order ID",
+            "Full Name (Billing)",
+            "Phone (Billing)",
+            status_col,
+            "Pathao Consignment ID",
+            "mod_dt_parsed",
+            "dt_parsed",
+            "Shipping Address 1",
+            "Shipping City",
+        ]
+        if c in raw_df.columns
     ]
 
     def _dedup(df, label):
@@ -615,7 +790,9 @@ def _render_dispatch_export():
     # Sort chronologically by modification date (most recent dispatches first)
     sort_cols = [c for c in ["mod_dt_parsed", "dt_parsed"] if c in export_df.columns]
     if sort_cols:
-        export_df = export_df.sort_values(by=sort_cols, ascending=False, na_position="last").reset_index(drop=True)
+        export_df = export_df.sort_values(
+            by=sort_cols, ascending=False, na_position="last"
+        ).reset_index(drop=True)
 
     rename_map = {
         "Full Name (Billing)": "Customer",
@@ -624,16 +801,29 @@ def _render_dispatch_export():
         "mod_dt_parsed": "Last Modified",
         "dt_parsed": "Order Date",
     }
-    export_df = export_df.rename(columns={k: v for k, v in rename_map.items() if k in export_df.columns})
+    export_df = export_df.rename(
+        columns={k: v for k, v in rename_map.items() if k in export_df.columns}
+    )
 
-    col_order = ["Export Tag", "Order ID", "Customer", "Phone", "Status",
-                 "Pathao Consignment ID", "Last Modified", "Order Date",
-                 "Shipping Address 1", "Shipping City"]
+    col_order = [
+        "Export Tag",
+        "Order ID",
+        "Customer",
+        "Phone",
+        "Status",
+        "Pathao Consignment ID",
+        "Last Modified",
+        "Order Date",
+        "Shipping Address 1",
+        "Shipping City",
+    ]
     export_df = export_df[[c for c in col_order if c in export_df.columns]]
 
     for dt_col in ["Last Modified", "Order Date"]:
         if dt_col in export_df.columns:
-            export_df[dt_col] = safe_coerce_datetime_naive(export_df[dt_col]).dt.strftime("%Y-%m-%d %I:%M %p")
+            export_df[dt_col] = safe_coerce_datetime_naive(
+                export_df[dt_col]
+            ).dt.strftime("%Y-%m-%d %I:%M %p")
 
     st.divider()
     with st.expander(
@@ -642,13 +832,21 @@ def _render_dispatch_export():
     ):
         st.caption("Orders shipped during today's shift · one row per Order ID.")
 
-        search_q = st.text_input("🔍 Search by Order ID, Name, or Phone", key="dispatch_export_search").strip()
+        search_q = st.text_input(
+            "🔍 Search by Order ID, Name, or Phone", key="dispatch_export_search"
+        ).strip()
         display_df = export_df.copy()
         if search_q:
             mask = (
-                display_df["Order ID"].astype(str).str.contains(search_q, case=False, na=False)
-                | display_df.get("Customer", pd.Series(dtype=str)).astype(str).str.contains(search_q, case=False, na=False)
-                | display_df.get("Phone", pd.Series(dtype=str)).astype(str).str.contains(search_q, case=False, na=False)
+                display_df["Order ID"]
+                .astype(str)
+                .str.contains(search_q, case=False, na=False)
+                | display_df.get("Customer", pd.Series(dtype=str))
+                .astype(str)
+                .str.contains(search_q, case=False, na=False)
+                | display_df.get("Phone", pd.Series(dtype=str))
+                .astype(str)
+                .str.contains(search_q, case=False, na=False)
             )
             display_df = display_df[mask]
 
@@ -668,7 +866,7 @@ def _render_dispatch_export():
             },
         )
 
-        now_str = datetime.now(tz_bd).strftime("%Y%m%d_%H%M")
+        now_str = bd_now().strftime("%Y%m%d_%H%M")
         st.download_button(
             label=f"⬇️ Download Dispatch List ({len(export_df)} orders) — CSV",
             data=export_df.to_csv(index=False).encode("utf-8"),

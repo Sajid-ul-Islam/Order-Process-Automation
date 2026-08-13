@@ -1,6 +1,9 @@
 import streamlit as st
 
-def render_premium_header(title: str, subtitle: str, icon: str = "🚀", active_badge: bool = True):
+
+def render_premium_header(
+    title: str, subtitle: str, icon: str = "🚀", active_badge: bool = True
+):
     """
     Renders a unified glassmorphism gradient header banner across the DEEN-OPS app.
     """
@@ -39,6 +42,7 @@ def generate_metric_card(label: str, value: str, icon: str = "") -> str:
     </div>
     """
 
+
 def render_metric_grid(metrics: list):
     """
     Renders a grid of metric cards.
@@ -46,15 +50,8 @@ def render_metric_grid(metrics: list):
     """
     html = '<div class="metric-container">'
     for m in metrics:
-        html += generate_metric_card(m.get("label", ""), str(m.get("value", "")), m.get("icon", ""))
-    html += '</div>'
+        html += generate_metric_card(
+            m.get("label", ""), str(m.get("value", "")), m.get("icon", "")
+        )
+    html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
-
-def apply_standard_dataframe(df, **kwargs):
-    """
-    A standardized wrapper for st.dataframe applying common DEEN-OPS visual aesthetics.
-    """
-    kwargs.setdefault("use_container_width", True)
-    kwargs.setdefault("hide_index", True)
-    kwargs.setdefault("height", 450)
-    return st.dataframe(df, **kwargs)

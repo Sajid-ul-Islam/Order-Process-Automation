@@ -32,7 +32,10 @@ def _rotate_error_logs() -> None:
         LOG_MAX_SIZE_BYTES = 1 * 1024 * 1024  # 1 MB
         LOGS_TO_KEEP = 200
 
-        if os.path.exists(ERROR_LOG_FILE) and os.path.getsize(ERROR_LOG_FILE) > LOG_MAX_SIZE_BYTES:
+        if (
+            os.path.exists(ERROR_LOG_FILE)
+            and os.path.getsize(ERROR_LOG_FILE) > LOG_MAX_SIZE_BYTES
+        ):
             with open(ERROR_LOG_FILE, "r+", encoding="utf-8") as f:
                 logs = json.load(f)
                 if len(logs) > LOGS_TO_KEEP:
@@ -174,16 +177,20 @@ def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> N
             value=st.session_state.get("show_animation", True),
         )
 
-
-
         # ── Auto-refresh interval ──────────────────────────────────────────
         st.caption("Data Sync")
         refresh_opts = {
-            "15s": 15, "30s": 30, "60s": 60,
-            "2m": 120, "5m": 300, "Manual": 0,
+            "15s": 15,
+            "30s": 30,
+            "60s": 60,
+            "2m": 120,
+            "5m": 300,
+            "Manual": 0,
         }
         current_val = st.session_state.get("wc_refresh_interval", 30)
-        current_label = next((k for k, v in refresh_opts.items() if v == current_val), "30s")
+        current_label = next(
+            (k for k, v in refresh_opts.items() if v == current_val), "30s"
+        )
         chosen_label = st.selectbox(
             "Auto-refresh interval",
             options=list(refresh_opts.keys()),
@@ -196,6 +203,7 @@ def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> N
             st.session_state["wc_refresh_interval"] = new_interval
             # Clear cache immediately so new interval takes effect
             from src.services.woocommerce.client import load_from_woocommerce
+
             load_from_woocommerce.clear()
             st.rerun()
 
@@ -203,13 +211,18 @@ def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> N
         last_sync = st.session_state.get("live_sync_time")
         if last_sync:
             elapsed_m = int((datetime.now() - last_sync).total_seconds() / 60)
-            sync_label = f"Last sync: {elapsed_m}m ago" if elapsed_m > 0 else "Last sync: Just now"
+            sync_label = (
+                f"Last sync: {elapsed_m}m ago"
+                if elapsed_m > 0
+                else "Last sync: Just now"
+            )
         else:
             sync_label = "Not synced yet"
         st.caption(sync_label)
 
         if st.button("🔄 Refresh Now", use_container_width=True, type="primary"):
             from src.services.woocommerce.client import load_live_source
+
             try:
                 load_live_source(force_refresh=True)
                 st.toast("⚡ Live data refreshed!")
@@ -264,22 +277,29 @@ def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> N
                 st.rerun()
 
 
-def _render_sidebar(is_auth_on: bool, config_issues: list[str], nav_items: list[str], default_nav: str) -> str:
+def _render_sidebar(
+    is_auth_on: bool, config_issues: list[str], nav_items: list[str], default_nav: str
+) -> str:
     """Render a clean, streamlined, and intuitive sidebar."""
     with st.sidebar:
         _render_sidebar_branding()
         _render_sidebar_user_context(is_auth_on)
 
-        st.link_button("🌐 Launch DEEN BI", CLOUD_APP_URL, use_container_width=True, type="primary")
+        st.link_button(
+            "🌐 Launch DEEN BI", CLOUD_APP_URL, use_container_width=True, type="primary"
+        )
 
         # ── Chart Color Theme Selector (Placed right after Launch DEEN BI) ──
         from src.config.ui_config import CHART_THEMES
+
         theme_names = list(CHART_THEMES.keys())
         current_theme = st.session_state.get("chart_theme", "✨ Emerald Cyberpunk")
         chosen_theme = st.selectbox(
             "🎨 Chart Theme",
             options=theme_names,
-            index=theme_names.index(current_theme) if current_theme in theme_names else 0,
+            index=theme_names.index(current_theme)
+            if current_theme in theme_names
+            else 0,
             help="Select color palette theme for charts and metrics across the app.",
             key="sidebar_theme_selector",
         )
@@ -296,7 +316,9 @@ def _render_sidebar(is_auth_on: bool, config_issues: list[str], nav_items: list[
         st.divider()
 
         with st.expander("📅 Operational Shift Slots", expanded=False):
-            from src.components.ui.calendar_slots import render_operational_slots_calendar
+            from src.components.ui.calendar_slots import (
+                render_operational_slots_calendar,
+            )
 
             render_operational_slots_calendar()
 
@@ -317,7 +339,9 @@ def _render_header(selected_nav: str) -> None:
 
     banner = st.session_state.get("header_status_banner", "")
     if banner:
-        st.markdown(f'<div style="margin-top:8px;">{banner}</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="margin-top:8px;">{banner}</div>', unsafe_allow_html=True
+        )
 
 
 # ── Page routing ────────────────────────────────────────────────────────────
@@ -333,7 +357,11 @@ def _route_page(selected_nav: str) -> None:
 
         safe_render(render_app_banner, fallback_msg="App banner unavailable.")
         safe_render(render_live_tab, fallback_msg="Live Dashboard unavailable.")
-    elif selected_nav in ["\U0001f4e6 Bulk Order Processer", "\U0001f4e6 Bulk Order Processor", "\U0001f4e6 Pathao Processor"]:
+    elif selected_nav in [
+        "\U0001f4e6 Bulk Order Processer",
+        "\U0001f4e6 Bulk Order Processor",
+        "\U0001f4e6 Pathao Processor",
+    ]:
         from src.pages.pathao_orders import render_pathao_tab
 
         safe_render(render_pathao_tab, fallback_msg="Pathao Processor unavailable.")
@@ -345,10 +373,12 @@ def _route_page(selected_nav: str) -> None:
         from src.pages.excel_merger import render_excel_merger_tab
         from src.pages.inventory_distribution import render_distribution_tab
 
-        dist_tab, merge_tab = st.tabs([
-            ":material/inventory_2: Distribution Matrix",
-            ":material/list_alt: Product Listing",
-        ])
+        dist_tab, merge_tab = st.tabs(
+            [
+                ":material/inventory_2: Distribution Matrix",
+                ":material/list_alt: Product Listing",
+            ]
+        )
         with dist_tab:
             safe_render(
                 lambda: render_distribution_tab(
@@ -357,15 +387,21 @@ def _route_page(selected_nav: str) -> None:
                 fallback_msg="Inventory Distribution unavailable.",
             )
         with merge_tab:
-            safe_render(render_excel_merger_tab, fallback_msg="Product Listing unavailable.")
+            safe_render(
+                render_excel_merger_tab, fallback_msg="Product Listing unavailable."
+            )
     elif selected_nav == "\U0001f4e6 Current Stock Analytics":
         from src.pages.stock_analytics import render_stock_analytics_tab
 
-        safe_render(render_stock_analytics_tab, fallback_msg="Stock Analytics unavailable.")
+        safe_render(
+            render_stock_analytics_tab, fallback_msg="Stock Analytics unavailable."
+        )
     elif selected_nav == "\U0001f9e9 Delivery Data Parser":
         from src.pages.delivery_parser import render_fuzzy_parser_tab
 
-        safe_render(render_fuzzy_parser_tab, fallback_msg="Delivery Data Parser unavailable.")
+        safe_render(
+            render_fuzzy_parser_tab, fallback_msg="Delivery Data Parser unavailable."
+        )
     elif selected_nav == "\U0001f4e5 Sales Data Ingestion":
         from src.pages.sales_ingestion import render_manual_tab
 
@@ -373,7 +409,9 @@ def _route_page(selected_nav: str) -> None:
     elif selected_nav == "\U0001f4c9 Return Analytics":
         from src.pages.return_analytics import render_return_analytics_tab
 
-        safe_render(render_return_analytics_tab, fallback_msg="Return Analytics unavailable.")
+        safe_render(
+            render_return_analytics_tab, fallback_msg="Return Analytics unavailable."
+        )
     elif selected_nav == "\U0001f680 Data Pilot":
         from src.pages.data_pilot import render_ai_pilot_page
 
@@ -381,7 +419,10 @@ def _route_page(selected_nav: str) -> None:
     elif selected_nav == "\U0001f6d2 Order tracking":
         from src.pages.woocommerce_orders import render_woocommerce_orders_tab
 
-        safe_render(render_woocommerce_orders_tab, fallback_msg="WooCommerce Orders unavailable.")
+        safe_render(
+            render_woocommerce_orders_tab,
+            fallback_msg="WooCommerce Orders unavailable.",
+        )
 
 
 # ── Public entry point ──────────────────────────────────────────────────────
@@ -408,7 +449,8 @@ def run_app() -> None:
 
     # Remove hidden items from nav list (mutate in-place)
     PRIMARY_NAV[:] = [
-        item for item in PRIMARY_NAV
+        item
+        for item in PRIMARY_NAV
         if "Excel Merger" not in item and "Product Listing" not in item
     ]
 
@@ -440,9 +482,12 @@ def run_app() -> None:
         render_bike_animation()
 
     # ── Page routing with smooth transition wrapper ──────────────────────
-    st.markdown(f'<div class="page-view-wrapper page-nav-{abs(hash(selected_nav))}">', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="page-view-wrapper page-nav-{abs(hash(selected_nav))}">',
+        unsafe_allow_html=True,
+    )
     _route_page(selected_nav)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # ── Re-render header with any injected content ─────────────────────────
     with header_container:

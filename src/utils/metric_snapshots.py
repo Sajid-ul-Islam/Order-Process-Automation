@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from src.config.constants import METRIC_SNAPSHOT_DIR
+from src.config.constants import METRIC_SNAPSHOT_DIR, bd_now
 
 
 def save_metric_snapshot(metrics: dict[str, Any], path: str | None = None) -> str:
@@ -22,8 +21,7 @@ def save_metric_snapshot(metrics: dict[str, Any], path: str | None = None) -> st
         The file path where the snapshot was saved.
     """
     if path is None:
-        tz_bd = timezone(timedelta(hours=6))
-        ts = datetime.now(tz_bd).strftime("%Y%m%d_%H%M%S")
+        ts = bd_now().strftime("%Y%m%d_%H%M%S")
         path = os.path.join(METRIC_SNAPSHOT_DIR, f"snapshot_{ts}.json")
 
     with open(path, "w", encoding="utf-8") as f:

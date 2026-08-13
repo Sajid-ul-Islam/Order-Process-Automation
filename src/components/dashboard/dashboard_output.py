@@ -1,41 +1,67 @@
 """Thin orchestrator for dashboard output — delegates to sub-modules."""
 
 import pandas as pd
-import plotly.express as px
 import streamlit as st
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
-from src.processing.data_processing import get_dispatch_metrics, generate_executive_briefing
-from src.components.dashboard.dashboard_charts import render_category_charts, render_spotlight
+from src.config.constants import bd_now
+from src.processing.data_processing import (
+    get_dispatch_metrics,
+    generate_executive_briefing,
+)
+from src.components.dashboard.dashboard_charts import (
+    render_category_charts,
+    render_spotlight,
+)
 from src.components.dashboard.dashboard_filters import render_ingestion_filters
 from src.components.dashboard.dashboard_metrics import render_operational_metrics
-from src.services.woocommerce.client import get_items_sold_label
 from src.services.exports.excel_exporter import export_to_styled_excel
 from src.utils.metric_history import load_snapshot_history
 
 
-
-def _render_operational_cycle_metrics(m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping, render_core_metrics=True):
+def _render_operational_cycle_metrics(
+    m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping, render_core_metrics=True
+):
     """Render operational cycle metrics section (Today/Prev/Backlog mode)."""
     if m_df is None:
         return None, None, None, {}, pd.DataFrame()
 
     if m_df.empty:
-        m_df = pd.DataFrame(columns=["Quantity", "Item Cost", "Order ID", "Order Status"])
+        m_df = pd.DataFrame(
+            columns=["Quantity", "Item Cost", "Order ID", "Order Status"]
+        )
 
-    order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
-    status_col_m = "Order Status" if "Order Status" in m_df.columns else "Status" if "Status" in m_df.columns else None
+    order_view_mode = (
+        st.session_state.get("live_order_filter", "All Orders")
+        if nav_mode == "Today"
+        else "All Orders"
+    )
+    status_col_m = (
+        "Order Status"
+        if "Order Status" in m_df.columns
+        else "Status"
+        if "Status" in m_df.columns
+        else None
+    )
     status_col_c = None
     if c_df is not None:
-        status_col_c = "Order Status" if "Order Status" in c_df.columns else "Status" if "Status" in c_df.columns else None
+        status_col_c = (
+            "Order Status"
+            if "Order Status" in c_df.columns
+            else "Status"
+            if "Status" in c_df.columns
+            else None
+        )
 
     if order_view_mode == "All Orders" and nav_mode == "Today":
         from src.processing.data_processing import filter_all_orders_to_slot
+
         m_df = filter_all_orders_to_slot(m_df, nav_mode)
         if c_df is not None and not c_df.empty:
             c_df = filter_all_orders_to_slot(c_df, "Prev")
     elif order_view_mode == "Shipped Only":
         from src.processing.data_processing import filter_shipped_by_slot
+
         m_df = filter_shipped_by_slot(m_df, nav_mode, is_comparison=False)
         if c_df is not None:
             c_df = filter_shipped_by_slot(c_df, nav_mode, is_comparison=True)
@@ -48,11 +74,18 @@ def _render_operational_cycle_metrics(m_df, c_df, nav_mode, dummy_mapping, wc_ra
     if render_core_metrics:
         st.subheader("Core Metrics")
         drill, summ, top, basket, active_df = render_operational_metrics(
-            m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping, forecast_val=0, avg_proc_time=0
+            m_df,
+            c_df,
+            nav_mode,
+            dummy_mapping,
+            wc_raw_mapping,
+            forecast_val=0,
+            avg_proc_time=0,
         )
     else:
         # Still compute the values needed downstream without rendering the cards
         from src.processing.data_processing import prepare_granular_data, aggregate_data
+
         m_df_std, _ = prepare_granular_data(m_df, wc_raw_mapping)
         if not m_df_std.empty:
             drill, summ, top, basket = aggregate_data(m_df_std, dummy_mapping)
@@ -65,19 +98,40 @@ def _render_operational_cycle_metrics(m_df, c_df, nav_mode, dummy_mapping, wc_ra
 
 def _render_ingestion_mode_metrics(granular_df, dummy_mapping, last_updated):
     """Render ingestion mode metrics and filters."""
-    f_drill, f_summ, f_top, f_basket, f_active = render_ingestion_filters(granular_df, dummy_mapping)
-    drill, summ, top, basket = (f_drill, f_summ, f_top, f_basket) if f_summ is not None else (None, None, None, None)
+    f_drill, f_summ, f_top, f_basket, f_active = render_ingestion_filters(
+        granular_df, dummy_mapping
+    )
+    drill, summ, top, basket = (
+        (f_drill, f_summ, f_top, f_basket)
+        if f_summ is not None
+        else (None, None, None, None)
+    )
     active_df = f_active
 
     if granular_df is not None and summ is not None:
         with st.container():
-            st.subheader("Core Metrics") # This subheader is now rendered by render_operational_metrics
+            st.subheader(
+                "Core Metrics"
+            )  # This subheader is now rendered by render_operational_metrics
             # Ingestion mode uses the same KPI card renderer as the live dashboard for consistency.
             # We pass the filtered `active_df` as the main dataframe (`m_df`) and `None` for comparison (`c_df`).
             # The `nav_mode` is set to a neutral value like "Ingestion" to avoid comparison logic.
-            from src.components.dashboard.dashboard_metrics import render_operational_metrics
-            wc_raw_mapping = {"name":"Item Name", "cost":"Item Cost", "qty":"Quantity", "date":"Order Date", "order_id":"Order ID", "phone":"Phone (Billing)", "sku":"SKU"}
-            render_operational_metrics(active_df, None, "Ingestion", dummy_mapping, wc_raw_mapping)
+            from src.components.dashboard.dashboard_metrics import (
+                render_operational_metrics,
+            )
+
+            wc_raw_mapping = {
+                "name": "Item Name",
+                "cost": "Item Cost",
+                "qty": "Quantity",
+                "date": "Order Date",
+                "order_id": "Order ID",
+                "phone": "Phone (Billing)",
+                "sku": "SKU",
+            }
+            render_operational_metrics(
+                active_df, None, "Ingestion", dummy_mapping, wc_raw_mapping
+            )
             st.divider()
 
     return drill, summ, top, basket, active_df
@@ -96,28 +150,43 @@ def _render_charts(summ, total_rev=None):
         st.subheader("📊 Performance Outlook & Category Analytics")
 
     chart_summ = summ.copy()
-    
+
     with col_toggle:
         # Use a toggle for view selection, placed in the second column
         show_sub_cat = st.toggle(
             "Show Sub-Category View",
-            value=st.session_state.get("perf_outlook_view", "Sub-Category") == "Sub-Category",
+            value=st.session_state.get("perf_outlook_view", "Sub-Category")
+            == "Sub-Category",
             key="perf_outlook_toggle",
-            help="Toggle between high-level Category view (off) and granular Sub-Category view (on)."
+            help="Toggle between high-level Category view (off) and granular Sub-Category view (on).",
         )
-    
+
     new_view = "Sub-Category" if show_sub_cat else "Category"
     st.session_state["perf_outlook_view"] = new_view
     display_col = new_view
 
     if display_col == "Category" and "Category" in chart_summ.columns:
-        chart_summ = chart_summ.groupby("Category", as_index=False).agg({"Total Qty": "sum", "Total Amount": "sum"})
+        chart_summ = chart_summ.groupby("Category", as_index=False).agg(
+            {"Total Qty": "sum", "Total Amount": "sum"}
+        )
 
     # Prepare metrics summary for inline placement inside chart whitespace
     metrics_summary = {}
-    top_rev_cat = chart_summ.sort_values("Total Amount", ascending=False).iloc[0] if not chart_summ.empty else None
-    top_vol_cat = chart_summ.sort_values("Total Qty", ascending=False).iloc[0] if not chart_summ.empty else None
-    tot_rev = total_rev if (total_rev is not None and total_rev > 0) else chart_summ["Total Amount"].sum()
+    top_rev_cat = (
+        chart_summ.sort_values("Total Amount", ascending=False).iloc[0]
+        if not chart_summ.empty
+        else None
+    )
+    top_vol_cat = (
+        chart_summ.sort_values("Total Qty", ascending=False).iloc[0]
+        if not chart_summ.empty
+        else None
+    )
+    tot_rev = (
+        total_rev
+        if (total_rev is not None and total_rev > 0)
+        else chart_summ["Total Amount"].sum()
+    )
     tot_vol = chart_summ["Total Qty"].sum()
 
     if top_rev_cat is not None:
@@ -137,18 +206,26 @@ def _render_charts(summ, total_rev=None):
     metrics_summary["cat_cnt"] = len(chart_summ)
     metrics_summary["avg_price"] = (tot_rev / tot_vol) if tot_vol > 0 else 0
 
-    sorted_cats = chart_summ.sort_values("Total Amount", ascending=False)[display_col].tolist() if not chart_summ.empty else []
+    sorted_cats = (
+        chart_summ.sort_values("Total Amount", ascending=False)[display_col].tolist()
+        if not chart_summ.empty
+        else []
+    )
     from src.config.ui_config import CHART_THEMES
+
     theme_name = st.session_state.get("chart_theme", "✨ Emerald Cyberpunk")
     theme_cfg = CHART_THEMES.get(theme_name, CHART_THEMES["✨ Emerald Cyberpunk"])
     palette = theme_cfg["colors"]
-    color_map = {
-        cat: palette[i % len(palette)]
-        for i, cat in enumerate(sorted_cats)
-    }
+    color_map = {cat: palette[i % len(palette)] for i, cat in enumerate(sorted_cats)}
 
     if not chart_summ.empty:
-        render_category_charts(chart_summ, display_col, color_map, metrics_summary=metrics_summary, total_revenue=total_rev)
+        render_category_charts(
+            chart_summ,
+            display_col,
+            color_map,
+            metrics_summary=metrics_summary,
+            total_revenue=total_rev,
+        )
     st.divider()
 
     return color_map
@@ -162,10 +239,20 @@ def _render_spotlight_and_sku_report(top, color_map, wc_raw_mapping):
     prev_top = None
     if st.session_state.get("wc_sync_mode") == "Operational Cycle":
         nav_mode = st.session_state.get("wc_nav_mode", "Today")
-        comp_df = st.session_state.get("wc_prev_df") if nav_mode == "Today" else st.session_state.get("wc_curr_df") if nav_mode == "Prev" else None
+        comp_df = (
+            st.session_state.get("wc_prev_df")
+            if nav_mode == "Today"
+            else st.session_state.get("wc_curr_df")
+            if nav_mode == "Prev"
+            else None
+        )
 
         if comp_df is not None and not comp_df.empty:
-            from src.processing.data_processing import prepare_granular_data, aggregate_data
+            from src.processing.data_processing import (
+                prepare_granular_data,
+                aggregate_data,
+            )
+
             comp_df_std, _ = prepare_granular_data(comp_df, wc_raw_mapping)
             if not comp_df_std.empty:
                 _, _, prev_top, _ = aggregate_data(comp_df_std, wc_raw_mapping)
@@ -178,7 +265,9 @@ def _render_spotlight_and_sku_report(top, color_map, wc_raw_mapping):
 def _render_sku_report(top):
     """Render the Master SKU-Wise Product Sales Report table."""
     st.subheader("📦 Product Sales Report (Master SKU Wise)")
-    st.caption("Aggregated item count and revenue grouped by Master SKU / Clean Product Name.")
+    st.caption(
+        "Aggregated item count and revenue grouped by Master SKU / Clean Product Name."
+    )
 
     top_df = top.copy()
     group_keys = ["SKU"]
@@ -187,22 +276,27 @@ def _render_sku_report(top):
     else:
         group_keys.append("Product Name")
 
-    report_df = (
-        top_df.groupby(group_keys, as_index=False)
-        .agg({"Total Qty": "sum", "Total Amount": "sum", "Category": "first"})
+    report_df = top_df.groupby(group_keys, as_index=False).agg(
+        {"Total Qty": "sum", "Total Amount": "sum", "Category": "first"}
     )
 
     if "Clean_Product" in report_df.columns:
         report_df.rename(columns={"Clean_Product": "Product Name"}, inplace=True)
 
-    report_df = report_df.sort_values("Total Qty", ascending=False).reset_index(drop=True)
+    report_df = report_df.sort_values("Total Qty", ascending=False).reset_index(
+        drop=True
+    )
     report_df.index = report_df.index + 1
 
     display_df = report_df.copy()
-    search_q = st.text_input("🔍 Search Product Name or SKU in Report", key="sku_report_search").strip()
+    search_q = st.text_input(
+        "🔍 Search Product Name or SKU in Report", key="sku_report_search"
+    ).strip()
     if search_q:
         display_df = display_df[
-            display_df["Product Name"].astype(str).str.contains(search_q, case=False, na=False)
+            display_df["Product Name"]
+            .astype(str)
+            .str.contains(search_q, case=False, na=False)
             | display_df["SKU"].astype(str).str.contains(search_q, case=False, na=False)
         ]
 
@@ -210,21 +304,44 @@ def _render_sku_report(top):
         display_df.style.format({"Total Qty": "{:,.0f}", "Total Amount": "৳{:,.0f}"}),
         use_container_width=True,
         column_config={
-            "SKU": st.column_config.TextColumn("SKU", help="Master SKU identification key"),
-            "Product Name": st.column_config.TextColumn("Product Name", help="Clean/Base product name"),
-            "Category": st.column_config.TextColumn("Category", help="Product main category"),
-            "Total Qty": st.column_config.NumberColumn("Quantity Sold", help="Total product item count sold"),
-            "Total Amount": st.column_config.NumberColumn("Total Revenue", help="Total revenue generated from product style"),
+            "SKU": st.column_config.TextColumn(
+                "SKU", help="Master SKU identification key"
+            ),
+            "Product Name": st.column_config.TextColumn(
+                "Product Name", help="Clean/Base product name"
+            ),
+            "Category": st.column_config.TextColumn(
+                "Category", help="Product main category"
+            ),
+            "Total Qty": st.column_config.NumberColumn(
+                "Quantity Sold", help="Total product item count sold"
+            ),
+            "Total Amount": st.column_config.NumberColumn(
+                "Total Revenue", help="Total revenue generated from product style"
+            ),
         },
     )
     st.divider()
 
 
-def _build_export_data(is_operational, summ, top, active_df, today_rev, today_qty, today_orders, today_aov, dm, final_report_text):
+def _build_export_data(
+    is_operational,
+    summ,
+    top,
+    active_df,
+    today_rev,
+    today_qty,
+    today_orders,
+    today_aov,
+    dm,
+    final_report_text,
+):
     """Build the export data dictionary for Excel export."""
     export_data = {}
     if is_operational:
-        export_data["Executive Briefing"] = pd.DataFrame({"Executive Summary": final_report_text.split('\n')})
+        export_data["Executive Briefing"] = pd.DataFrame(
+            {"Executive Summary": final_report_text.split("\n")}
+        )
 
     metrics_data = [
         {"Metric": "Total Revenue (TK)", "Value": today_rev},
@@ -233,11 +350,13 @@ def _build_export_data(is_operational, summ, top, active_df, today_rev, today_qt
         {"Metric": "Basket Size (TK)", "Value": today_aov},
     ]
     if is_operational and dm:
-        metrics_data.extend([
-            {"Metric": "Pending Dispatch", "Value": dm.get("pending", 0)},
-            {"Metric": "Dispatched", "Value": dm.get("dispatched", 0)},
-            {"Metric": "Dispatch Rate (%)", "Value": dm.get("dispatch_rate", 0)},
-        ])
+        metrics_data.extend(
+            [
+                {"Metric": "Pending Dispatch", "Value": dm.get("pending", 0)},
+                {"Metric": "Dispatched", "Value": dm.get("dispatched", 0)},
+                {"Metric": "Dispatch Rate (%)", "Value": dm.get("dispatch_rate", 0)},
+            ]
+        )
     export_data["Core Metrics"] = pd.DataFrame(metrics_data)
 
     if summ is not None and not summ.empty:
@@ -250,7 +369,19 @@ def _build_export_data(is_operational, summ, top, active_df, today_rev, today_qt
     return export_data
 
 
-def _stream_ai_briefing(summ, top, active_df, today_rev, today_qty, today_orders, today_aov, dm, current_data_fingerprint, new_customers=None, returning_customers=None):
+def _stream_ai_briefing(
+    summ,
+    top,
+    active_df,
+    today_rev,
+    today_qty,
+    today_orders,
+    today_aov,
+    dm,
+    current_data_fingerprint,
+    new_customers=None,
+    returning_customers=None,
+):
     """Stream an AI-generated briefing via the Data Pilot agent."""
     import queue
     import threading
@@ -259,18 +390,37 @@ def _stream_ai_briefing(summ, top, active_df, today_rev, today_qty, today_orders
 
     if new_customers is None or returning_customers is None:
         from src.utils.customer_registry import compute_new_vs_returning_counts
+
         new_customers, returning_customers = compute_new_vs_returning_counts(active_df)
 
-    context_data = {"sales_summary": summ, "top_products": top, "raw_sales_data": active_df}
+    context_data = {
+        "sales_summary": summ,
+        "top_products": top,
+        "raw_sales_data": active_df,
+    }
 
     top_spotlight_str = ""
     if top is not None and not top.empty:
         top_5 = top.sort_values("Total Amount", ascending=False).head(5)
-        top_list = [f"{row.get('Product Name', 'Unknown')} ({row.get('Total Qty', 0)} units, ৳{row.get('Total Amount', 0):,.0f})" for _, row in top_5.iterrows()]
-        top_spotlight_str = "\nProduct Spotlight (Top 5 Revenue Generators):\n" + "\n".join([f"- {item}" for item in top_list])
+        top_list = [
+            f"{row.get('Product Name', 'Unknown')} ({row.get('Total Qty', 0)} units, ৳{row.get('Total Amount', 0):,.0f})"
+            for _, row in top_5.iterrows()
+        ]
+        top_spotlight_str = (
+            "\nProduct Spotlight (Top 5 Revenue Generators):\n"
+            + "\n".join([f"- {item}" for item in top_list])
+        )
 
-    gross_rev = active_df["Gross Amount"].sum() if (active_df is not None and "Gross Amount" in active_df.columns) else today_rev
-    cashback_disc = active_df["Cashback Discount"].sum() if (active_df is not None and "Cashback Discount" in active_df.columns) else max(0.0, gross_rev - today_rev)
+    gross_rev = (
+        active_df["Gross Amount"].sum()
+        if (active_df is not None and "Gross Amount" in active_df.columns)
+        else today_rev
+    )
+    cashback_disc = (
+        active_df["Cashback Discount"].sum()
+        if (active_df is not None and "Cashback Discount" in active_df.columns)
+        else max(0.0, gross_rev - today_rev)
+    )
     loss_pct = (cashback_disc / gross_rev * 100) if gross_rev > 0 else 0.0
 
     gross_aov = (gross_rev / today_orders) if today_orders > 0 else today_aov
@@ -298,7 +448,7 @@ def _stream_ai_briefing(summ, top, active_df, today_rev, today_qty, today_orders
         f"- Ecom Orders: {dm.get('ecom_dispatch', 0)} | Outlet: {dm.get('outlet_dispatch', 0)} | Exchange: {dm.get('exchange_dispatch', 0)}\n"
         f"{top_spotlight_str}\n\n"
         f"Based on the provided context data (sales_summary, top_products), write a concise, professional, and insightful narrative.\n"
-        f"Highlight Net Realized Revenue as the primary headline figure, explicitly analyze actual shipped status counts (total dispatched orders, Pathao vs other courier breakdown, pending fulfillment status, and dispatch rate), analyze customer acquisition mix (New vs Returning customer count and ratio), analyze cashback/fee discount impact on overall revenue & basket size, summarize the \"Product Spotlight\" to point out what is driving revenue, and provide a concluding remark on the day's performance.\n"
+        f'Highlight Net Realized Revenue as the primary headline figure, explicitly analyze actual shipped status counts (total dispatched orders, Pathao vs other courier breakdown, pending fulfillment status, and dispatch rate), analyze customer acquisition mix (New vs Returning customer count and ratio), analyze cashback/fee discount impact on overall revenue & basket size, summarize the "Product Spotlight" to point out what is driving revenue, and provide a concluding remark on the day\'s performance.\n'
         f"The entire response should be a single block of text formatted for WhatsApp (using markdown like *bold* and _italic_)."
     )
 
@@ -372,24 +522,59 @@ def _stream_ai_briefing(summ, top, active_df, today_rev, today_qty, today_orders
         st.error(f"AI generation failed: {e}")
 
 
-def _render_ai_briefing_section(is_operational, summ, top, active_df, today_rev, today_qty, today_orders, today_aov, dm, current_data_fingerprint, final_report_text, new_customers=None, returning_customers=None):
+def _render_ai_briefing_section(
+    is_operational,
+    summ,
+    top,
+    active_df,
+    today_rev,
+    today_qty,
+    today_orders,
+    today_aov,
+    dm,
+    current_data_fingerprint,
+    final_report_text,
+    new_customers=None,
+    returning_customers=None,
+):
     """Render the AI executive briefing expander with auto-generation and streaming."""
     if not is_operational:
         return
 
     with st.expander("📋 View/Copy Executive Briefing", expanded=False):
         from src.components.ui.clipboard import render_copy_button
+
         c1, c2, c3 = st.columns([2, 1, 1])
         with c1:
             st.markdown("##### 🤖 AI Executive Narrative")
         with c2:
-            auto_gen = st.toggle("🤖 Auto-Generate AI", value=st.session_state.get("auto_gen_ai_dash", False), key="auto_gen_ai_dash")
-            gen_clicked = st.button("✨ Generate Now", key="gen_ai_narrative_dash", use_container_width=True)
-            data_changed = current_data_fingerprint != st.session_state.get("last_ai_data_fingerprint", "")
+            auto_gen = st.toggle(
+                "🤖 Auto-Generate AI",
+                value=st.session_state.get("auto_gen_ai_dash", False),
+                key="auto_gen_ai_dash",
+            )
+            gen_clicked = st.button(
+                "✨ Generate Now", key="gen_ai_narrative_dash", use_container_width=True
+            )
+            data_changed = current_data_fingerprint != st.session_state.get(
+                "last_ai_data_fingerprint", ""
+            )
 
             if gen_clicked or (auto_gen and data_changed):
                 with st.spinner("🧠 AI Pilot is analyzing today's performance..."):
-                    _stream_ai_briefing(summ, top, active_df, today_rev, today_qty, today_orders, today_aov, dm, current_data_fingerprint, new_customers=new_customers, returning_customers=returning_customers)
+                    _stream_ai_briefing(
+                        summ,
+                        top,
+                        active_df,
+                        today_rev,
+                        today_qty,
+                        today_orders,
+                        today_aov,
+                        dm,
+                        current_data_fingerprint,
+                        new_customers=new_customers,
+                        returning_customers=returning_customers,
+                    )
 
         with c3:
             render_copy_button(final_report_text, label="📋 Copy Briefing")
@@ -397,37 +582,57 @@ def _render_ai_briefing_section(is_operational, summ, top, active_df, today_rev,
         st.info(final_report_text)
 
         if hasattr(st, "feedback"):
-            st.markdown("<div style='margin-top: 10px; margin-bottom: -10px; font-size: 0.85rem; color: #94a3b8; font-weight: 600;'>Rate this AI Narrative:</div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div style='margin-top: 10px; margin-bottom: -10px; font-size: 0.85rem; color: #94a3b8; font-weight: 600;'>Rate this AI Narrative:</div>",
+                unsafe_allow_html=True,
+            )
             st.feedback("stars", key=f"ai_briefing_feedback_{current_data_fingerprint}")
 
 
 def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, today_aov):
     """Render the bottom tabbed section: Goals, History, Handover, WhatsApp."""
-    bottom_tabs = st.tabs([
-        "🎯 Shift Goals",
-        "📅 30-Day History",
-        "📝 Shift Handover",
-        "💬 WhatsApp Quick-Send",
-    ])
+    bottom_tabs = st.tabs(
+        [
+            "🎯 Shift Goals",
+            "📅 30-Day History",
+            "📝 Shift Handover",
+            "💬 WhatsApp Quick-Send",
+        ]
+    )
 
     with bottom_tabs[0]:
         st.markdown("#### 🎯 Set Shift Targets")
-        st.caption("Targets appear as progress bars on the Core Metrics KPI cards above.")
+        st.caption(
+            "Targets appear as progress bars on the Core Metrics KPI cards above."
+        )
         goals = st.session_state.get("shift_goals", {})
         gc1, gc2, gc3 = st.columns(3)
         with gc1:
             rev_g = st.number_input(
-                "💰 Revenue Goal (৳)", min_value=0, max_value=5_000_000,
-                value=int(goals.get("revenue", 0)), step=5000, key="goal_revenue_input",
+                "💰 Revenue Goal (৳)",
+                min_value=0,
+                max_value=5_000_000,
+                value=int(goals.get("revenue", 0)),
+                step=5000,
+                key="goal_revenue_input",
             )
         with gc2:
             ord_g = st.number_input(
-                "🛒 Order Goal", min_value=0, max_value=5000,
-                value=int(goals.get("orders", 0)), step=10, key="goal_orders_input",
+                "🛒 Order Goal",
+                min_value=0,
+                max_value=5000,
+                value=int(goals.get("orders", 0)),
+                step=10,
+                key="goal_orders_input",
             )
         with gc3:
             st.markdown('<div style="padding-top:28px;"></div>', unsafe_allow_html=True)
-            if st.button("✅ Apply Goals", use_container_width=True, type="primary", key="apply_goals_btn"):
+            if st.button(
+                "✅ Apply Goals",
+                use_container_width=True,
+                type="primary",
+                key="apply_goals_btn",
+            ):
                 st.session_state["shift_goals"] = {"revenue": rev_g, "orders": ord_g}
                 st.session_state["_last_snap_key"] = ""
                 st.toast(f"🎯 Goals set — Revenue: ৳{rev_g:,} | Orders: {ord_g}")
@@ -437,62 +642,106 @@ def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, toda
         st.markdown("#### 📈 30-Day Revenue & Order Trend")
         hist_df = load_snapshot_history(30)
         if hist_df.empty:
-            st.info("📂 No history snapshots yet. Metrics are saved automatically each time the dashboard loads with live data.")
+            st.info(
+                "📂 No history snapshots yet. Metrics are saved automatically each time the dashboard loads with live data."
+            )
         else:
             import plotly.graph_objects as go
+
             fig_hist = go.Figure()
-            fig_hist.add_trace(go.Bar(
-                x=hist_df["date"].dt.strftime("%d %b"),
-                y=hist_df["revenue"],
-                name="Revenue",
-                marker_color="rgba(59,130,246,0.7)",
-                hovertemplate="%{x}<br>Revenue: ৳%{y:,.0f}<extra></extra>",
-            ))
-            fig_hist.add_trace(go.Scatter(
-                x=hist_df["date"].dt.strftime("%d %b"),
-                y=hist_df["orders"],
-                name="Orders",
-                yaxis="y2",
-                mode="lines+markers",
-                line=dict(color="#10b981", width=2),
-                marker=dict(size=5),
-                hovertemplate="%{x}<br>Orders: %{y}<extra></extra>",
-            ))
+            fig_hist.add_trace(
+                go.Bar(
+                    x=hist_df["date"].dt.strftime("%d %b"),
+                    y=hist_df["revenue"],
+                    name="Revenue",
+                    marker_color="rgba(59,130,246,0.7)",
+                    hovertemplate="%{x}<br>Revenue: ৳%{y:,.0f}<extra></extra>",
+                )
+            )
+            fig_hist.add_trace(
+                go.Scatter(
+                    x=hist_df["date"].dt.strftime("%d %b"),
+                    y=hist_df["orders"],
+                    name="Orders",
+                    yaxis="y2",
+                    mode="lines+markers",
+                    line=dict(color="#10b981", width=2),
+                    marker=dict(size=5),
+                    hovertemplate="%{x}<br>Orders: %{y}<extra></extra>",
+                )
+            )
             fig_hist.update_layout(
-                yaxis=dict(title="Revenue (৳)", showgrid=True, gridcolor="rgba(128,128,128,0.1)"),
-                yaxis2=dict(title="Orders", overlaying="y", side="right", showgrid=False),
+                yaxis=dict(
+                    title="Revenue (৳)",
+                    showgrid=True,
+                    gridcolor="rgba(128,128,128,0.1)",
+                ),
+                yaxis2=dict(
+                    title="Orders", overlaying="y", side="right", showgrid=False
+                ),
                 legend=dict(orientation="h", y=1.05),
                 margin=dict(l=10, r=10, t=30, b=10),
                 height=320,
             )
-            st.plotly_chart(fig_hist, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(
+                fig_hist, use_container_width=True, config={"displayModeBar": False}
+            )
             with st.expander("Raw History Table"):
                 st.dataframe(
-                    hist_df.rename(columns={"date": "Date", "revenue": "Revenue (৳)", "orders": "Orders", "qty": "Units"})
+                    hist_df.rename(
+                        columns={
+                            "date": "Date",
+                            "revenue": "Revenue (৳)",
+                            "orders": "Orders",
+                            "qty": "Units",
+                        }
+                    )
                     .assign(**{"Date": hist_df["date"].dt.strftime("%Y-%m-%d")})
                     .sort_values("Date", ascending=False),
-                    use_container_width=True, hide_index=True,
+                    use_container_width=True,
+                    hide_index=True,
                 )
 
     with bottom_tabs[2]:
         st.markdown("#### 📝 Shift Handover Report")
-        st.caption("Generate a formatted summary ready to share with the next shift or management.")
-        if st.button("✨ Generate Handover Report", type="primary", use_container_width=True, key="gen_handover_btn"):
-            dm_h = get_dispatch_metrics(active_df, today_orders) if active_df is not None and not active_df.empty else {}
+        st.caption(
+            "Generate a formatted summary ready to share with the next shift or management."
+        )
+        if st.button(
+            "✨ Generate Handover Report",
+            type="primary",
+            use_container_width=True,
+            key="gen_handover_btn",
+        ):
+            dm_h = (
+                get_dispatch_metrics(active_df, today_orders)
+                if active_df is not None and not active_df.empty
+                else {}
+            )
 
             top_lines = ""
             if top is not None and not top.empty:
-                name_col_h = "Product Name" if "Product Name" in top.columns else top.columns[0]
+                name_col_h = (
+                    "Product Name" if "Product Name" in top.columns else top.columns[0]
+                )
                 amt_col_h = "Total Amount" if "Total Amount" in top.columns else None
                 qty_col_h = "Total Qty" if "Total Qty" in top.columns else None
-                for _, row in top.sort_values(amt_col_h, ascending=False).head(5).iterrows() if amt_col_h else []:
+                for _, row in (
+                    top.sort_values(amt_col_h, ascending=False).head(5).iterrows()
+                    if amt_col_h
+                    else []
+                ):
                     top_lines += f"  • {row.get(name_col_h, 'Unknown')} — {row.get(qty_col_h, 0):.0f} units | ৳{row.get(amt_col_h, 0):,.0f}\n"
 
             goals_h = st.session_state.get("shift_goals", {})
             rev_goal_h = goals_h.get("revenue", 0)
-            rev_pct_h = f"{today_rev / rev_goal_h * 100:.0f}%" if rev_goal_h > 0 else "No target set"
+            rev_pct_h = (
+                f"{today_rev / rev_goal_h * 100:.0f}%"
+                if rev_goal_h > 0
+                else "No target set"
+            )
 
-            now_bd = datetime.now(timezone(timedelta(hours=6)))
+            now_bd = bd_now()
             handover_text = (
                 f"*🛡️ DEEN OPS — Shift Handover Report*\n"
                 f"Generated: {now_bd.strftime('%d %b %Y, %I:%M %p')} (BD)\n\n"
@@ -512,12 +761,17 @@ def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, toda
 
         if st.session_state.get("shift_handover_text"):
             from src.components.ui.clipboard import render_copy_button
-            render_copy_button(st.session_state["shift_handover_text"], label="📋 Copy Handover")
+
+            render_copy_button(
+                st.session_state["shift_handover_text"], label="📋 Copy Handover"
+            )
             st.code(st.session_state["shift_handover_text"], language="text")
 
     with bottom_tabs[3]:
         st.markdown("#### 💬 WhatsApp Quick-Send")
-        st.caption("Generate wa.me links for processing orders directly from today's live data — no file upload needed.")
+        st.caption(
+            "Generate wa.me links for processing orders directly from today's live data — no file upload needed."
+        )
         _render_whatsapp_quicksend()
 
 
@@ -528,7 +782,13 @@ def _render_whatsapp_quicksend():
         st.info("📡 No live data loaded. Sync the Live Dashboard first.")
         return
 
-    status_col_wp = "Order Status" if "Order Status" in src_df.columns else "Status" if "Status" in src_df.columns else None
+    status_col_wp = (
+        "Order Status"
+        if "Order Status" in src_df.columns
+        else "Status"
+        if "Status" in src_df.columns
+        else None
+    )
     wp_df = src_df.copy()
     if status_col_wp:
         wp_df = wp_df[wp_df[status_col_wp].astype(str).str.lower() == "processing"]
@@ -537,14 +797,24 @@ def _render_whatsapp_quicksend():
         st.warning("⚠️ No processing orders in the current live data to message.")
         return
 
-    st.toast(f"⚡ Found {wp_df[status_col_wp].value_counts().get('processing', len(wp_df))} processing orders ready to message.")
+    st.toast(
+        f"⚡ Found {wp_df[status_col_wp].value_counts().get('processing', len(wp_df))} processing orders ready to message."
+    )
 
     phone_col = next(
-        (c for c in wp_df.columns if any(kw in str(c).lower() for kw in ["phone", "mobile", "contact"])),
+        (
+            c
+            for c in wp_df.columns
+            if any(kw in str(c).lower() for kw in ["phone", "mobile", "contact"])
+        ),
         None,
     )
     name_col_wp = next(
-        (c for c in wp_df.columns if any(kw in str(c).lower() for kw in ["billing name", "full name", "name"])),
+        (
+            c
+            for c in wp_df.columns
+            if any(kw in str(c).lower() for kw in ["billing name", "full name", "name"])
+        ),
         None,
     )
 
@@ -559,18 +829,30 @@ def _render_whatsapp_quicksend():
         key="wp_quicksend_msg",
     )
 
-    if st.button("📲 Generate Links", type="primary", use_container_width=True, key="wp_quicksend_btn"):
+    if st.button(
+        "📲 Generate Links",
+        type="primary",
+        use_container_width=True,
+        key="wp_quicksend_btn",
+    ):
         import urllib.parse
+
         links = []
         for _, row in wp_df.iterrows():
-            phone = str(row.get(phone_col, "")).strip().replace(" ", "").replace("-", "")
+            phone = (
+                str(row.get(phone_col, "")).strip().replace(" ", "").replace("-", "")
+            )
             if not phone or phone.lower() in {"nan", "none"}:
                 continue
             if phone.startswith("0"):
                 phone = "880" + phone[1:]
             elif not phone.startswith("880"):
                 phone = "880" + phone
-            name_wp = str(row.get(name_col_wp, "Valued Customer")) if name_col_wp else "Valued Customer"
+            name_wp = (
+                str(row.get(name_col_wp, "Valued Customer"))
+                if name_col_wp
+                else "Valued Customer"
+            )
             msg = custom_msg_wp.replace("{name}", name_wp.strip())
             wa_link = f"https://wa.me/{phone}?text={urllib.parse.quote(msg)}"
             links.append({"Name": name_wp, "Phone": phone, "WhatsApp Link": wa_link})
@@ -596,32 +878,55 @@ def _render_export_buttons(excel_report_bytes, export_date_str, active_df):
             data=excel_report_bytes,
             file_name=f"DEEN_Analytics_Report_{export_date_str}.xlsx",
             type="primary",
-            use_container_width=True
+            use_container_width=True,
         )
     with c2:
         if active_df is not None and not active_df.empty:
             st.download_button(
                 label="📄 Export Filtered View (CSV)",
-                data=active_df.to_csv(index=False).encode('utf-8'),
+                data=active_df.to_csv(index=False).encode("utf-8"),
                 file_name=f"DEEN_Filtered_Data_{export_date_str}.csv",
                 type="secondary",
-                use_container_width=True
+                use_container_width=True,
             )
 
 
 def render_dashboard_output(
-    drill, summ, top, timeframe, basket, source_name, last_updated="N/A", granular_df=None,
-    show_core_metrics=True
+    drill,
+    summ,
+    top,
+    timeframe,
+    basket,
+    source_name,
+    last_updated="N/A",
+    granular_df=None,
+    show_core_metrics=True,
 ):
     """Renders common dashboard widgets/charts/tables/export.
-    
+
     Args:
         show_core_metrics: When False, skips the Core Metrics KPI card rendering
             (useful when a separate @st.fragment handles auto-refresh of metrics).
     """
 
-    dummy_mapping = {"name":"Product Name", "cost":"Item Cost", "qty":"Quantity", "date":"Date", "order_id":"Order ID", "phone":"Phone", "sku":"SKU"}
-    wc_raw_mapping = {"name":"Item Name", "cost":"Item Cost", "qty":"Quantity", "date":"Order Date", "order_id":"Order ID", "phone":"Phone (Billing)", "sku":"SKU"}
+    dummy_mapping = {
+        "name": "Product Name",
+        "cost": "Item Cost",
+        "qty": "Quantity",
+        "date": "Date",
+        "order_id": "Order ID",
+        "phone": "Phone",
+        "sku": "SKU",
+    }
+    wc_raw_mapping = {
+        "name": "Item Name",
+        "cost": "Item Cost",
+        "qty": "Quantity",
+        "date": "Order Date",
+        "order_id": "Order ID",
+        "phone": "Phone (Billing)",
+        "sku": "SKU",
+    }
 
     # ── Mode selection: Operational Cycle vs Ingestion ──
     is_operational = st.session_state.get("wc_sync_mode") == "Operational Cycle"
@@ -634,28 +939,52 @@ def render_dashboard_output(
             m_df = st.session_state.get("wc_backlog_df")
         else:
             m_df = st.session_state.get("wc_prev_df")
-            
-        c_df = st.session_state.get("wc_prev_df" if nav_mode == "Today" else "wc_curr_df") if nav_mode != "Backlog" else None
-        drill, summ, top, basket, active_df = _render_operational_cycle_metrics(m_df, c_df, nav_mode, dummy_mapping, wc_raw_mapping, render_core_metrics=show_core_metrics)
+
+        c_df = (
+            st.session_state.get("wc_prev_df" if nav_mode == "Today" else "wc_curr_df")
+            if nav_mode != "Backlog"
+            else None
+        )
+        drill, summ, top, basket, active_df = _render_operational_cycle_metrics(
+            m_df,
+            c_df,
+            nav_mode,
+            dummy_mapping,
+            wc_raw_mapping,
+            render_core_metrics=show_core_metrics,
+        )
     else:
-        drill, summ, top, basket, active_df = _render_ingestion_mode_metrics(granular_df, dummy_mapping, last_updated)
+        drill, summ, top, basket, active_df = _render_ingestion_mode_metrics(
+            granular_df, dummy_mapping, last_updated
+        )
 
     # ── Executive Briefing & Key Metrics ──
-    today_qty = summ['Total Qty'].sum() if summ is not None else 0
-    today_orders = basket.get('total_orders', 0) if basket else 0
-    today_aov = basket.get('avg_customer_value', basket.get('avg_basket_value', 0)) if basket else 0
+    today_qty = summ["Total Qty"].sum() if summ is not None else 0
+    today_orders = basket.get("total_orders", 0) if basket else 0
+    today_aov = (
+        basket.get("avg_customer_value", basket.get("avg_basket_value", 0))
+        if basket
+        else 0
+    )
 
     dm = None
     final_report_text = ""
     hero = st.session_state.get("hero_metrics", {})
-    
-    today_qty = hero.get("qty", summ['Total Qty'].sum() if summ is not None else 0)
-    today_orders = hero.get("orders", basket.get('total_orders', 0) if basket else 0)
-    today_aov = hero.get("net_aov", basket.get('avg_customer_value', basket.get('avg_basket_value', 0)) if basket else 0)
+
+    today_qty = hero.get("qty", summ["Total Qty"].sum() if summ is not None else 0)
+    today_orders = hero.get("orders", basket.get("total_orders", 0) if basket else 0)
+    today_aov = hero.get(
+        "net_aov",
+        basket.get("avg_customer_value", basket.get("avg_basket_value", 0))
+        if basket
+        else 0,
+    )
 
     dm = None
     final_report_text = ""
-    today_rev = float(hero.get("net_rev", summ['Total Amount'].sum() if summ is not None else 0.0))
+    today_rev = float(
+        hero.get("net_rev", summ["Total Amount"].sum() if summ is not None else 0.0)
+    )
     gross_rev = float(hero.get("gross_rev", today_rev))
     cashback_disc = float(hero.get("cashback_disc", 0.0))
 
@@ -664,12 +993,18 @@ def render_dashboard_output(
 
         _adf = active_df if (active_df is not None and not active_df.empty) else None
         if not hero:
-            cashback_disc = float(_adf["Cashback Discount"].sum()) if (_adf is not None and "Cashback Discount" in _adf.columns) else 0.0
+            cashback_disc = (
+                float(_adf["Cashback Discount"].sum())
+                if (_adf is not None and "Cashback Discount" in _adf.columns)
+                else 0.0
+            )
 
             if _adf is not None and "Total Amount" in _adf.columns:
                 today_rev = float(_adf["Total Amount"].sum())
             else:
-                today_rev = float(summ['Total Amount'].sum()) if summ is not None else 0.0
+                today_rev = (
+                    float(summ["Total Amount"].sum()) if summ is not None else 0.0
+                )
 
             if _adf is not None and "Gross Amount" in _adf.columns:
                 gross_rev = float(_adf["Gross Amount"].sum())
@@ -677,54 +1012,93 @@ def render_dashboard_output(
                 gross_rev = today_rev + cashback_disc
 
     # ── Performance Hub: Category Share | Spotlight | SKU Report ─────────────
-    tab_cat, tab_spot, tab_sku = st.tabs([
-        "Category Share",
-        "Spotlight",
-        "SKU Report",
-    ])
+    tab_cat, tab_spot, tab_sku = st.tabs(
+        [
+            "Category Share",
+            "Spotlight",
+            "SKU Report",
+        ]
+    )
 
     with tab_cat:
         color_map = _render_charts(summ, total_rev=today_rev)
 
     if is_operational:
-        net_aov = float(hero.get("net_aov", (today_rev / today_orders) if today_orders > 0 else float(today_aov)))
+        net_aov = float(
+            hero.get(
+                "net_aov",
+                (today_rev / today_orders) if today_orders > 0 else float(today_aov),
+            )
+        )
 
         if "new_customers" in hero and "returning_customers" in hero:
             new_cust_cnt = hero["new_customers"]
             ret_cust_cnt = hero["returning_customers"]
         else:
             from src.utils.customer_registry import compute_new_vs_returning_counts
+
             full_df_for_cust = st.session_state.get("wc_curr_df")
-            new_cust_cnt, ret_cust_cnt = compute_new_vs_returning_counts(active_df, full_df_for_cust, wc_raw_mapping)
+            new_cust_cnt, ret_cust_cnt = compute_new_vs_returning_counts(
+                active_df, full_df_for_cust, wc_raw_mapping
+            )
 
         report_text = generate_executive_briefing(
-            today_rev, today_qty, today_orders, net_aov, dm, top,
-            gross_rev=gross_rev, cashback_disc=cashback_disc,
-            new_customers=new_cust_cnt, returning_customers=ret_cust_cnt
+            today_rev,
+            today_qty,
+            today_orders,
+            net_aov,
+            dm,
+            top,
+            gross_rev=gross_rev,
+            cashback_disc=cashback_disc,
+            new_customers=new_cust_cnt,
+            returning_customers=ret_cust_cnt,
         )
 
         current_data_fingerprint = f"{today_rev}_{today_orders}_{dm.get('pathao_count', 0)}_{dm.get('other_count', 0)}_{new_cust_cnt}_{ret_cust_cnt}"
 
-        if st.session_state.get("last_ai_data_fingerprint", "") != current_data_fingerprint:
+        if (
+            st.session_state.get("last_ai_data_fingerprint", "")
+            != current_data_fingerprint
+        ):
             st.session_state.pop("ai_report_text", None)
 
         final_report_text = st.session_state.get("ai_report_text", report_text)
 
         _render_ai_briefing_section(
-            is_operational, summ, top, active_df,
-            today_rev, today_qty, today_orders, net_aov,
-            dm, current_data_fingerprint, final_report_text,
-            new_customers=new_cust_cnt, returning_customers=ret_cust_cnt
+            is_operational,
+            summ,
+            top,
+            active_df,
+            today_rev,
+            today_qty,
+            today_orders,
+            net_aov,
+            dm,
+            current_data_fingerprint,
+            final_report_text,
+            new_customers=new_cust_cnt,
+            returning_customers=ret_cust_cnt,
         )
 
     with tab_spot:
         prev_top = None
         if st.session_state.get("wc_sync_mode") == "Operational Cycle":
             nav_mode = st.session_state.get("wc_nav_mode", "Today")
-            comp_df = st.session_state.get("wc_prev_df") if nav_mode == "Today" else st.session_state.get("wc_curr_df") if nav_mode == "Prev" else None
+            comp_df = (
+                st.session_state.get("wc_prev_df")
+                if nav_mode == "Today"
+                else st.session_state.get("wc_curr_df")
+                if nav_mode == "Prev"
+                else None
+            )
 
             if comp_df is not None and not comp_df.empty:
-                from src.processing.data_processing import prepare_granular_data, aggregate_data
+                from src.processing.data_processing import (
+                    prepare_granular_data,
+                    aggregate_data,
+                )
+
                 comp_df_std, _ = prepare_granular_data(comp_df, wc_raw_mapping)
                 if not comp_df_std.empty:
                     _, _, prev_top, _ = aggregate_data(comp_df_std, wc_raw_mapping)
@@ -736,7 +1110,10 @@ def render_dashboard_output(
 
     # ── Revenue & Cashback Impact Analysis (Ingestion mode) ──────────────────
     if not is_operational and active_df is not None and not active_df.empty:
-        has_cashback = "Cashback Discount" in active_df.columns and (active_df["Cashback Discount"] > 0).any()
+        has_cashback = (
+            "Cashback Discount" in active_df.columns
+            and (active_df["Cashback Discount"] > 0).any()
+        )
         if has_cashback:
             st.divider()
             compare_cb = st.toggle(
@@ -745,23 +1122,43 @@ def render_dashboard_output(
                 key="ingest_compare_cashback",
             )
             if compare_cb:
-                from src.components.dashboard.dashboard_metrics import render_revenue_cashback_comparison_section
+                from src.components.dashboard.dashboard_metrics import (
+                    render_revenue_cashback_comparison_section,
+                )
+
                 render_revenue_cashback_comparison_section(active_df, raw_df=None)
 
     # ── Export Preparation ──
-    export_data = _build_export_data(is_operational, summ, top, active_df, today_rev, today_qty, today_orders, today_aov, dm, final_report_text)
+    export_data = _build_export_data(
+        is_operational,
+        summ,
+        top,
+        active_df,
+        today_rev,
+        today_qty,
+        today_orders,
+        today_aov,
+        dm,
+        final_report_text,
+    )
     excel_report_bytes = export_to_styled_excel(export_data)
 
-    export_date_str = datetime.now().strftime('%Y%m%d')
+    export_date_str = datetime.now().strftime("%Y%m%d")
     if not is_operational:
-        if active_df is not None and not active_df.empty and "Date" in active_df.columns:
+        if (
+            active_df is not None
+            and not active_df.empty
+            and "Date" in active_df.columns
+        ):
             try:
                 min_d = pd.to_datetime(active_df["Date"]).min()
                 max_d = pd.to_datetime(active_df["Date"]).max()
                 if min_d.date() == max_d.date():
-                    export_date_str = min_d.strftime('%Y%m%d')
+                    export_date_str = min_d.strftime("%Y%m%d")
                 else:
-                    export_date_str = f"{min_d.strftime('%Y%m%d')}_to_{max_d.strftime('%Y%m%d')}"
+                    export_date_str = (
+                        f"{min_d.strftime('%Y%m%d')}_to_{max_d.strftime('%Y%m%d')}"
+                    )
             except Exception:
                 pass
 

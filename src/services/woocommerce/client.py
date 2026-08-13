@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from requests.auth import HTTPBasicAuth
 
-from src.config.constants import SHIPPED_STATUSES
+from src.config.constants import BD_TZ, SHIPPED_STATUSES, bd_now
 from src.config.settings import get_woocommerce_config
 from src.processing.column_detection import scrub_raw_dataframe
 from src.utils.http import request_with_backoff
@@ -18,7 +18,12 @@ def _normalize_iso_gmt(dt_str: str) -> str:
     if not dt_str or not isinstance(dt_str, str):
         return dt_str
     dt_str = dt_str.strip()
-    if dt_str and not dt_str.endswith("Z") and "+" not in dt_str and "-" not in dt_str[10:]:
+    if (
+        dt_str
+        and not dt_str.endswith("Z")
+        and "+" not in dt_str
+        and "-" not in dt_str[10:]
+    ):
         return dt_str + "Z"
     return dt_str
 
@@ -41,14 +46,21 @@ def _flatten_order(order: dict) -> list[dict]:
     ship = order.get("shipping", {})
     c_name = f"{bill.get('first_name', '')} {bill.get('last_name', '')}".strip()
     pmt = order.get("payment_method_title", "")
-    
+
     ptc_consignment_id = ""
     for meta in order.get("meta_data", []):
         k = str(meta.get("key", "")).lower()
         if k in [
-            "ptc_consignment_id", "pathao_consignment_id", "consignment_id",
-            "tracking_number", "tracking_code", "_pathao_consignment_id",
-            "pathao_tracking", "shipment_id", "_tracking_number", "courier_consignment_id"
+            "ptc_consignment_id",
+            "pathao_consignment_id",
+            "consignment_id",
+            "tracking_number",
+            "tracking_code",
+            "_pathao_consignment_id",
+            "pathao_tracking",
+            "shipment_id",
+            "_tracking_number",
+            "courier_consignment_id",
         ]:
             v = str(meta.get("value", "")).strip()
             if v and v.lower() not in ["none", "nan", "null", "n/a", "0"]:
@@ -61,15 +73,19 @@ def _flatten_order(order: dict) -> list[dict]:
 
     # Extract order level discounts, fee lines, & coupons
     ord_discount_total = float(order.get("discount_total", 0) or 0)
-    coupons = [c.get("code") for c in order.get("coupon_lines", []) if isinstance(c, dict) and c.get("code")]
+    coupons = [
+        c.get("code")
+        for c in order.get("coupon_lines", [])
+        if isinstance(c, dict) and c.get("code")
+    ]
     coupon_str = ", ".join(coupons) if coupons else ""
-    
+
     # Process fee_lines: Negative fees = discount/cashback, Positive fees = extra fee
     fee_lines = order.get("fee_lines", [])
     fee_discount_total = 0.0
     extra_fee_total = 0.0
     fee_notes = []
-    
+
     for fee in fee_lines:
         if isinstance(fee, dict):
             f_val = float(fee.get("total", 0) or 0)
@@ -92,48 +108,56 @@ def _flatten_order(order: dict) -> list[dict]:
     for idx, item in enumerate(line_items):
         item_id = item.get("id", idx)
         qty_raw = item.get("quantity", 1)
-        qty_num = float(str(qty_raw if qty_raw is not None else "1").replace(",", "")) if float(str(qty_raw if qty_raw is not None else "1").replace(",", "")) > 0 else 1.0
-        
+        qty_num = (
+            float(str(qty_raw if qty_raw is not None else "1").replace(",", ""))
+            if float(str(qty_raw if qty_raw is not None else "1").replace(",", "")) > 0
+            else 1.0
+        )
+
         tot_val = float(item.get("total", 0) or 0)
         sub_val = float(item.get("subtotal", tot_val) or tot_val)
-        
-        eff_unit_cost = tot_val / qty_num if tot_val > 0 else float(item.get("price", 0) or 0)
+
+        eff_unit_cost = (
+            tot_val / qty_num if tot_val > 0 else float(item.get("price", 0) or 0)
+        )
         std_unit_cost = sub_val / qty_num if sub_val > 0 else eff_unit_cost
-        
+
         item_disc = max(0.0, sub_val - tot_val)
         total_cashback_disc = item_disc + split_ord_discount + split_fee_discount
 
-        flattened.append({
-            "Order ID": oid,
-            "Line Item ID": item_id,
-            "Line Item Index": idx,
-            "Order Number": onum,
-            "Order Date": d_val,
-            "Order Date Modified": m_val,
-            "Order Status": status,
-            "Full Name (Billing)": c_name,
-            "Phone (Billing)": bill.get("phone", ""),
-            "Shipping Address 1": ship.get("address_1", ""),
-            "Shipping City": ship.get("city", ""),
-            "State Name (Billing)": bill.get("state", ""),
-            "Item Name": item.get("name"),
-            "SKU": item.get("sku", ""),
-            # Effective Unit Price (Net after line item discounts/cashback)
-            "Item Cost": eff_unit_cost,
-            # Standard Unit Price (Gross before line item discounts/cashback)
-            "Subtotal Cost": std_unit_cost,
-            "Item Discount": item_disc,
-            "Order Discount Total": ord_discount_total,
-            "Fee Discount Total": split_fee_discount,
-            "Extra Fee": split_extra_fee,
-            "Cashback Discount": total_cashback_disc,
-            "Fee Notes": fee_notes_str,
-            "Coupons": coupon_str,
-            "Quantity": qty_num,
-            "Order Total Amount": order.get("total"),
-            "Payment Method Title": pmt,
-            "Pathao Consignment ID": ptc_consignment_id,
-        })
+        flattened.append(
+            {
+                "Order ID": oid,
+                "Line Item ID": item_id,
+                "Line Item Index": idx,
+                "Order Number": onum,
+                "Order Date": d_val,
+                "Order Date Modified": m_val,
+                "Order Status": status,
+                "Full Name (Billing)": c_name,
+                "Phone (Billing)": bill.get("phone", ""),
+                "Shipping Address 1": ship.get("address_1", ""),
+                "Shipping City": ship.get("city", ""),
+                "State Name (Billing)": bill.get("state", ""),
+                "Item Name": item.get("name"),
+                "SKU": item.get("sku", ""),
+                # Effective Unit Price (Net after line item discounts/cashback)
+                "Item Cost": eff_unit_cost,
+                # Standard Unit Price (Gross before line item discounts/cashback)
+                "Subtotal Cost": std_unit_cost,
+                "Item Discount": item_disc,
+                "Order Discount Total": ord_discount_total,
+                "Fee Discount Total": split_fee_discount,
+                "Extra Fee": split_extra_fee,
+                "Cashback Discount": total_cashback_disc,
+                "Fee Notes": fee_notes_str,
+                "Coupons": coupon_str,
+                "Quantity": qty_num,
+                "Order Total Amount": order.get("total"),
+                "Payment Method Title": pmt,
+                "Pathao Consignment ID": ptc_consignment_id,
+            }
+        )
     return flattened
 
 
@@ -142,12 +166,15 @@ def _flatten_order(order: dict) -> list[dict]:
 
 def _fetch_wc_page(url: str, params: dict, auth: HTTPBasicAuth, page: int):
     """Fetch a single page of WooCommerce orders.
-    
+
     Returns (rows, total_pages) where rows is the flattened list of order item dicts.
     """
-    res = request_with_backoff("GET", url, params={**params, "page": page}, auth=auth, timeout=15)
+    res = request_with_backoff(
+        "GET", url, params={**params, "page": page}, auth=auth, timeout=15
+    )
     res.raise_for_status()
     import json
+
     data = json.loads(res.content.decode("utf-8-sig"))
     rows = []
     for order in data:
@@ -160,7 +187,6 @@ def _fetch_wc_batch(url: str, params: dict, auth: HTTPBasicAuth) -> list:
     """Fetch all pages of WooCommerce orders concurrently and return flattened rows."""
     fields = "id,number,date_created,date_created_gmt,date_modified,date_modified_gmt,status,billing,shipping,payment_method_title,line_items,total,discount_total,shipping_total,fee_lines,coupon_lines,meta_data"
     params["_fields"] = fields
-
 
     try:
         rows, total_pages = _fetch_wc_page(url, params, auth, page=1)
@@ -175,7 +201,10 @@ def _fetch_wc_batch(url: str, params: dict, auth: HTTPBasicAuth) -> list:
     from concurrent.futures import ThreadPoolExecutor
 
     with ThreadPoolExecutor(max_workers=min(total_pages, 8)) as executor:
-        futures = [executor.submit(_fetch_wc_page, url, params, auth, pg) for pg in range(2, total_pages + 1)]
+        futures = [
+            executor.submit(_fetch_wc_page, url, params, auth, pg)
+            for pg in range(2, total_pages + 1)
+        ]
         for future in futures:
             try:
                 extra_rows, _ = future.result()
@@ -194,22 +223,22 @@ def get_woocommerce_shipped_orders_count(after_iso: str, before_iso: str) -> int
 
     url = f"{cfg.get('store_url', '').rstrip('/')}/wp-json/wc/v3/orders"
     auth = HTTPBasicAuth(cfg.get("consumer_key", ""), cfg.get("consumer_secret", ""))
-    
+
     params = {
         "per_page": 1,
         "after": after_iso,
         "before": before_iso,
         "status": "shipped,completed,confirmed",
-        "_fields": "id"
+        "_fields": "id",
     }
-    
+
     try:
         res = request_with_backoff("GET", url, params=params, auth=auth, timeout=10)
         if res.status_code == 200:
             return int(res.headers.get("X-WP-Total", 0))
     except Exception as e:
         log_system_event("WC_COUNT_FETCH_ERROR", str(e))
-        
+
     return 0
 
 
@@ -218,17 +247,22 @@ def get_woocommerce_shipped_orders_count(after_iso: str, before_iso: str) -> int
 
 def _get_operational_sync_params(cache_buster: str | None = None) -> dict:
     """Build API params for the Operational Cycle sync mode (3-day rolling window or user-selected custom date range)."""
-    tz_bd = timezone(timedelta(hours=6))
-    now_bd = datetime.now(tz_bd)
+    now_bd = bd_now()
     shift_h = st.session_state.get("shift_cutoff_hour", 18)
     shift_m = st.session_state.get("shift_cutoff_minute", 0)
 
     custom_range = st.session_state.get("live_custom_range")
-    if custom_range and isinstance(custom_range, (tuple, list)) and len(custom_range) == 2:
+    if (
+        custom_range
+        and isinstance(custom_range, (tuple, list))
+        and len(custom_range) == 2
+    ):
         start_d, end_d = custom_range[0], custom_range[1]
         today_bd = now_bd.date()
         if start_d != today_bd or end_d != today_bd:
-            start_dt = datetime.combine(start_d, datetime.min.time()) - timedelta(hours=6)
+            start_dt = datetime.combine(start_d, datetime.min.time()) - timedelta(
+                hours=6
+            )
             end_dt = datetime.combine(end_d, datetime.max.time()) - timedelta(hours=6)
             return _apply_cache_buster(
                 {
@@ -242,7 +276,9 @@ def _get_operational_sync_params(cache_buster: str | None = None) -> dict:
                 cache_buster,
             )
 
-    anchor_bd = now_bd.replace(hour=shift_h, minute=shift_m, second=0, microsecond=0) - timedelta(days=3)
+    anchor_bd = now_bd.replace(
+        hour=shift_h, minute=shift_m, second=0, microsecond=0
+    ) - timedelta(days=3)
     anchor_utc = anchor_bd - timedelta(hours=6)
 
     return _apply_cache_buster(
@@ -264,8 +300,7 @@ def _get_today_modified_shipped_params(cache_buster: str | None = None) -> dict:
     WooCommerce supports `modified_after` to filter by date_modified regardless of order date.
     Note: Subtract 6 hours from prev_cutoff (BD Time UTC+6) so WooCommerce API receives UTC ISO time.
     """
-    tz_bd = timezone(timedelta(hours=6))
-    _, prev_cutoff, _, _ = _compute_cutoff_times(tz_bd)
+    _, prev_cutoff, _, _ = _compute_cutoff_times(BD_TZ)
     prev_cutoff_utc = prev_cutoff - timedelta(hours=6)
     return _apply_cache_buster(
         {
@@ -277,10 +312,6 @@ def _get_today_modified_shipped_params(cache_buster: str | None = None) -> dict:
         },
         cache_buster,
     )
-
-
-
-
 
 
 def _get_global_open_params(cache_buster: str | None = None) -> dict:
@@ -299,7 +330,9 @@ def _get_global_open_params(cache_buster: str | None = None) -> dict:
 def _get_custom_range_params(cache_buster: str | None = None) -> dict:
     """Build API params for the Custom Range sync mode."""
     start_date = st.session_state.get("wc_sync_start_date", datetime.now().date())
-    start_time = st.session_state.get("wc_sync_start_time", (datetime.now() - timedelta(hours=12)).time())
+    start_time = st.session_state.get(
+        "wc_sync_start_time", (datetime.now() - timedelta(hours=12)).time()
+    )
     end_date = st.session_state.get("wc_sync_end_date", datetime.now().date())
     end_time = st.session_state.get("wc_sync_end_time", datetime.now().time())
 
@@ -323,7 +356,11 @@ def _merge_deduplicated_orders(main_rows: list, extra_rows: list) -> list:
     """Merge two order lists, deduplicating by unique line item, preferring the latest date_modified / latest status."""
     order_map = {}
     for r in main_rows + extra_rows:
-        line_key = r.get("Line Item ID") if r.get("Line Item ID") is not None else r.get("Line Item Index", 0)
+        line_key = (
+            r.get("Line Item ID")
+            if r.get("Line Item ID") is not None
+            else r.get("Line Item Index", 0)
+        )
         key = (r.get("Order ID"), r.get("Item Name", ""), r.get("SKU", ""), line_key)
         if key not in order_map:
             order_map[key] = r
@@ -337,7 +374,6 @@ def _merge_deduplicated_orders(main_rows: list, extra_rows: list) -> list:
     return list(order_map.values())
 
 
-
 # ── Operational partitioning ─────────────────────────────────────────────────
 
 
@@ -346,7 +382,9 @@ def _is_off_day(d, holiday_list: list[str]) -> bool:
     return d.weekday() == 4 or d.strftime("%Y-%m-%d") in holiday_list
 
 
-def _prev_working_day_cutoff(from_cutoff: datetime, holiday_list: list[str], shift_h: int, shift_m: int) -> datetime:
+def _prev_working_day_cutoff(
+    from_cutoff: datetime, holiday_list: list[str], shift_h: int, shift_m: int
+) -> datetime:
     """Walk backwards from `from_cutoff` skipping all consecutive off days.
 
     Each step goes back one calendar day and skips it if it is a Friday or
@@ -388,7 +426,9 @@ def _compute_cutoff_times(tz_bd):
     holiday_list = st.session_state.get("operational_holidays", [])
 
     # Next shift boundary: today at shift_h:shift_m, or tomorrow if already past it
-    cutoff_today = ref_now.replace(hour=shift_h, minute=shift_m, second=0, microsecond=0)
+    cutoff_today = ref_now.replace(
+        hour=shift_h, minute=shift_m, second=0, microsecond=0
+    )
     if ref_now >= cutoff_today:
         cutoff_today = cutoff_today + timedelta(days=1)
 
@@ -396,7 +436,9 @@ def _compute_cutoff_times(tz_bd):
     prev_cutoff = _prev_working_day_cutoff(cutoff_today, holiday_list, shift_h, shift_m)
 
     # Walk backwards again for the shift before that
-    day_before_prev = _prev_working_day_cutoff(prev_cutoff, holiday_list, shift_h, shift_m)
+    day_before_prev = _prev_working_day_cutoff(
+        prev_cutoff, holiday_list, shift_h, shift_m
+    )
 
     shipped_limit = max(cutoff_today, ref_now + timedelta(hours=12))
     return cutoff_today, prev_cutoff, day_before_prev, shipped_limit
@@ -407,15 +449,19 @@ def _apply_shipped_history(df_full):
         return df_full
     df_full = df_full.copy()
     from src.processing.data_processing import safe_coerce_datetime_naive
+
     df_full["dt_parsed"] = safe_coerce_datetime_naive(df_full["Order Date"])
-    df_full["mod_dt_parsed"] = safe_coerce_datetime_naive(df_full["Order Date Modified"])
+    df_full["mod_dt_parsed"] = safe_coerce_datetime_naive(
+        df_full["Order Date Modified"]
+    )
 
     import os
     import json
     from src.config.constants import RESOURCES_DIR
+
     os.makedirs(RESOURCES_DIR, exist_ok=True)
     history_file = os.path.join(RESOURCES_DIR, "shipped_history.json")
-    
+
     # Use session-state cache to avoid repeated disk reads within the same Streamlit run
     shipped_history = st.session_state.get("_shipped_history_cache")
     if shipped_history is None:
@@ -432,16 +478,25 @@ def _apply_shipped_history(df_full):
     for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
         if c_col in df_full.columns:
             p_val = df_full[c_col].astype(str).str.strip().str.lower()
-            has_consignment = has_consignment | (~p_val.isin(["", "nan", "none", "n/a", "0", "null"]))
+            has_consignment = has_consignment | (
+                ~p_val.isin(["", "nan", "none", "n/a", "0", "null"])
+            )
 
-    is_shipped_mask = df_full["Order Status"].astype(str).str.lower().isin(SHIPPED_STATUSES) | has_consignment
-    
+    is_shipped_mask = (
+        df_full["Order Status"].astype(str).str.lower().isin(SHIPPED_STATUSES)
+        | has_consignment
+    )
+
     for idx, row in df_full[is_shipped_mask].iterrows():
-        oid = str(row["Order ID"])
+        oid = str(row.get("Order ID", row.get("Order Number", "")))
+        if not oid:
+            continue
         actual_mod_dt = row["mod_dt_parsed"]
         if pd.notnull(actual_mod_dt):
             if oid in shipped_history:
-                stored_dt = safe_coerce_datetime_naive(pd.Series([shipped_history[oid]])).iloc[0]
+                stored_dt = safe_coerce_datetime_naive(
+                    pd.Series([shipped_history[oid]])
+                ).iloc[0]
                 if pd.isnull(stored_dt) or actual_mod_dt > stored_dt:
                     shipped_history[oid] = str(actual_mod_dt)
                     history_updated = True
@@ -449,7 +504,9 @@ def _apply_shipped_history(df_full):
                 shipped_history[oid] = str(actual_mod_dt)
                 history_updated = True
         elif oid in shipped_history:
-            stored_dt = safe_coerce_datetime_naive(pd.Series([shipped_history[oid]])).iloc[0]
+            stored_dt = safe_coerce_datetime_naive(
+                pd.Series([shipped_history[oid]])
+            ).iloc[0]
             if pd.notnull(stored_dt):
                 df_full.at[idx, "mod_dt_parsed"] = stored_dt
 
@@ -461,35 +518,43 @@ def _apply_shipped_history(df_full):
                 json.dump(shipped_history, f)
         except Exception:
             pass
-            
+
     return df_full
+
 
 def _partition_operational_data(df_full):
     """Split a full DataFrame into Today, Prev, and Backlog partitions.
-    
+
     Returns (df_live, df_prev, df_backlog, slot_label, slot_boundaries).
     slot_boundaries: (curr_slot, prev_slot, backlog_slot).
     """
     df_full = _apply_shipped_history(df_full)
 
-    tz_bd = timezone(timedelta(hours=6))
-    cutoff_today, prev_cutoff, day_before_prev, shipped_limit = _compute_cutoff_times(tz_bd)
+    cutoff_today, prev_cutoff, day_before_prev, shipped_limit = _compute_cutoff_times(
+        BD_TZ
+    )
 
     has_consignment = pd.Series(False, index=df_full.index)
     for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
         if c_col in df_full.columns:
             p_val = df_full[c_col].astype(str).str.strip().str.lower()
-            has_consignment = has_consignment | (~p_val.isin(["", "nan", "none", "n/a", "0", "null"]))
+            has_consignment = has_consignment | (
+                ~p_val.isin(["", "nan", "none", "n/a", "0", "null"])
+            )
 
-    is_shipped = df_full["Order Status"].astype(str).str.lower().isin(SHIPPED_STATUSES) | has_consignment
-    is_confirmed = df_full["Order Status"].astype(str).str.lower() == "confirmed"
+    is_shipped = (
+        df_full["Order Status"].astype(str).str.lower().isin(SHIPPED_STATUSES)
+        | has_consignment
+    )
     is_processing = df_full["Order Status"].astype(str).str.lower() == "processing"
     is_hold = df_full["Order Status"].astype(str).str.lower() == "on-hold"
-    is_waiting = df_full["Order Status"].astype(str).str.lower().isin(["pending", "waiting"])
+    is_waiting = (
+        df_full["Order Status"].astype(str).str.lower().isin(["pending", "waiting"])
+    )
 
     # Any order created or modified in today's shift (status changes, newly placed, dispatches)
-    modified_recent = (df_full["mod_dt_parsed"] >= prev_cutoff)
-    created_recent = (df_full["dt_parsed"] >= prev_cutoff)
+    modified_recent = df_full["mod_dt_parsed"] >= prev_cutoff
+    created_recent = df_full["dt_parsed"] >= prev_cutoff
 
     # For the "Today" view, include ANY order created or modified within the current operational shift.
     # This is more inclusive and catches old orders that were shipped today.
@@ -499,14 +564,13 @@ def _partition_operational_data(df_full):
     df_live = df_full[created_recent | modified_recent | is_processing].copy()
 
     df_prev = df_full[
-        (df_full["mod_dt_parsed"] >= day_before_prev) & 
-        (df_full["mod_dt_parsed"] < prev_cutoff) & 
-        is_shipped
+        (df_full["mod_dt_parsed"] >= day_before_prev)
+        & (df_full["mod_dt_parsed"] < prev_cutoff)
+        & is_shipped
     ].copy()
 
     df_backlog = df_full[is_hold | is_waiting].copy()
 
-    now_bd = datetime.now(tz_bd)
     slot_label = "Today"
 
     # curr_slot: from start of today's shift (prev_cutoff) to end of today's shift (cutoff_today)
@@ -524,7 +588,9 @@ def _build_result_payload(df_to_return, slot_label, modified_at, partitions, slo
     """Build the standard results dictionary returned by load_from_woocommerce."""
     return {
         "df_to_return": df_to_return,
-        "sync_desc": f"WooCommerce_{slot_label}_API_{len(df_to_return)}_Orders" if not df_to_return.empty else "woocommerce_api_empty",
+        "sync_desc": f"WooCommerce_{slot_label}_API_{len(df_to_return)}_Orders"
+        if not df_to_return.empty
+        else "woocommerce_api_empty",
         "modified_at": modified_at,
         "partitions": partitions,
         "slots": slots,
@@ -554,7 +620,6 @@ def load_from_woocommerce(cache_buster: str | None = None):
 
     endpoint = f"{wc_url.rstrip('/')}/wp-json/wc/v3/orders"
     auth = HTTPBasicAuth(wc_key, wc_secret)
-    tz_bd = timezone(timedelta(hours=6))
 
     try:
         sync_mode = st.session_state.get("wc_sync_mode", "Operational Cycle")
@@ -565,10 +630,15 @@ def load_from_woocommerce(cache_buster: str | None = None):
             today_shipped_params = _get_today_modified_shipped_params(cache_buster)
 
             from concurrent.futures import ThreadPoolExecutor
+
             with ThreadPoolExecutor(max_workers=3) as executor:
                 f_op = executor.submit(_fetch_wc_batch, endpoint, params, auth)
-                f_global = executor.submit(_fetch_wc_batch, endpoint, global_params, auth)
-                f_shipped = executor.submit(_fetch_wc_batch, endpoint, today_shipped_params, auth)
+                f_global = executor.submit(
+                    _fetch_wc_batch, endpoint, global_params, auth
+                )
+                f_shipped = executor.submit(
+                    _fetch_wc_batch, endpoint, today_shipped_params, auth
+                )
 
                 rows = f_op.result()
                 global_rows = f_global.result()
@@ -582,18 +652,18 @@ def load_from_woocommerce(cache_buster: str | None = None):
 
         df_full = pd.DataFrame(rows)
         if df_full.empty:
-            return _build_result_payload(
-                pd.DataFrame(), "", "N/A", {}, {}
-            )
-            
+            return _build_result_payload(pd.DataFrame(), "", "N/A", {}, {})
+
         if sync_mode != "Operational Cycle":
             df_full = _apply_shipped_history(df_full)
 
-        now_str = datetime.now(tz_bd).strftime("%Y-%m-%d %H:%M:%S")
+        now_str = bd_now().strftime("%Y-%m-%d %H:%M:%S")
         st.session_state["live_sync_time"] = datetime.now()
 
         if sync_mode == "Operational Cycle":
-            df_live, df_prev, df_backlog, slot_label, slots = _partition_operational_data(df_full)
+            df_live, df_prev, df_backlog, slot_label, slots = (
+                _partition_operational_data(df_full)
+            )
             df_to_return = df_backlog if slot_label == "Backlog" else df_live
             partitions = {
                 "wc_curr_df": scrub_raw_dataframe(df_live),
@@ -616,7 +686,7 @@ def load_from_woocommerce(cache_buster: str | None = None):
 
     except Exception as e:
         log_system_event("WC_API_ERROR", str(e))
-        raise RuntimeError(f"Failed to fetch data from WooCommerce: {e}")
+        raise RuntimeError(f"Failed to fetch data from WooCommerce: {e}") from e
 
 
 def fetch_specific_woocommerce_orders(order_ids: list):
@@ -636,7 +706,7 @@ def fetch_specific_woocommerce_orders(order_ids: list):
     auth = HTTPBasicAuth(wc_key, wc_secret)
 
     # Split order_ids into batches of 100 because WC REST API limits 'include'
-    batches = [order_ids[i:i + 100] for i in range(0, len(order_ids), 100)]
+    batches = [order_ids[i : i + 100] for i in range(0, len(order_ids), 100)]
     all_processed = []
 
     try:
@@ -644,12 +714,19 @@ def fetch_specific_woocommerce_orders(order_ids: list):
 
         def _fetch_batch(batch_ids):
             include_str = ",".join(map(str, batch_ids))
-            params = {"include": include_str, "_fields": "id,number,date_created,date_modified,status,billing,shipping,payment_method_title,line_items,total,meta_data", "per_page": 100}
+            params = {
+                "include": include_str,
+                "_fields": "id,number,date_created,date_modified,status,billing,shipping,payment_method_title,line_items,total,meta_data",
+                "per_page": 100,
+            }
 
-            res = request_with_backoff("GET", endpoint, params=params, auth=auth, timeout=15)
+            res = request_with_backoff(
+                "GET", endpoint, params=params, auth=auth, timeout=15
+            )
             if res.status_code != 200:
                 return []
             import json
+
             data = json.loads(res.content.decode("utf-8-sig"))
             rows = []
             for order in data:
@@ -696,15 +773,16 @@ def _staleness_info(df):
     )
     if not mod_col:
         return None, None
-    mods = pd.to_datetime(df[mod_col].astype(str).str.replace("Z", "", regex=False), errors="coerce")
+    mods = pd.to_datetime(
+        df[mod_col].astype(str).str.replace("Z", "", regex=False), errors="coerce"
+    )
     if "mod_dt_parsed" not in df.columns:
         # Raw column is UTC/GMT — convert to BD local for comparison.
         mods = mods + pd.Timedelta(hours=6)
     newest = mods.max()
     if pd.isnull(newest):
         return None, None
-    tz_bd = timezone(timedelta(hours=6))
-    now_bd = datetime.now(tz_bd).replace(tzinfo=None)
+    now_bd = bd_now().replace(tzinfo=None)
     return newest, (now_bd - newest).total_seconds() / 60
 
 
@@ -727,39 +805,81 @@ def _should_autorefresh() -> bool:
 
 
 def load_live_source(force_refresh=False):
-    """Stateless fetch with stateful session update and automatic offline snapshot fallback."""
-    if force_refresh or _should_autorefresh():
+    """Stateless fetch with stateful session update and automatic offline snapshot fallback.
+
+    Every sync triggers the WooCommerce REST API with a unique cache-buster
+    query param, so Cloudflare's URL-keyed cache is bypassed and the API
+    returns the latest events (new orders, status changes, shipments). Within
+    the refresh interval, the last fetched data is reused without an extra
+    REST call — and never via an un-busted URL that could be served stale.
+    """
+    should_fetch = force_refresh or _should_autorefresh()
+    if should_fetch:
         load_from_woocommerce.clear()
 
     results = None
-    try:
-        results = load_from_woocommerce()
-    except Exception as api_err:
-        log_system_event("WC_API_DOWN_ERROR", f"WooCommerce REST API failed: {api_err}")
-        results = None
-
-    # ── Stale-data retry ─────────────────────────────────────────────────────
-    # The store's REST API intermittently serves cached/older order data (the
-    # same query returns different states minutes apart). If the fetched data's
-    # newest order modification is much older than now, retry once with a
-    # cache-busting query param to force a fresh response from the origin.
-    if results and isinstance(results, dict) and _data_looks_stale(results.get("df_to_return")):
-        newest, age_min = _staleness_info(results.get("df_to_return"))
-        log_system_event(
-            "WC_STALE_DATA",
-            f"newest_mod={newest} age_min={age_min:.0f}" if newest is not None else "stale-detected",
-        )
-        load_from_woocommerce.clear()
-        cache_buster = str(int(datetime.now().timestamp() * 1000))
+    if should_fetch:
         try:
-            retried = load_from_woocommerce(cache_buster=cache_buster)
-            if retried and isinstance(retried, dict) and not _data_looks_stale(retried.get("df_to_return")):
-                results = retried
-                log_system_event("WC_STALE_RETRY_RECOVERED", "cache-buster returned fresh data")
-            else:
-                log_system_event("WC_STALE_RETRY_UNRESOLVED", "data still stale after cache-buster retry")
-        except Exception as retry_err:
-            log_system_event("WC_STALE_RETRY_FAILED", str(retry_err))
+            # Unique cache-buster per sync → the REST API always answers from origin.
+            results = load_from_woocommerce(
+                cache_buster=str(int(datetime.now().timestamp() * 1000))
+            )
+        except Exception as api_err:
+            log_system_event(
+                "WC_API_DOWN_ERROR", f"WooCommerce REST API failed: {api_err}"
+            )
+            results = None
+        # Unique-keyed entries would accumulate in st.cache_data — drop them.
+        load_from_woocommerce.clear()
+
+        # ── Stale-data retry ─────────────────────────────────────────────────
+        # Backstop in case the origin itself returns cached data (e.g. a WP
+        # object cache): retry once with a fresh cache-buster.
+        if (
+            results
+            and isinstance(results, dict)
+            and _data_looks_stale(results.get("df_to_return"))
+        ):
+            newest, age_min = _staleness_info(results.get("df_to_return"))
+            log_system_event(
+                "WC_STALE_DATA",
+                f"newest_mod={newest} age_min={age_min:.0f}"
+                if newest is not None
+                else "stale-detected",
+            )
+            try:
+                retried = load_from_woocommerce(
+                    cache_buster=str(int(datetime.now().timestamp() * 1000))
+                )
+                load_from_woocommerce.clear()
+                if (
+                    retried
+                    and isinstance(retried, dict)
+                    and not _data_looks_stale(retried.get("df_to_return"))
+                ):
+                    results = retried
+                    log_system_event(
+                        "WC_STALE_RETRY_RECOVERED", "cache-buster returned fresh data"
+                    )
+                else:
+                    log_system_event(
+                        "WC_STALE_RETRY_UNRESOLVED",
+                        "data still stale after cache-buster retry",
+                    )
+            except Exception as retry_err:
+                log_system_event("WC_STALE_RETRY_FAILED", str(retry_err))
+    else:
+        # Within the refresh interval: reuse the last fetched data without
+        # another REST call (an un-busted URL could be served stale by Cloudflare).
+        df_cached = st.session_state.get("wc_full_df")
+        if df_cached is not None and not df_cached.empty:
+            results = {
+                "df_to_return": df_cached,
+                "sync_desc": st.session_state.get(
+                    "_wc_last_sync_desc", f"WooCommerce_cached_{len(df_cached)}_Orders"
+                ),
+                "modified_at": st.session_state.get("_wc_last_modified_at", ""),
+            }
 
     if results and isinstance(results, dict):
         df_new = results.get("df_to_return")
@@ -767,14 +887,23 @@ def load_live_source(force_refresh=False):
         # ── New-Order Detection: compare Order IDs vs last sync ──────────────
         new_order_count = 0
         if df_new is not None and not df_new.empty:
-            id_col = next((c for c in ["Order ID", "order_id", "ID", "id"] if c in df_new.columns), None)
+            id_col = next(
+                (
+                    c
+                    for c in ["Order ID", "order_id", "ID", "id"]
+                    if c in df_new.columns
+                ),
+                None,
+            )
             if id_col:
                 current_ids = set(df_new[id_col].dropna().astype(str).unique())
                 prev_ids = st.session_state.get("wc_last_order_ids", set())
                 new_ids = current_ids - prev_ids
                 new_order_count = len(new_ids)
                 st.session_state["wc_last_order_ids"] = current_ids
-                if new_order_count > 0 and prev_ids:  # only notify on subsequent syncs, not first load
+                if (
+                    new_order_count > 0 and prev_ids
+                ):  # only notify on subsequent syncs, not first load
                     st.session_state["wc_new_order_count"] = new_order_count
                 else:
                     st.session_state["wc_new_order_count"] = 0
@@ -796,10 +925,13 @@ def load_live_source(force_refresh=False):
 
         # 4. Update Full Context for Forecasting
         st.session_state["wc_full_df"] = df_new
+        st.session_state["_wc_last_sync_desc"] = results.get("sync_desc", "")
+        st.session_state["_wc_last_modified_at"] = results.get("modified_at", "")
 
         # 5. Silent Autosave for Offline Mode Fallback
         try:
             from src.utils.snapshots import save_sales_snapshot
+
             if df_new is not None and not df_new.empty:
                 save_sales_snapshot(df_new)
         except Exception:
@@ -815,19 +947,19 @@ def load_live_source(force_refresh=False):
 
     # Automatic Fallback: Load last saved snapshot when API is not working
     from src.utils.snapshots import load_sales_snapshot
+
     df_snap = load_sales_snapshot()
     if df_snap is not None and not df_snap.empty:
         st.session_state.live_sync_time = datetime.now()
         st.session_state["wc_full_df"] = df_snap
         return df_snap, "LOCAL_SNAPSHOT_FALLBACK", "API_OFFLINE"
 
-    raise ValueError("WooCommerce REST API is offline and no local saved snapshot is available.")
+    raise ValueError(
+        "WooCommerce REST API is offline and no local saved snapshot is available."
+    )
 
 
 def get_items_sold_label(last_updated):
-    from datetime import datetime, timedelta, timezone
-
-    tz_bd = timezone(timedelta(hours=6))
     try:
         if (
             isinstance(last_updated, str)
@@ -841,6 +973,6 @@ def get_items_sold_label(last_updated):
     except Exception:
         pass
 
-    if datetime.now(tz_bd).hour < 16:
+    if bd_now().hour < 16:
         return "Items to be sold"
     return "Item sold"

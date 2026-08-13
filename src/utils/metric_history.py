@@ -3,23 +3,20 @@
 Saves a daily shift summary as a JSON file under resources/metric_snapshots/.
 Provides a loader that returns a DataFrame of historical metrics for trend charts.
 """
+
 from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import pandas as pd
 
-from src.config.constants import METRIC_SNAPSHOT_DIR
-
-# Bangladesh timezone offset
-_BD_TZ = timezone(timedelta(hours=6))
+from src.config.constants import METRIC_SNAPSHOT_DIR, bd_now
 
 
 def _today_key() -> str:
-    return datetime.now(_BD_TZ).strftime("%Y-%m-%d")
+    return bd_now().strftime("%Y-%m-%d")
 
 
 def _snapshot_path(date_key: str) -> str:
@@ -56,7 +53,7 @@ def save_shift_snapshot(
         shifts: list = existing.get("shifts", [])
         shifts.append(
             {
-                "ts": datetime.now(_BD_TZ).isoformat(),
+                "ts": bd_now().isoformat(),
                 "label": shift_label,
                 "revenue": round(revenue, 2),
                 "orders": orders,

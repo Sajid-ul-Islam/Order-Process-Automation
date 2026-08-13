@@ -1,7 +1,21 @@
 import os
+from datetime import datetime, timedelta, timezone
 
 # Project root — resolved once from src/config/ -> src/ -> project root
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+
+# Bangladesh timezone (UTC+6) — shared so modules stop re-deriving it inline.
+BD_TZ = timezone(timedelta(hours=6))
+
+
+def bd_now():
+    """Current wall-clock time in Bangladesh (UTC+6)."""
+    return datetime.now(BD_TZ)
+
+
+def bd_today():
+    """Today's calendar date in Bangladesh."""
+    return bd_now().date()
 
 # Data directories
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
@@ -47,7 +61,7 @@ ERROR_LOG_FILE = os.path.join(DATA_DIR, "error_logs.json")
 STATE_FILE = os.path.join(DATA_DIR, "session_state.json")
 
 # Unified Category Master List (Preserves Hierarchical Order)
-# Use ↳ (\u21b3) for sub-categories. 
+# Use ↳ (\u21b3) for sub-categories.
 COMMON_CATS = [
     "Jeans",
     "  \u21b3 Regular Fit Jeans",
@@ -102,7 +116,7 @@ COMMON_CATS = [
     "Mask",
     "Water Bottle",
     "Bundles",
-    "Others"
+    "Others",
 ]
 
 # Ensure directories exist

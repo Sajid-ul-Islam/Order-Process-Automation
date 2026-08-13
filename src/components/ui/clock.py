@@ -1,5 +1,7 @@
 import streamlit as st
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
+
+from src.config.constants import bd_now
 
 
 def _get_sync_badge_html(sync_time: datetime | None) -> str:
@@ -64,12 +66,11 @@ window.__syncInterval = setInterval(updateSync, 1000);
 
 def get_clock_html():
     """Returns the compact, single-line JavaScript clock HTML string."""
-    tz_bd = timezone(timedelta(hours=6))
-    now_bd = datetime.now(tz_bd)
+    now_bd = bd_now()
     return f"""<div style="text-align: right; line-height: 1.5; color: white; font-family: sans-serif;">
-<span id="header-clock-time" style="font-size: 1.05rem; font-weight: 700; letter-spacing: -0.3px;">{now_bd.strftime('%I:%M:%S %p')}</span>
+<span id="header-clock-time" style="font-size: 1.05rem; font-weight: 700; letter-spacing: -0.3px;">{now_bd.strftime("%I:%M:%S %p")}</span>
 <span style="color: rgba(255,255,255,0.4); margin: 0 10px; font-weight: 300;">|</span>
-<span id="header-clock-date" style="font-size: 0.9rem; color: rgba(255,255,255,0.8); font-weight: 500;">{now_bd.strftime('%A, %B %d')}</span>
+<span id="header-clock-date" style="font-size: 0.9rem; color: rgba(255,255,255,0.8); font-weight: 500;">{now_bd.strftime("%A, %B %d")}</span>
 </div>
 <script>
 (function() {{

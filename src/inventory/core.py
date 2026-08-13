@@ -7,6 +7,8 @@ from typing import Dict, Tuple, Optional
 import pandas as pd
 from rapidfuzz import process
 
+from src.utils.file_io import read_uploaded
+
 
 @lru_cache(maxsize=4096)
 def normalize_key(val) -> str:
@@ -107,7 +109,9 @@ def identify_columns(
         ) and qty_col is None:
             qty_col = c_orig
         # Prefer explicit "item name" over generic "title"
-        if ("item name" in c_lower or "product name" in c_lower or "product" == c_lower) and title_col is None:
+        if (
+            "item name" in c_lower or "product name" in c_lower or "product" == c_lower
+        ) and title_col is None:
             title_col = c_orig
         elif "title" in c_lower and title_col is None:
             title_col = c_orig
@@ -170,24 +174,15 @@ def add_title_size_column(
     return df
 
 
-def _read_uploaded(file_obj) -> pd.DataFrame:
-    if isinstance(file_obj, pd.DataFrame):
-        return file_obj
-    file_obj.seek(0)
-    if getattr(file_obj, "name", "").endswith(".csv"):
-        return pd.read_csv(file_obj)
-    return pd.read_excel(file_obj)
-
-
 def load_inventory_from_uploads(uploaded_files: Dict[str, object]):
     """
     Build inventory mapping from uploaded inventory files.
     Matching is based only on 'Title - Size' (computed from Title + Size).
     """
     inventory: Dict[str, Dict[str, int]] = {}
-    sku_to_title_size: Dict[str, str] = (
-        {}
-    )  # sku_key -> Title-Size key (for SKU match validation)
+    sku_to_title_size: Dict[
+        str, str
+    ] = {}  # sku_key -> Title-Size key (for SKU match validation)
     all_locations = list(uploaded_files.keys())
     warnings = []
     enriched_dfs: Dict[str, pd.DataFrame] = {}
@@ -196,7 +191,7 @@ def load_inventory_from_uploads(uploaded_files: Dict[str, object]):
         if file_obj is None:
             continue
         try:
-            df = _read_uploaded(file_obj)
+            df = read_uploaded(file_obj)
             size_col, qty_col, title_col, sku_col = identify_columns(df)
 
             if not title_col:
@@ -217,11 +212,11 @@ def load_inventory_from_uploads(uploaded_files: Dict[str, object]):
                 for idx, row in df.iterrows():
                     sku_val = str(row[sku_col]).strip()
                     norm_sku = normalize_sku(sku_val)
-                    
+
                     size_val = "NO_SIZE"
                     if size_col and size_col in df.columns:
                         size_val = normalize_size(row[size_col])
-                    
+
                     if norm_sku and norm_sku != "0":
                         combo = (norm_sku, size_val)
                         if combo in seen_combinations:
@@ -232,7 +227,7 @@ def load_inventory_from_uploads(uploaded_files: Dict[str, object]):
                             continue
                         seen_combinations.add(combo)
                     rows_to_keep.append(idx)
-                
+
                 df = df.loc[rows_to_keep]
 
             df = add_title_size_column(df, title_col=title_col, size_col=size_col)
@@ -271,15 +266,22 @@ def load_inventory_from_uploads(uploaded_files: Dict[str, object]):
                         sku_to_title_size[sku_key] = (
                             key  # SKU -> Title-Size key for this row
                         )
-                        
+
                         # Master SKU + Size Key
-                        if size_col and size_col in df.columns and pd.notna(row.get(size_col, "")) and str(row.get(size_col, "")).strip():
+                        if (
+                            size_col
+                            and size_col in df.columns
+                            and pd.notna(row.get(size_col, ""))
+                            and str(row.get(size_col, "")).strip()
+                        ):
                             size_val = row.get(size_col, "")
                             norm_sz = normalize_size(size_val)
                         else:
-                            _, extracted_size = item_name_to_title_size(row.get(title_col, ""))
+                            _, extracted_size = item_name_to_title_size(
+                                row.get(title_col, "")
+                            )
                             norm_sz = normalize_size(extracted_size)
-                            
+
                         sku_size_key = f"SKU:{sku_key}_SZ:{norm_sz}"
                         if sku_size_key not in inventory:
                             inventory[sku_size_key] = {loc: 0 for loc in all_locations}
@@ -296,7 +298,7 @@ def sku_has_size_variations(sku_key: str, inventory: dict) -> bool:
     prefix = f"sku:{sku_key.casefold()}_sz:"
     for key in inventory:
         if str(key).casefold().startswith(prefix):
-            sz = str(key)[len(prefix):]
+            sz = str(key)[len(prefix) :]
             if sz.upper() != "NO_SIZE":
                 return True
     return False
@@ -307,7 +309,7 @@ def sku_has_size_variations(sku_key: str, inventory: dict) -> bool:
 
 def _build_location_config(locations, priority_locations):
     """Build location keyword mapping and ordered dispatch labels.
-    
+
     Returns (location_keywords: dict, ordered_labels: list).
     """
     loc_kw = {
@@ -361,6 +363,7 @@ def _parse_qty_needed(df):
             return int(float(x))
         except Exception:
             return 1
+
     return [_parse(x) for x in df[qty_col]]
 
 
@@ -372,10 +375,18 @@ def _match_row_to_inventory(
     Uses a priority system: SKU+Size → Exact Name → SKU-only → Fuzzy Name.
     Returns (inv_key, status).
     """
-    raw_item_name = str(raw_item_name) if isinstance(raw_item_name, (list, dict, set)) else raw_item_name
+    raw_item_name = (
+        str(raw_item_name)
+        if isinstance(raw_item_name, (list, dict, set))
+        else raw_item_name
+    )
     title, size = item_name_to_title_size(raw_item_name)
 
-    if size_col_val is not None and pd.notna(size_col_val) and str(size_col_val).strip():
+    if (
+        size_col_val is not None
+        and pd.notna(size_col_val)
+        and str(size_col_val).strip()
+    ):
         size = normalize_size(size_col_val)
 
     pl_key = build_title_size_key(title, size)
@@ -406,14 +417,22 @@ def _match_row_to_inventory(
         return pl_key, status
 
     # Priority 3: SKU-only match (no size variations for this SKU)
-    if sku and sku != "0" and sku in sku_to_inv_key and not (size != "NO_SIZE" and sku_has_size_variations(sku, inventory)):
+    if (
+        sku
+        and sku != "0"
+        and sku in sku_to_inv_key
+        and not (size != "NO_SIZE" and sku_has_size_variations(sku, inventory))
+    ):
         return sku, f"SKU Match (Size/Name mismatch -> {sku_to_inv_key[sku]})"
 
     # Priority 4: Fuzzy name match
     if pl_key:
-        name_keys = [k for k in inventory if not k.startswith("SKU:") and k not in sku_to_inv_key]
+        name_keys = [
+            k for k in inventory if not k.startswith("SKU:") and k not in sku_to_inv_key
+        ]
         same_size_keys = [
-            k for k in name_keys
+            k
+            for k in name_keys
             if normalize_size(item_name_to_title_size(k)[1]) == normalize_size(size)
         ]
         if same_size_keys:
@@ -446,7 +465,13 @@ def _assign_location_columns(df, locations, stock_sources, inventory):
 def _get_order_address(df, group_indices):
     """Extract the delivery address from the first row of a group."""
     parts = []
-    for addr_col in ["Shipping City", "Shipping Address 1", "Shipping Address", "Address", "City"]:
+    for addr_col in [
+        "Shipping City",
+        "Shipping Address 1",
+        "Shipping Address",
+        "Address",
+        "City",
+    ]:
         if addr_col in df.columns:
             first_idx = group_indices[0]
             val = df.loc[first_idx, addr_col]
@@ -472,10 +497,16 @@ def _reorder_labels_by_address(ordered_labels, order_address, loc_kw):
 
 
 def _try_allocate_for_group(
-    running_inv, stock_sources, qty_needed, group_indices, locations, loc_keywords, commit=False
+    running_inv,
+    stock_sources,
+    qty_needed,
+    group_indices,
+    locations,
+    loc_keywords,
+    commit=False,
 ):
     """Attempt to allocate stock for all items in an order group from locations matching keywords.
-    
+
     If commit=True, the running_inv is permanently updated.
     Returns True if all items could be fully allocated.
     """
@@ -539,11 +570,18 @@ def _compute_oos_locations(source_key, needed, locations, running_inv):
     return ", ".join(oos_locs)
 
 
-def _compute_fulfillment_for_oos(idx, suggestion, source_key, needed, running_inv, df, item_name_col, locations):
+def _compute_fulfillment_for_oos(
+    idx, suggestion, source_key, needed, running_inv, df, item_name_col, locations
+):
     """Compute fulfillment status, OOS locations, and alternatives for an OOS item."""
     alt = _find_suggested_alternatives(
-        str(item_name_to_title_size(str(df.loc[idx, item_name_col]) if item_name_col in df.columns else "")[0]),
-        source_key, running_inv
+        str(
+            item_name_to_title_size(
+                str(df.loc[idx, item_name_col]) if item_name_col in df.columns else ""
+            )[0]
+        ),
+        source_key,
+        running_inv,
     )
 
     if not source_key:
@@ -557,7 +595,11 @@ def _compute_fulfillment_for_oos(idx, suggestion, source_key, needed, running_in
     else:
         f_status = "❌ Blocked (Another item in order is OOS)"
 
-    return f_status, _compute_oos_locations(source_key, needed, locations, running_inv), alt
+    return (
+        f_status,
+        _compute_oos_locations(source_key, needed, locations, running_inv),
+        alt,
+    )
 
 
 def _apply_dispatch_suffixes(df, group_col):
@@ -609,7 +651,9 @@ def add_stock_columns_from_inventory(
 
     for i, row in df.iterrows():
         pl_sku = _parse_row_sku(row, sku_col)
-        size_col_val = row.get(size_col) if size_col and size_col in df.columns else None
+        size_col_val = (
+            row.get(size_col) if size_col and size_col in df.columns else None
+        )
         inv_key, status = _match_row_to_inventory(
             pl_sku, row.get(item_name_col, ""), size_col_val, inventory, sku_to_inv_key
         )
@@ -644,20 +688,32 @@ def add_stock_columns_from_inventory(
         temp_group_added = True
 
     try:
-        for _group_val, group_indices in df.groupby(group_col, sort=False).groups.items():
+        for _group_val, group_indices in df.groupby(
+            group_col, sort=False
+        ).groups.items():
             try:
                 num_items = len(group_indices)
                 for idx in group_indices:
                     items_in_order_list[idx] = num_items
 
                 order_address = _get_order_address(df, group_indices)
-                current_labels = _reorder_labels_by_address(ordered_labels, order_address, loc_kw)
+                current_labels = _reorder_labels_by_address(
+                    ordered_labels, order_address, loc_kw
+                )
 
                 # Find all locations that can fulfill this order
                 full_locs = []
                 for label in current_labels:
                     kws = loc_kw.get(label, [label.lower()])
-                    if _try_allocate_for_group(running_inv, stock_sources, qty_needed, group_indices, locations, kws, commit=False):
+                    if _try_allocate_for_group(
+                        running_inv,
+                        stock_sources,
+                        qty_needed,
+                        group_indices,
+                        locations,
+                        kws,
+                        commit=False,
+                    ):
                         full_locs.append(label)
 
                 full_locs_str = ", ".join(full_locs) if full_locs else "None"
@@ -668,12 +724,28 @@ def add_stock_columns_from_inventory(
                 suggestion = None
                 for label in current_labels:
                     kws = loc_kw.get(label, [label.lower()])
-                    if _try_allocate_for_group(running_inv, stock_sources, qty_needed, group_indices, locations, kws, commit=True):
+                    if _try_allocate_for_group(
+                        running_inv,
+                        stock_sources,
+                        qty_needed,
+                        group_indices,
+                        locations,
+                        kws,
+                        commit=True,
+                    ):
                         suggestion = label
                         break
 
                 if suggestion is None:
-                    if _try_allocate_for_group(running_inv, stock_sources, qty_needed, group_indices, locations, [loc.lower() for loc in locations], commit=True):
+                    if _try_allocate_for_group(
+                        running_inv,
+                        stock_sources,
+                        qty_needed,
+                        group_indices,
+                        locations,
+                        [loc.lower() for loc in locations],
+                        commit=True,
+                    ):
                         suggestion = "Multiple / Split"
                     else:
                         suggestion = "OOS / Unfulfillable"
@@ -689,7 +761,14 @@ def add_stock_columns_from_inventory(
 
                     if suggestion == "OOS / Unfulfillable":
                         f_status, oos_locs, alt = _compute_fulfillment_for_oos(
-                            idx, suggestion, source_key, needed, running_inv, df, item_name_col, locations
+                            idx,
+                            suggestion,
+                            source_key,
+                            needed,
+                            running_inv,
+                            df,
+                            item_name_col,
+                            locations,
                         )
                         fulfillment_status[idx] = f_status
                         oos_locations_list[idx] = oos_locs
@@ -722,13 +801,19 @@ def add_stock_columns_from_inventory(
 
     if group_col:
         df = _apply_dispatch_suffixes(df, group_col)
-        df["Unique Order"] = (~df.duplicated(subset=[group_col])).map({True: "Yes", False: ""})
+        df["Unique Order"] = (~df.duplicated(subset=[group_col])).map(
+            {True: "Yes", False: ""}
+        )
         df["Items in Order"] = items_in_order_list
     else:
         df["Unique Order"] = "Yes"
         df["Items in Order"] = 1
 
-    cols = [c for c in df.columns if c not in ["Match Status", "Unique Order", "Items in Order"]] + ["Items in Order", "Unique Order", "Match Status"]
+    cols = [
+        c
+        for c in df.columns
+        if c not in ["Match Status", "Unique Order", "Items in Order"]
+    ] + ["Items in Order", "Unique Order", "Match Status"]
     df = df[cols]
 
     return df, len(matched)

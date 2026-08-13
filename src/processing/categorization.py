@@ -5,45 +5,72 @@ from functools import lru_cache
 @lru_cache(maxsize=4096)
 def _normalize(name):
     """Normalizes names for matching."""
-    if not name: return ""
+    if not name:
+        return ""
     return str(name).lower().strip()
+
 
 def _has_any(keywords, text):
     """Checks if any keyword is in the text."""
     return any(kw in text for kw in keywords)
 
+
 @lru_cache(maxsize=4096)
 def get_category_for_sales(name) -> str:
     """Categorizes products based on keywords in their names (Unified v16.0 Rules)."""
     name_str = _normalize(name)
-    if not name_str: return "Others"
+    if not name_str:
+        return "Others"
 
     # 1. HIGH PRIORITY SPECIAL CATEGORIES
-    if _has_any(["panjabi", "punjabi"], name_str): return "Panjabi"
-    if _has_any(["sweatshirt", "hoodie", "pullover"], name_str): return "Sweatshirt"
-    if "polo" in name_str: return "Polo Shirt"
-    if _has_any(["turtleneck", "turtle-neck", "mock neck"], name_str): return "Turtle-Neck"
-    if "bundle" in name_str: return "Bundles"
-    if "cuban" in name_str: return "HS Shirt"
+    if _has_any(["panjabi", "punjabi"], name_str):
+        return "Panjabi"
+    if _has_any(["sweatshirt", "hoodie", "pullover"], name_str):
+        return "Sweatshirt"
+    if "polo" in name_str:
+        return "Polo Shirt"
+    if _has_any(["turtleneck", "turtle-neck", "mock neck"], name_str):
+        return "Turtle-Neck"
+    if "bundle" in name_str:
+        return "Bundles"
+    if "cuban" in name_str:
+        return "HS Shirt"
 
     # 2. MAIN CLUSTERS
-    if _has_any(["jeans"], name_str): return "Jeans"
-    if _has_any(["drop shoulder", "oversized"], name_str): return "Drop Shoulder"
-    if "tank top" in name_str: return "Tank Top"
-    
+    if _has_any(["jeans"], name_str):
+        return "Jeans"
+    if _has_any(["drop shoulder", "oversized"], name_str):
+        return "Drop Shoulder"
+    if "tank top" in name_str:
+        return "Tank Top"
+
     # Use word boundary check for 'tee' to prevent matching substrings of words like 'steel'
     has_tshirt = (
-        _has_any(["t-shirt", "t shirt", "active wear", "activewear", "jersy", "jersey"], name_str)
+        _has_any(
+            ["t-shirt", "t shirt", "active wear", "activewear", "jersy", "jersey"],
+            name_str,
+        )
         or re.search(r"\btee\b", name_str) is not None
     )
     if has_tshirt:
         return "T-Shirt"
 
-    fs_keywords = ["full sleeve", "long sleeve", "fs", "l/s", "fullsleeve", "full-sleeve"]
-    is_shirt = _has_any(["shirt"], name_str) and not _has_any(["pant", "trouser"], name_str)
-    
+    fs_keywords = [
+        "full sleeve",
+        "long sleeve",
+        "fs",
+        "l/s",
+        "fullsleeve",
+        "full-sleeve",
+    ]
+    is_shirt = _has_any(["shirt"], name_str) and not _has_any(
+        ["pant", "trouser"], name_str
+    )
+
     if is_shirt:
-        if _has_any(fs_keywords, name_str) or _has_any(["denim", "flannel", "oxford", "kaftan", "executive", "formal"], name_str):
+        if _has_any(fs_keywords, name_str) or _has_any(
+            ["denim", "flannel", "oxford", "kaftan", "executive", "formal"], name_str
+        ):
             return "FS Shirt"
         return "HS Shirt"
 
@@ -71,63 +98,92 @@ def get_category_for_sales(name) -> str:
 
     return "Others"
 
+
 @lru_cache(maxsize=4096)
 def get_sub_category_for_sales(name, category) -> str:
     """Extracts sub-category based on Unified v16.0 Hierarchical Rules."""
     name_str = _normalize(name)
-    if not name_str: return category
+    if not name_str:
+        return category
 
     if category == "Jeans":
-        if "regular" in name_str: return "Regular Fit Jeans"
-        if "slim" in name_str: return "Slim Fit Jeans"
-        if "straight" in name_str: return "Straight Fit Jeans"
+        if "regular" in name_str:
+            return "Regular Fit Jeans"
+        if "slim" in name_str:
+            return "Slim Fit Jeans"
+        if "straight" in name_str:
+            return "Straight Fit Jeans"
 
     elif category == "T-Shirt":
-        if _has_any(["active wear", "activewear"], name_str): return "Active Wear T-Shirt"
-        if _has_any(["jersy", "jersey"], name_str): return "Jersy"
-        if _has_any(["full sleeve", "long sleeve", "fs"], name_str): return "FS-T-Shirt"
+        if _has_any(["active wear", "activewear"], name_str):
+            return "Active Wear T-Shirt"
+        if _has_any(["jersy", "jersey"], name_str):
+            return "Jersy"
+        if _has_any(["full sleeve", "long sleeve", "fs"], name_str):
+            return "FS-T-Shirt"
         return "HS T-Shirt"
 
     elif category == "FS Shirt":
-        if "flannel" in name_str: return "Flannel Shirt"
-        if "denim" in name_str: return "Denim Shirt"
-        if "oxford" in name_str: return "Oxford Shirt"
-        if "kaftan" in name_str: return "Kaftan Shirt"
-        if "casual" in name_str: return "Casual Shirt - Full Sleeve"
-        if _has_any(["executive", "formal"], name_str): return "Formal Shirt"
+        if "flannel" in name_str:
+            return "Flannel Shirt"
+        if "denim" in name_str:
+            return "Denim Shirt"
+        if "oxford" in name_str:
+            return "Oxford Shirt"
+        if "kaftan" in name_str:
+            return "Kaftan Shirt"
+        if "casual" in name_str:
+            return "Casual Shirt - Full Sleeve"
+        if _has_any(["executive", "formal"], name_str):
+            return "Formal Shirt"
         return "FS Shirt"
 
     elif category == "HS Shirt":
-        if "contrast" in name_str: return "Contrast Shirt"
-        if "casual" in name_str: return "Casual Shirt - Half Sleeve"
-        if "cuban" in name_str: return "Cuban Shirt"
+        if "contrast" in name_str:
+            return "Contrast Shirt"
+        if "casual" in name_str:
+            return "Casual Shirt - Half Sleeve"
+        if "cuban" in name_str:
+            return "Cuban Shirt"
         return "HS Shirt"
 
     elif category == "Wallet":
-        if "passport" in name_str: return "Passport Holder"
-        if "card holder" in name_str: return "Card Holder"
-        if "long" in name_str: return "Long Wallet"
-        if "bifold" in name_str: return "Bifold Wallet"
-        if "trifold" in name_str: return "Trifold Wallet"
+        if "passport" in name_str:
+            return "Passport Holder"
+        if "card holder" in name_str:
+            return "Card Holder"
+        if "long" in name_str:
+            return "Long Wallet"
+        if "bifold" in name_str:
+            return "Bifold Wallet"
+        if "trifold" in name_str:
+            return "Trifold Wallet"
         return "Wallet"
 
     elif category == "Panjabi":
-        if _has_any(["embroidered cotton"], name_str): return "Embroidered Cotton Panjabi"
+        if _has_any(["embroidered cotton"], name_str):
+            return "Embroidered Cotton Panjabi"
         return "Panjabi"
 
     elif category == "Sweatshirt":
-        if "cotton terry" in name_str: return "Cotton Terry Sweatshirt"
-        if "french terry" in name_str: return "French Terry Sweatshirt"
+        if "cotton terry" in name_str:
+            return "Cotton Terry Sweatshirt"
+        if "french terry" in name_str:
+            return "French Terry Sweatshirt"
         return "Sweatshirt"
 
     elif category == "Twill":
-        if "joggers" in name_str: return "Twill Joggers"
-        if _has_any(["five pocket", "5 pocket", "5-pocket"], name_str): return "Twill Five Pockets"
+        if "joggers" in name_str:
+            return "Twill Joggers"
+        if _has_any(["five pocket", "5 pocket", "5-pocket"], name_str):
+            return "Twill Five Pockets"
         return "Twill Pant"
 
     elif category == "Trousers":
-        if "joggers" in name_str: return "Joggers"
-        if "regular fit" in name_str: return "Regular Fit Trousers"
+        if "joggers" in name_str:
+            return "Joggers"
+        if "regular fit" in name_str:
+            return "Regular Fit Trousers"
         return "Trousers"
 
     return category

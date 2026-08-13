@@ -40,9 +40,7 @@ def safe_filter(
         return df
 
 
-def safe_column_access(
-    df: pd.DataFrame, col: str, default: Any = "N/A"
-) -> pd.Series:
+def safe_column_access(df: pd.DataFrame, col: str, default: Any = "N/A") -> pd.Series:
     """Safely access a DataFrame column.
 
     Returns the column if it exists, otherwise returns a Series filled with the

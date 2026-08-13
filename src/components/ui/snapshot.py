@@ -3,24 +3,26 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.config.constants import bd_now
+
 
 # ── Metric computation ────────────────────────────────────────────────────────
+
 
 def compute_snapshot_metrics(
     granular_df: pd.DataFrame | None,
     basket_metrics: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """Compute a snapshot of core metrics from the current dashboard state."""
-    tz_bd = timezone(timedelta(hours=6))
     snapshot: dict[str, Any] = {
-        "timestamp": datetime.now(tz_bd).isoformat(),
+        "timestamp": bd_now().isoformat(),
         "core": {
             "total_qty": 0,
             "total_revenue": 0,
@@ -67,11 +69,11 @@ def compute_snapshot_metrics(
 
 # ── PNG card builder ──────────────────────────────────────────────────────────
 
+
 def _build_snapshot_png(metrics: dict[str, Any]) -> bytes | None:
     """Render a styled metrics-summary card as a PNG using Plotly."""
     try:
         core = metrics.get("core", {})
-        ts = metrics.get("timestamp", "")
 
         total_rev = f"TK {core.get('total_revenue', 0):,.0f}"
         total_qty = f"{core.get('total_qty', 0):,}"
@@ -90,43 +92,69 @@ def _build_snapshot_png(metrics: dict[str, Any]) -> bytes | None:
         CARD = "#1e293b"
         ACCENT = "#3b82f6"
         TEXT = "#f1f5f9"
-        MUTED = "#94a3b8"
 
         fig = go.Figure()
 
         fig.add_annotation(
-            x=0.5, y=0.97, xref="paper", yref="paper",
-            text="<b>📊 Dashboard Snapshot</b>", showarrow=False,
-            font=dict(size=22, color=TEXT, family="Arial")
+            x=0.5,
+            y=0.97,
+            xref="paper",
+            yref="paper",
+            text="<b>📊 Dashboard Snapshot</b>",
+            showarrow=False,
+            font=dict(size=22, color=TEXT, family="Arial"),
         )
 
-        fig.add_trace(go.Table(
-            domain=dict(x=[0.0, 1.0], y=[0.72, 0.90]),
-            header=dict(
-                values=["<b>Revenue</b>", "<b>Items Sold</b>", "<b>Orders</b>", "<b>Avg Basket</b>"],
-                fill_color=ACCENT, align="center", font=dict(color=TEXT)
-            ),
-            cells=dict(
-                values=[[total_rev], [total_qty], [total_ord], [avg_bv]],
-                fill_color=CARD, align="center", font=dict(color=TEXT, size=14)
-            )
-        ))
-
-        if cats:
-            fig.add_trace(go.Table(
-                domain=dict(x=[0.0, 1.0], y=[0.02, 0.68]),
+        fig.add_trace(
+            go.Table(
+                domain=dict(x=[0.0, 1.0], y=[0.72, 0.90]),
                 header=dict(
-                    values=["<b>Category</b>", "<b>Qty</b>", "<b>Revenue</b>"],
-                    fill_color="#1d4ed8", align="left", font=dict(color=TEXT)
+                    values=[
+                        "<b>Revenue</b>",
+                        "<b>Items Sold</b>",
+                        "<b>Orders</b>",
+                        "<b>Avg Basket</b>",
+                    ],
+                    fill_color=ACCENT,
+                    align="center",
+                    font=dict(color=TEXT),
                 ),
                 cells=dict(
-                    values=[cat_col, vol_col, rev_col],
-                    fill_color=CARD, align="left", font=dict(color=TEXT)
-                )
-            ))
+                    values=[[total_rev], [total_qty], [total_ord], [avg_bv]],
+                    fill_color=CARD,
+                    align="center",
+                    font=dict(color=TEXT, size=14),
+                ),
+            )
+        )
 
-        fig.update_layout(paper_bgcolor=BG, plot_bgcolor=BG, width=800, height=520, margin=dict(l=20, r=20, t=20, b=20))
-        
+        if cats:
+            fig.add_trace(
+                go.Table(
+                    domain=dict(x=[0.0, 1.0], y=[0.02, 0.68]),
+                    header=dict(
+                        values=["<b>Category</b>", "<b>Qty</b>", "<b>Revenue</b>"],
+                        fill_color="#1d4ed8",
+                        align="left",
+                        font=dict(color=TEXT),
+                    ),
+                    cells=dict(
+                        values=[cat_col, vol_col, rev_col],
+                        fill_color=CARD,
+                        align="left",
+                        font=dict(color=TEXT),
+                    ),
+                )
+            )
+
+        fig.update_layout(
+            paper_bgcolor=BG,
+            plot_bgcolor=BG,
+            width=800,
+            height=520,
+            margin=dict(l=20, r=20, t=20, b=20),
+        )
+
         # This is where it might crash if kaleido is broken
         return fig.to_image(format="png")
     except Exception:
@@ -134,6 +162,7 @@ def _build_snapshot_png(metrics: dict[str, Any]) -> bytes | None:
 
 
 # ── Public widget ─────────────────────────────────────────────────────────────
+
 
 def render_snapshot_button(
     granular_df: pd.DataFrame | None = None,
@@ -145,11 +174,10 @@ def render_snapshot_button(
     # Attempt PNG build
     png_bytes = None
     if "kaleido" in st.session_state.get("_kaleido_check", "unknown"):
-         png_bytes = _build_snapshot_png(metrics)
+        png_bytes = _build_snapshot_png(metrics)
     else:
         # One-time check to see if kaleido works without crashing the process
         try:
-            import kaleido
             st.session_state["_kaleido_check"] = "kaleido_present"
             png_bytes = _build_snapshot_png(metrics)
         except Exception:
@@ -167,7 +195,7 @@ def render_snapshot_button(
         mime = "application/json"
         label = "💾 Save Snapshot (JSON)"
         if st.session_state.get("_kaleido_check") == "kaleido_failed":
-             st.caption("⚠️ PNG export failed (kaleido error). Saving as JSON.")
+            st.caption("⚠️ PNG export failed (kaleido error). Saving as JSON.")
 
     col1, col2 = st.columns([4, 1])
     with col2:
@@ -177,5 +205,5 @@ def render_snapshot_button(
             file_name=file_name,
             mime=mime,
             use_container_width=True,
-            key=f"snap_btn_{datetime.now().microsecond}" # Force refresh if needed
+            key=f"snap_btn_{datetime.now().microsecond}",  # Force refresh if needed
         )

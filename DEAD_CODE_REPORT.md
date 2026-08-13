@@ -143,3 +143,76 @@ Reorganized monolithic `src/components/` and `src/pages/` directories into struc
 - `import plotly.express as px` in `src/components/dashboard/dashboard_output.py` (unused).
 - `from src.services.exports.excel_exporter import export_to_styled_excel` in `src/components/dashboard/dashboard_output.py` (unused).
 
+---
+
+## Dead Code Audit — August 2026
+
+Full-codebase sweep (ruff F401/F541/F811/F841 + import-graph analysis + test run).
+
+### Deleted Files
+| File | Reason |
+|------|--------|
+| `src/pages/whatsapp_daily_report.py` | Empty 0-byte placeholder, never imported or referenced. |
+
+### Relocated Files
+| File | New Location | Reason |
+|------|--------------|--------|
+| `src/pages/executive_daily_report.py` | `scripts/executive_daily_report.py` | Standalone CLI script (not a routed page) — belongs with the other operational scripts. Docstring usage updated. |
+
+### Untracked Runtime Artifacts
+`data/error_logs.json` and `data/session_state.json` were tracked in git despite being regenerated on every run (machine-specific tracebacks / serialized session state). Both are now in `.gitignore` and removed from tracking; `data/feedback/system_logs.json` was already ignored.
+
+### Removed Dead Functions
+| Function | File | Reason |
+|----------|------|--------|
+| `apply_standard_dataframe()` | `src/components/ui/ui_components.py` | Never called anywhere in the codebase. |
+| `customer_groups` computation (polars group-by on `_clean_phone`) | `src/processing/data_processing.py` | Result never used; removed along with the now-pointless `_clean_phone` enrichment branch (behavior-identical: `avg_customer_value`/`unique_customers` still only set when no phone column exists). |
+| `render_performance_analysis()` | `src/components/dashboard/dashboard_output.py` | Already removed in the June 2026 audit (kept here for completeness). |
+
+### Removed Unused Imports & Variables
+- ~40 unused imports removed via `ruff check --fix` (including `plotly.express`, unused `ui_components` helpers, `BytesIO`, `typing` names, `requests`, `kaleido`, etc.).
+- ~25 unused local variables removed (e.g. `is_confirmed`/`now_bd` in `woocommerce/client.py`, `range_sub` block in `dashboard_metrics.py` — computed but only referenced by a commented-out `st.caption`, `styled_df` in `pathao_orders.py`, `edited_df` in `woocommerce_orders.py`, `is_holiday_merge`/`p_20b` in `layout/header.py`, `success`/`now` in `llm/manager.py`).
+- 2 f-strings without placeholders converted to plain strings (`F541`).
+- 2 shadowing redefinitions fixed: `np` in `data_pilot.py` (local import kept), `io` in `inventory_distribution.py` (top-level import kept, redundant function-local `import io` removed).
+
+### Follow-up Sweep (guarded by `tests/test_no_unused_imports.py`)
+- 9 unused imports removed from `src/pages/data_pilot.py` (`os`, `typing.Dict`/`List`, `DATA_DIR`, `load_secrets_schema`, `TfidfVectorizer`, `cosine_similarity`, `NeuralBrain`, `PredictiveIntelligence`) — caught by the new F401 guard test.
+- `scripts/check_imports.py` module list extended from 45 → 64 modules, covering every module in `src/` (including the new `llm/agent.py`, `woocommerce/orders.py`, `dashboard/svg.py`, `inventory/core.py`, the remaining pages/processing/services/ui modules).
+
+### Not Touched (by design)
+- `E701` compound statements (~94 one-liner `if ...: ...`) and `E722` bare `except`s (~10) — pre-existing style choices, not dead code; left for a dedicated formatting pass.
+- `scripts/update_pathao_data.py`, `scripts/generate_requirements_lock.py`, `scripts/generate_snapshot.py` — operational utilities (referenced by `.claude/`, CI, or usable standalone).
+- `BackEnd/cache/` — intentionally tracked: the nightly `data_crunch.yml` action commits regenerated snapshots.
+- `resources/metric_snapshots/`, `resources/pathao_map.json`, etc. — persisted data the app reads/writes.
+
+### Docs Updated
+- `README.md`: removed stale `requirements/` package layout and `requirements.lock`/`_deprecated/` claims; structure tree now matches the real tree.
+- `ARCHITECTURE.md`: layer diagram and tables now reference the current module locations (e.g. `components/dashboard/dashboard_output.py`); removed `services/google/sheets` and `state/insights`.
+- `ERROR_HANDLING_GUIDE.md`: fixed stale `dashboard_output.py` path.
+- `agent.md`: page list and operational-dashboard rules now reference `components/dashboard/` and the `pages/pathao_orders/` package.
+
+**Verification:** `ruff check` clean for F-categories; `python -m compileall -q src app.py scripts/ tests/` passes; `pytest tests/ -q` → 16 passed; `scripts/check_imports.py` → 64/64 modules import cleanly.
+
+---
+
+## Modularization Pass — Duplicate Logic Consolidation
+
+Same-work-done-in-many-places cleanup. No behavior change intended (one latent bug fixed, see below); every consolidation is covered by `tests/test_shared_helpers.py` (21 new tests, suite now 37).
+
+### Shared BD time (`src/config/constants.py`)
+- Added `BD_TZ`, `bd_now()`, `bd_today()` — the codebase re-derived `timezone(timedelta(hours=6))` in **18+ places** across `woocommerce/client.py` (6 sites), `data_processing.py` (4), `live_dashboard.py` (4), `metric_history.py`, `metric_snapshots.py`, `clock.py`, `snapshot.py`, `dashboard_output.py`, and `scripts/executive_daily_report.py`. All now use the shared helpers; per-function `from datetime import ...` shadowing imports removed.
+
+### Shared phone normalization (`src/utils/text.py`)
+- Added `normalize_phone_number()` — canonical BD 11-digit 0-prefixed form (017…, 17…, +88017…, 88017… → 017…).
+- `customer_registry.normalize_phone_key()` and `WhatsAppOrderProcessor.clean_phone_number()` were two divergent re-implementations; both now delegate to the shared function. The registry wrapper keeps its `pd.isna` guard; the WhatsApp path keeps its `pd.isna` guard.
+- **Bug fixed as a side effect:** the old WhatsApp implementation returned `88017…` untouched for `88`/`880`-prefixed inputs, producing broken `https://wa.me/+88880…` links (doubled country code). The shared canonicalizer now yields correct `+88017…` links. Standard `017…`/`17…` inputs are byte-identical to the old behavior.
+
+### Shared column picking (`src/processing/column_detection.py`)
+- Added `pick_column(df, candidates, default)` — replaces the repeated `next((c for c in [...] if c in df.columns), default)` idiom. `customer_registry.py` had **6 near-identical blocks** (phone/email/date/order-id column selection across `update_customer_registry` and `compute_new_vs_returning_counts`); candidate lists hoisted to module constants, all blocks now call `pick_column`.
+
+### Shared file reading (`src/utils/file_io.py`)
+- `inventory/core.py` had a private `_read_uploaded()` duplicating `file_io.read_uploaded()` (plus DataFrame passthrough). `read_uploaded()` now handles DataFrames and None, and inventory imports it instead of defining its own.
+
+### Verification
+- `pytest tests/` → 37 passed (21 new in `tests/test_shared_helpers.py`); `ruff check --select F` clean; `compileall` OK; `check_imports.py` → 64/64.
+

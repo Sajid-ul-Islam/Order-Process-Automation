@@ -4,6 +4,19 @@ import pandas as pd
 from src.utils.logging import log_system_event
 
 
+def pick_column(
+    df: pd.DataFrame, candidates: list[str], default: str | None = None
+) -> str | None:
+    """Return the first candidate column present in df, else `default`.
+
+    Replaces the repeated ``next((c for c in [...] if c in df.columns), default)``
+    idiom used across the codebase for finding the best matching column name.
+    """
+    if df is None:
+        return default
+    return next((c for c in candidates if c in df.columns), default)
+
+
 @st.cache_data(show_spinner=False)
 def find_columns(df: pd.DataFrame) -> dict[str, str]:
     """Detects primary columns using exact and then partial matching.
@@ -77,7 +90,10 @@ def find_columns(df: pd.DataFrame) -> dict[str, str]:
                         found[key] = col
                         break
     except Exception as e:
-        log_system_event("COLUMN_DETECT_ERROR", f"Partial detection returned {len(found)} columns: {e}")
+        log_system_event(
+            "COLUMN_DETECT_ERROR",
+            f"Partial detection returned {len(found)} columns: {e}",
+        )
 
     return found
 
@@ -98,12 +114,23 @@ def scrub_raw_dataframe(df):
 
     # 3. Optimized Summary Filter (Avoid stacking)
     # Target common text columns instead of the entire dataframe
-    summary_keywords = ["total", "grand total", "summary", "analytics", "chart", "metric"]
+    summary_keywords = [
+        "total",
+        "grand total",
+        "summary",
+        "analytics",
+        "chart",
+        "metric",
+    ]
     pattern = "|".join(summary_keywords)
 
     # Check specifically for Order Number or ID being 'Total' or similar
     # If we find a column that looks like an ID, use it as a primary filter
-    id_cols = [c for c in df.columns if any(k in c.lower() for k in ["id", "number", "invoice", "#"])]
+    id_cols = [
+        c
+        for c in df.columns
+        if any(k in c.lower() for k in ["id", "number", "invoice", "#"])
+    ]
     if id_cols:
         col = id_cols[0]
         df = df[~df[col].astype(str).str.lower().str.contains(pattern, na=False)]

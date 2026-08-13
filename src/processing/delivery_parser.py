@@ -239,4 +239,3 @@ def parse_data_fuzzy(raw_text):
             record = extract_fields_fuzzy(cons_id, body)
             records.append(record)
     return pd.DataFrame(records)
-

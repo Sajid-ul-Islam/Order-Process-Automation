@@ -3,20 +3,32 @@
 Stores a mapping of customer phone numbers and emails to their earliest known order date.
 Accurately identifies returning customers even if their previous order was placed years ago.
 """
+
 from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
-from collections import defaultdict
 
 import pandas as pd
 
 from src.config.constants import RESOURCES_DIR
+from src.processing.column_detection import pick_column
 from src.processing.data_processing import safe_coerce_datetime_naive
 from src.utils.logging import log_system_event
+from src.utils.text import normalize_phone_number
 
 CUSTOMER_REGISTRY_PATH = os.path.join(RESOURCES_DIR, "customer_registry.json")
+
+# Column-name candidates used across registry scans (same work, one definition).
+_PHONE_COL_CANDIDATES = [
+    "Phone (Billing)",
+    "Phone",
+    "Billing Phone",
+    "Customer Phone",
+    "phone",
+]
+_EMAIL_COL_CANDIDATES = ["Billing Email", "Email", "Customer Email", "email"]
+_DATE_COL_CANDIDATES = ["Order Date", "Date", "Created Date"]
 
 
 def normalize_phone_key(cust_id: str | None) -> str:
@@ -26,25 +38,7 @@ def normalize_phone_key(cust_id: str | None) -> str:
     """
     if not cust_id or pd.isna(cust_id):
         return ""
-    cust_str = str(cust_id).strip().lower()
-    if not cust_str or cust_str in ["nan", "none", "0", "null", "n/a", "01700000000"]:
-        return ""
-
-    if "@" in cust_str:
-        return cust_str
-
-    digits = "".join(filter(str.isdigit, cust_str))
-    if not digits:
-        return cust_str
-
-    if digits.startswith("880"):
-        digits = "0" + digits[3:]
-    elif digits.startswith("88"):
-        digits = "0" + digits[2:]
-    elif not digits.startswith("0") and len(digits) == 10:
-        digits = "0" + digits
-
-    return digits
+    return normalize_phone_number(cust_id)
 
 
 def load_customer_registry() -> dict[str, str]:
@@ -54,11 +48,15 @@ def load_customer_registry() -> dict[str, str]:
             with open(CUSTOMER_REGISTRY_PATH, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            log_system_event("CUSTOMER_REGISTRY_LOAD_ERROR", f"Failed to load registry: {e}")
+            log_system_event(
+                "CUSTOMER_REGISTRY_LOAD_ERROR", f"Failed to load registry: {e}"
+            )
     return {}
 
 
-def get_customer_first_order_date(cust_id: str | None, registry: dict[str, str] | None = None) -> pd.Timestamp | None:
+def get_customer_first_order_date(
+    cust_id: str | None, registry: dict[str, str] | None = None
+) -> pd.Timestamp | None:
     """Lookup earliest known order date for a customer across all normalized key variations."""
     if not cust_id or pd.isna(cust_id):
         return None
@@ -88,7 +86,9 @@ def get_customer_first_order_date(cust_id: str | None, registry: dict[str, str] 
     return earliest_dt
 
 
-def register_customer_history(cust_id: str, first_order_date: str | pd.Timestamp) -> bool:
+def register_customer_history(
+    cust_id: str, first_order_date: str | pd.Timestamp
+) -> bool:
     """Manually register or override a customer's earliest order date in history."""
     clean_key = normalize_phone_key(cust_id)
     if not clean_key:
@@ -114,11 +114,15 @@ def register_customer_history(cust_id: str, first_order_date: str | pd.Timestamp
             json.dump(registry, f, indent=2, ensure_ascii=False)
         return True
     except Exception as e:
-        log_system_event("CUSTOMER_REGISTRY_SAVE_ERROR", f"Failed to save registry: {e}")
+        log_system_event(
+            "CUSTOMER_REGISTRY_SAVE_ERROR", f"Failed to save registry: {e}"
+        )
         return False
 
 
-def update_customer_registry(df: pd.DataFrame, wc_raw_mapping: dict | None = None) -> int:
+def update_customer_registry(
+    df: pd.DataFrame, wc_raw_mapping: dict | None = None
+) -> int:
     """Update persistent customer registry from a DataFrame.
 
     Scans phone & email columns and updates earliest order dates using normalized keys.
@@ -134,13 +138,13 @@ def update_customer_registry(df: pd.DataFrame, wc_raw_mapping: dict | None = Non
         mapping = wc_raw_mapping or {}
         date_col = "Date" if "Date" in df.columns else mapping.get("date", "Order Date")
         if date_col not in df.columns:
-            date_col = next((c for c in ["Order Date", "Date", "Created Date"] if c in df.columns), None)
+            date_col = pick_column(df, _DATE_COL_CANDIDATES)
 
         if not date_col:
             return 0
 
-        phone_col = next((c for c in ["Phone (Billing)", "Phone", "Billing Phone", "Customer Phone", "phone"] if c in df.columns), None)
-        email_col = next((c for c in ["Billing Email", "Email", "Customer Email", "email"] if c in df.columns), None)
+        phone_col = pick_column(df, _PHONE_COL_CANDIDATES)
+        email_col = pick_column(df, _EMAIL_COL_CANDIDATES)
         cust_col = phone_col or email_col
 
         if not cust_col:
@@ -176,7 +180,9 @@ def update_customer_registry(df: pd.DataFrame, wc_raw_mapping: dict | None = Non
                 json.dump(registry, f, indent=2, ensure_ascii=False)
 
     except Exception as e:
-        log_system_event("CUSTOMER_REGISTRY_UPDATE_ERROR", f"Failed to update registry: {e}")
+        log_system_event(
+            "CUSTOMER_REGISTRY_UPDATE_ERROR", f"Failed to update registry: {e}"
+        )
 
     return updated_cnt
 
@@ -200,16 +206,20 @@ def compute_new_vs_returning_counts(
         update_customer_registry(full_df, wc_raw_mapping)
         lifetime_registry = load_customer_registry()
 
-        phone_col = next((c for c in ["Phone (Billing)", "Phone", "Billing Phone", "Customer Phone", "phone"] if c in m_df.columns), None)
-        email_col = next((c for c in ["Billing Email", "Email", "Customer Email", "email"] if c in m_df.columns), None)
+        phone_col = pick_column(m_df, _PHONE_COL_CANDIDATES)
+        email_col = pick_column(m_df, _EMAIL_COL_CANDIDATES)
         cust_col = phone_col or email_col
 
         if not cust_col:
             return 0, 0
 
-        full_dt_col = "Date" if "Date" in full_df.columns else wc_raw_mapping.get("date", "Order Date")
+        full_dt_col = (
+            "Date"
+            if "Date" in full_df.columns
+            else wc_raw_mapping.get("date", "Order Date")
+        )
         if full_dt_col not in full_df.columns:
-            full_dt_col = next((c for c in ["Order Date", "Date", "Created Date"] if c in full_df.columns), full_df.columns[0])
+            full_dt_col = pick_column(full_df, _DATE_COL_CANDIDATES, full_df.columns[0])
 
         f_df = full_df.copy()
         f_df["_dt"] = safe_coerce_datetime_naive(f_df[full_dt_col])
@@ -219,9 +229,13 @@ def compute_new_vs_returning_counts(
 
         first_order_map = f_df.groupby("_norm_cust")["_dt"].min().to_dict()
 
-        active_dt_col = "Date" if "Date" in m_df.columns else wc_raw_mapping.get("date", "Order Date")
+        active_dt_col = (
+            "Date"
+            if "Date" in m_df.columns
+            else wc_raw_mapping.get("date", "Order Date")
+        )
         if active_dt_col not in m_df.columns:
-            active_dt_col = next((c for c in ["Order Date", "Date", "Created Date"] if c in m_df.columns), m_df.columns[0])
+            active_dt_col = pick_column(m_df, _DATE_COL_CANDIDATES, m_df.columns[0])
 
         t_act = m_df.copy()
         t_act["_dt"] = safe_coerce_datetime_naive(t_act[active_dt_col])
@@ -229,7 +243,9 @@ def compute_new_vs_returning_counts(
 
         order_id_col = wc_raw_mapping.get("order_id", "Order ID")
         if order_id_col not in t_act.columns:
-            order_id_col = next((c for c in ["Order ID", "Order Number"] if c in t_act.columns), t_act.columns[0])
+            order_id_col = pick_column(
+                t_act, ["Order ID", "Order Number"], t_act.columns[0]
+            )
 
         act_uniq = t_act.drop_duplicates(subset=[order_id_col])
         for _, urow in act_uniq.iterrows():
@@ -244,12 +260,13 @@ def compute_new_vs_returning_counts(
             if reg_dt and (pd.isna(first_dt) or reg_dt < first_dt):
                 first_dt = reg_dt
 
-            if pd.notna(first_dt) and pd.notna(o_dt) and first_dt < o_dt.floor("D"):
+            if pd.notna(first_dt) and pd.notna(o_dt) and first_dt < o_dt:
                 ret_cnt += 1
             else:
                 new_cnt += 1
     except Exception as e:
-        log_system_event("COMPUTE_CUSTOMER_MIX_ERROR", f"Failed to compute customer mix: {e}")
+        log_system_event(
+            "COMPUTE_CUSTOMER_MIX_ERROR", f"Failed to compute customer mix: {e}"
+        )
 
     return new_cnt, ret_cnt
-

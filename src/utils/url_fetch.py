@@ -31,7 +31,7 @@ def fetch_dataframe_from_url(url: str, timeout: int = 15) -> pd.DataFrame:
         raise ValueError("URL cannot be empty.")
 
     url = url.strip()
-    
+
     # Auto-convert standard Google Sheets URLs to CSV export URLs
     if "docs.google.com/spreadsheets" in url and "export?format=csv" not in url:
         match = re.search(r"/d/([a-zA-Z0-9-_]+)", url)

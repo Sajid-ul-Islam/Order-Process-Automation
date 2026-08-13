@@ -80,19 +80,10 @@ The app now validates partially configured integrations at startup and surfaces 
 
 ## Dependency Layout
 
-```text
-requirements/
-|-- base.txt
-|-- integrations.txt
-|-- ai.txt
-`-- dev.txt
-```
-
 - `requirements.txt` installs runtime dependencies
 - `requirements_dev.txt` installs runtime and development tooling
-- `requirements.lock` pins runtime transitive dependencies for Docker and CI
 
-Refresh the lock file from a clean environment with:
+Optional: generate a pinned `requirements.lock` for reproducible installs with:
 
 ```bash
 python scripts/generate_requirements_lock.py
@@ -109,15 +100,21 @@ DEEN-OPS/
 |-- scripts/
 |-- src/
 |   |-- components/
+|   |   |-- dashboard/
+|   |   |-- layout/
+|   |   `-- ui/
 |   |-- config/
 |   |-- inventory/
 |   |-- pages/
 |   |-- processing/
 |   |-- services/
+|   |   |-- exports/
+|   |   |-- llm/
+|   |   |-- pathao/
+|   |   `-- woocommerce/
 |   |-- state/
 |   `-- utils/
-|-- tests/
-`-- _deprecated/
+`-- tests/
 ```
 
 ## Development
@@ -134,7 +131,7 @@ See [DEVELOPMENT.md](DEVELOPMENT.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [E
 
 [![Tests](https://github.com/Sajid-ul-Islam/Order-Process-Automation/actions/workflows/tests.yml/badge.svg)](https://github.com/Sajid-ul-Islam/Order-Process-Automation/actions/workflows/tests.yml)
 
-GitHub Actions runs the test suite from [.github/workflows/tests.yml](.github/workflows/tests.yml) using `requirements_dev.txt`, which is constrained by `requirements.lock`.
+GitHub Actions runs the test suite from [.github/workflows/tests.yml](.github/workflows/tests.yml) using `requirements_dev.txt`.
 
 ## Deployment Notes
 

@@ -109,7 +109,9 @@ def _env_present(env_keys: dict[str, str]) -> bool:
     return any(os.getenv(env_name) for env_name in env_keys.values())
 
 
-def _config_missing_keys(config: dict[str, Any], required_keys: tuple[str, ...]) -> list[str]:
+def _config_missing_keys(
+    config: dict[str, Any], required_keys: tuple[str, ...]
+) -> list[str]:
     return [key for key in required_keys if not config.get(key)]
 
 
@@ -127,7 +129,9 @@ def get_woocommerce_config(required: bool = False) -> dict[str, str]:
     """Return WooCommerce credentials from Streamlit secrets or env vars."""
     section = get_secret_section("woocommerce")
     config = {
-        "store_url": section.get("store_url") or section.get("url") or os.getenv("WC_URL"),
+        "store_url": section.get("store_url")
+        or section.get("url")
+        or os.getenv("WC_URL"),
         "consumer_key": section.get("consumer_key") or os.getenv("WC_KEY"),
         "consumer_secret": section.get("consumer_secret") or os.getenv("WC_SECRET"),
     }
@@ -158,8 +162,7 @@ def get_pathao_config(required: bool = False) -> dict[str, str]:
     )
     if required and missing:
         raise ValueError(
-            "Pathao configuration is incomplete. Missing keys: "
-            + ", ".join(missing)
+            "Pathao configuration is incomplete. Missing keys: " + ", ".join(missing)
         )
     return {key: value for key, value in config.items() if value}
 
@@ -187,8 +190,7 @@ def is_auth_configured() -> bool:
 
     google = _as_dict(auth.get("google"))
     return all(auth.get(key) for key in ("redirect_uri", "cookie_secret")) and all(
-        google.get(key)
-        for key in ("client_id", "client_secret", "server_metadata_url")
+        google.get(key) for key in ("client_id", "client_secret", "server_metadata_url")
     )
 
 
@@ -205,9 +207,11 @@ def validate_runtime_configuration() -> list[str]:
     """Validate partially configured integrations and return actionable issues."""
     issues: list[str] = []
     schema = load_secrets_schema().get("sections", {})
-    woocommerce_keys = tuple(
-        schema.get("woocommerce", {}).get("keys", {}).keys()
-    ) or ("store_url", "consumer_key", "consumer_secret")
+    woocommerce_keys = tuple(schema.get("woocommerce", {}).get("keys", {}).keys()) or (
+        "store_url",
+        "consumer_key",
+        "consumer_secret",
+    )
     pathao_keys = tuple(schema.get("pathao", {}).get("keys", {}).keys()) or (
         "base_url",
         "client_id",

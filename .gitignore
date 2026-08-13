@@ -7,6 +7,8 @@ env/
 venv/
 ENV/
 pathao_token.json
+data/error_logs.json
+data/session_state.json
 data/feedback/system_logs.json
 data/processed/
 data/raw/

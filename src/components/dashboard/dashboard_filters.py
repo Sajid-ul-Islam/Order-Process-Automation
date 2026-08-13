@@ -8,7 +8,10 @@ import pandas as pd
 import streamlit as st
 
 from src.config.constants import COMMON_CATS
-from src.processing.categorization import get_category_for_sales, get_sub_category_for_sales
+from src.processing.categorization import (
+    get_category_for_sales,
+    get_sub_category_for_sales,
+)
 from src.processing.data_processing import prepare_granular_data, aggregate_data
 from src.services.woocommerce.client import load_from_woocommerce
 from src.utils.product import get_base_product_name, get_size_from_name
@@ -23,7 +26,13 @@ def _get_category(name: str) -> str:
 def render_ingestion_filters(
     granular_df: pd.DataFrame | None,
     dummy_mapping: dict,
-) -> tuple[pd.DataFrame | None, pd.DataFrame | None, pd.DataFrame | None, dict | None, pd.DataFrame | None]:
+) -> tuple[
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+    dict | None,
+    pd.DataFrame | None,
+]:
     """Render the high-density filter intelligence bar for Sales Ingestion mode.
 
     Handles date range selection (with auto-fetch), hierarchical
@@ -46,11 +55,17 @@ def render_ingestion_filters(
         return drill, summ, top, basket, active_df
 
     with st.expander("🛠️ Filter Intelligence", expanded=True):
-        working_df = granular_df.copy() if granular_df is not None else pd.DataFrame(
-            columns=["Category", "Product Name", "Size", "Date"]
+        working_df = (
+            granular_df.copy()
+            if granular_df is not None
+            else pd.DataFrame(columns=["Category", "Product Name", "Size", "Date"])
         )
         if not working_df.empty:
-            if "Category" not in working_df.columns or "Sub-Category" not in working_df.columns or "Clean_Product" not in working_df.columns:
+            if (
+                "Category" not in working_df.columns
+                or "Sub-Category" not in working_df.columns
+                or "Clean_Product" not in working_df.columns
+            ):
                 working_df, _ = prepare_granular_data(working_df, dummy_mapping)
 
             # Clean trailing spaces from string columns to prevent filter mismatches
@@ -69,7 +84,10 @@ def render_ingestion_filters(
                 "Select Date Range",
                 value=st.session_state.get(
                     "ingest_range",
-                    ((datetime.now() - timedelta(days=30)).date(), datetime.now().date()),
+                    (
+                        (datetime.now() - timedelta(days=30)).date(),
+                        datetime.now().date(),
+                    ),
                 ),
                 min_value=datetime(2021, 8, 31).date(),
                 max_value=datetime.now().date(),
@@ -82,33 +100,58 @@ def render_ingestion_filters(
                     s_d, e_d = sel_range
                     st.session_state["wc_sync_mode"] = "Custom Range"
                     st.session_state["wc_sync_start_date"] = s_d
-                    st.session_state["wc_sync_start_time"] = datetime.strptime("00:00", "%H:%M").time()
+                    st.session_state["wc_sync_start_time"] = datetime.strptime(
+                        "00:00", "%H:%M"
+                    ).time()
                     st.session_state["wc_sync_end_date"] = e_d
-                    st.session_state["wc_sync_end_time"] = datetime.strptime("23:59", "%H:%M").time()
+                    st.session_state["wc_sync_end_time"] = datetime.strptime(
+                        "23:59", "%H:%M"
+                    ).time()
 
-                    with st.status(f"🚀 Syncing {s_d} to {e_d}...", expanded=True) as sync_status:
+                    with st.status(
+                        f"🚀 Syncing {s_d} to {e_d}...", expanded=True
+                    ) as sync_status:
                         try:
                             st.write("📡 Connecting to WooCommerce API...")
-                            wc_res = load_from_woocommerce()
+                            wc_res = load_from_woocommerce(
+                                cache_buster=str(int(datetime.now().timestamp() * 1000))
+                            )
                             st.write("🧮 Processing data...")
                             df_res = wc_res["df_to_return"]
                             if not df_res.empty:
                                 st.session_state.manual_df = df_res
-                                st.session_state.manual_source_name = wc_res["sync_desc"]
+                                st.session_state.manual_source_name = wc_res[
+                                    "sync_desc"
+                                ]
                                 st.write("💾 Saving snapshot...")
                                 save_sales_snapshot(df_res)
-                                sync_status.update(label="Sync Complete", state="complete", expanded=False)
+                                sync_status.update(
+                                    label="Sync Complete",
+                                    state="complete",
+                                    expanded=False,
+                                )
                                 st.toast("✅ Auto-Sync Complete!", icon="🎉")
                                 st.rerun()
                             else:
-                                sync_status.update(label="No Data", state="error", expanded=False)
+                                sync_status.update(
+                                    label="No Data", state="error", expanded=False
+                                )
                         except Exception as e:
-                            sync_status.update(label="Sync Failed", state="error", expanded=False)
+                            sync_status.update(
+                                label="Sync Failed", state="error", expanded=False
+                            )
                             st.error(f"Auto-sync failed: {e}")
 
-            if not working_df.empty and isinstance(sel_range, tuple) and len(sel_range) == 2:
+            if (
+                not working_df.empty
+                and isinstance(sel_range, tuple)
+                and len(sel_range) == 2
+            ):
                 sd, ed = pd.to_datetime(sel_range[0]), pd.to_datetime(sel_range[1])
-                working_df = working_df[(working_df["Date"] >= sd) & (working_df["Date"] <= (ed + timedelta(days=1)))]
+                working_df = working_df[
+                    (working_df["Date"] >= sd)
+                    & (working_df["Date"] <= (ed + timedelta(days=1)))
+                ]
 
         active_df = working_df
 
@@ -127,54 +170,95 @@ def render_ingestion_filters(
                 for opt in sel_unified:
                     if "  \u21b3 " in opt:
                         sub_name = opt.replace("  \u21b3 ", "")
-                        mask |= (working_df["Sub-Category"] == sub_name)
+                        mask |= working_df["Sub-Category"] == sub_name
                     else:
-                        mask |= (working_df["Category"] == opt)
+                        mask |= working_df["Category"] == opt
                 working_df = working_df[mask]
 
         with c3:
-            all_prods = sorted(working_df["Filter_Identity"].unique().tolist()) if not working_df.empty else []
-            sel_prods = st.multiselect("Select Item", all_prods, placeholder="All Products", key="fallback_filter_prod")
+            all_prods = (
+                sorted(working_df["Filter_Identity"].unique().tolist())
+                if not working_df.empty
+                else []
+            )
+            sel_prods = st.multiselect(
+                "Select Item",
+                all_prods,
+                placeholder="All Products",
+                key="fallback_filter_prod",
+            )
             if not working_df.empty:
-                working_df = working_df[working_df["Filter_Identity"].isin(sel_prods)] if sel_prods else working_df
+                working_df = (
+                    working_df[working_df["Filter_Identity"].isin(sel_prods)]
+                    if sel_prods
+                    else working_df
+                )
 
         with c4:
-            all_sizes = sorted(working_df["Size"].unique().tolist()) if not working_df.empty and "Size" in working_df.columns else []
-            sel_sizes = st.multiselect("Select Size", all_sizes, placeholder="All Sizes", key="fallback_filter_size")
+            all_sizes = (
+                sorted(working_df["Size"].unique().tolist())
+                if not working_df.empty and "Size" in working_df.columns
+                else []
+            )
+            sel_sizes = st.multiselect(
+                "Select Size",
+                all_sizes,
+                placeholder="All Sizes",
+                key="fallback_filter_size",
+            )
             if not working_df.empty and "Size" in working_df.columns:
-                working_df = working_df[working_df["Size"].isin(sel_sizes)] if sel_sizes else working_df
+                working_df = (
+                    working_df[working_df["Size"].isin(sel_sizes)]
+                    if sel_sizes
+                    else working_df
+                )
 
         with c5:
             st.markdown('<div style="height: 28px;"></div>', unsafe_allow_html=True)
-            if st.button("🔄", use_container_width=True, type="primary", help="Sync Fresh Data"):
+            if st.button(
+                "🔄", use_container_width=True, type="primary", help="Sync Fresh Data"
+            ):
                 st.cache_data.clear()
                 if isinstance(sel_range, tuple) and len(sel_range) == 2:
                     s_d, e_d = sel_range
                     st.session_state["wc_sync_mode"] = "Custom Range"
                     st.session_state["wc_sync_start_date"] = s_d
-                    st.session_state["wc_sync_start_time"] = datetime.strptime("00:00", "%H:%M").time()
+                    st.session_state["wc_sync_start_time"] = datetime.strptime(
+                        "00:00", "%H:%M"
+                    ).time()
                     st.session_state["wc_sync_end_date"] = e_d
-                    st.session_state["wc_sync_end_time"] = datetime.strptime("23:59", "%H:%M").time()
+                    st.session_state["wc_sync_end_time"] = datetime.strptime(
+                        "23:59", "%H:%M"
+                    ).time()
 
                     try:
-                        with st.status("🔄 Syncing Fresh Data...", expanded=True) as sync_status:
+                        with st.status(
+                            "🔄 Syncing Fresh Data...", expanded=True
+                        ) as sync_status:
                             st.write("📡 Connecting to WooCommerce API...")
-                            wc_res = load_from_woocommerce()
+                            wc_res = load_from_woocommerce(
+                                cache_buster=str(int(datetime.now().timestamp() * 1000))
+                            )
                             st.write("🧮 Restructuring and applying filters...")
                             df_res = wc_res["df_to_return"]
                             if not df_res.empty:
                                 if sel_unified:
-                                    df_res["_TmpCat"] = df_res["Item Name"].apply(_get_category)
+                                    df_res["_TmpCat"] = df_res["Item Name"].apply(
+                                        _get_category
+                                    )
                                     df_res["_TmpSub"] = df_res.apply(
-                                        lambda r: get_sub_category_for_sales(r["Item Name"], r["_TmpCat"]), axis=1
+                                        lambda r: get_sub_category_for_sales(
+                                            r["Item Name"], r["_TmpCat"]
+                                        ),
+                                        axis=1,
                                     )
                                     mask = pd.Series(False, index=df_res.index)
                                     for opt in sel_unified:
                                         if "  \u21b3 " in opt:
                                             sub_name = opt.replace("  \u21b3 ", "")
-                                            mask |= (df_res["_TmpSub"] == sub_name)
+                                            mask |= df_res["_TmpSub"] == sub_name
                                         else:
-                                            mask |= (df_res["_TmpCat"] == opt)
+                                            mask |= df_res["_TmpCat"] == opt
                                     df_res = df_res[mask]
                                     if "_TmpCat" in df_res.columns:
                                         df_res = df_res.drop(columns=["_TmpCat"])
@@ -183,30 +267,55 @@ def render_ingestion_filters(
 
                                 if sel_prods:
                                     df_res["_TmpIdent"] = df_res.apply(
-                                        lambda r: f"{get_base_product_name(r['Item Name'])} [{r['SKU']}]", axis=1
+                                        lambda r: (
+                                            f"{get_base_product_name(r['Item Name'])} [{r['SKU']}]"
+                                        ),
+                                        axis=1,
                                     )
-                                    df_res = df_res[df_res["_TmpIdent"].isin(sel_prods)].drop(columns=["_TmpIdent"])
+                                    df_res = df_res[
+                                        df_res["_TmpIdent"].isin(sel_prods)
+                                    ].drop(columns=["_TmpIdent"])
                                 if sel_sizes:
-                                    df_res["_TmpSize"] = df_res["Item Name"].apply(get_size_from_name)
-                                    df_res = df_res[df_res["_TmpSize"].isin(sel_sizes)].drop(columns=["_TmpSize"])
+                                    df_res["_TmpSize"] = df_res["Item Name"].apply(
+                                        get_size_from_name
+                                    )
+                                    df_res = df_res[
+                                        df_res["_TmpSize"].isin(sel_sizes)
+                                    ].drop(columns=["_TmpSize"])
 
                                 if not df_res.empty:
                                     st.session_state.manual_df = df_res
-                                    st.session_state.manual_source_name = wc_res["sync_desc"]
+                                    st.session_state.manual_source_name = wc_res[
+                                        "sync_desc"
+                                    ]
                                     st.write("💾 Saving local snapshot...")
                                     save_sales_snapshot(df_res)
-                                    sync_status.update(label="API Sync Complete", state="complete", expanded=False)
+                                    sync_status.update(
+                                        label="API Sync Complete",
+                                        state="complete",
+                                        expanded=False,
+                                    )
                                     st.toast("✅ API Sync Complete!", icon="🎉")
                                     st.rerun()
                                 else:
-                                    sync_status.update(label="No Data Matched Filters", state="error", expanded=False)
-                                    st.warning("No data found for the selected Category/Item/Size combination.")
+                                    sync_status.update(
+                                        label="No Data Matched Filters",
+                                        state="error",
+                                        expanded=False,
+                                    )
+                                    st.warning(
+                                        "No data found for the selected Category/Item/Size combination."
+                                    )
                             else:
-                                sync_status.update(label="Empty Payload", state="error", expanded=False)
+                                sync_status.update(
+                                    label="Empty Payload", state="error", expanded=False
+                                )
                                 st.warning("No data found for the selected range.")
                     except Exception as e:
-                        if 'sync_status' in locals():
-                            sync_status.update(label="Ingestion Failed", state="error", expanded=False)
+                        if "sync_status" in locals():
+                            sync_status.update(
+                                label="Ingestion Failed", state="error", expanded=False
+                            )
                         st.error(f"Ingestion failed: {e}")
                 else:
                     st.error("Please select both a start and end date.")

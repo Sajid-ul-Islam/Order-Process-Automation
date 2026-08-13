@@ -64,6 +64,7 @@ def build_order_df(orders):
     `orders` is a list of (order_id, status, created_dt, modified_dt, consignment).
     `created_dt` / `modified_dt` may be a datetime, a string, or None (missing date).
     """
+
     def _fmt(dt):
         if dt is None:
             return ""
@@ -73,18 +74,20 @@ def build_order_df(orders):
 
     rows = []
     for oid, status, created, modified, consignment in orders:
-        rows.append({
-            "Order ID": oid,
-            "Line Item ID": oid * 100,
-            "Order Status": status,
-            "Order Date": _fmt(created),
-            "Order Date Modified": _fmt(modified),
-            "Pathao Consignment ID": consignment or "",
-            "Item Name": "Test Item",
-            "SKU": "TST-1",
-            "Item Cost": 100.0,
-            "Quantity": 1,
-        })
+        rows.append(
+            {
+                "Order ID": oid,
+                "Line Item ID": oid * 100,
+                "Order Status": status,
+                "Order Date": _fmt(created),
+                "Order Date Modified": _fmt(modified),
+                "Pathao Consignment ID": consignment or "",
+                "Item Name": "Test Item",
+                "SKU": "TST-1",
+                "Item Cost": 100.0,
+                "Quantity": 1,
+            }
+        )
     df = pd.DataFrame(rows)
     df["dt_parsed"] = safe_coerce_datetime_naive(df["Order Date"])
     df["mod_dt_parsed"] = safe_coerce_datetime_naive(df["Order Date Modified"])

@@ -1,10 +1,11 @@
 """Validate that all src/ modules can be imported without errors."""
+
 import sys
 import os
 import importlib
 
 # Add project root to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 MODULES = [
     "src.config.settings",
@@ -40,6 +41,11 @@ MODULES = [
     "src.components.ui.widgets",
     "src.components.ui.snapshot",
     "src.components.ui.status",
+    "src.components.ui.calendar_slots",
+    "src.components.ui.dataframe_search",
+    "src.components.ui.empty_state",
+    "src.components.ui.ui_components",
+    "src.components.dashboard.svg",
     "src.pages.live_dashboard",
     "src.pages.sales_ingestion",
     "src.pages.stock_analytics",
@@ -47,11 +53,25 @@ MODULES = [
     "src.pages.inventory_distribution",
     "src.pages.whatsapp_messaging",
     "src.pages.delivery_parser",
+    "src.pages.return_analytics",
+    "src.pages.excel_merger",
+    "src.pages.woocommerce_orders",
     "src.components.dashboard.dashboard_metrics",
     "src.components.dashboard.dashboard_charts",
     "src.components.dashboard.dashboard_filters",
     "src.components.dashboard.dashboard_output",
     "src.pages.data_pilot",
+    "src.inventory.core",
+    "src.processing.categorization",
+    "src.processing.stock_categorization",
+    "src.processing.hybrid_data_loader",
+    "src.services.exports.excel_exporter",
+    "src.services.llm.agent",
+    "src.services.woocommerce.orders",
+    "src.utils.customer_registry",
+    "src.utils.http",
+    "src.utils.metric_history",
+    "src.utils.ml_brain",
 ]
 
 

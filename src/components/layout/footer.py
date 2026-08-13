@@ -12,7 +12,7 @@ def render_footer():
             with open(logo_jpg, "rb") as f:
                 b64 = base64.b64encode(f.read()).decode()
             logo_src = f"data:image/jpeg;base64,{b64}"
-    except:
+    except OSError:
         pass
 
     st.markdown(

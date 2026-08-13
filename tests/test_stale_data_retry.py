@@ -41,7 +41,9 @@ def test_parsed_mod_dt_within_threshold_is_fresh():
 
 def test_parsed_mod_dt_older_than_threshold_is_stale():
     now = _now_bd()
-    df = pd.DataFrame({"mod_dt_parsed": [now - timedelta(minutes=WC_STALE_MAX_AGE_MIN + 15)]})
+    df = pd.DataFrame(
+        {"mod_dt_parsed": [now - timedelta(minutes=WC_STALE_MAX_AGE_MIN + 15)]}
+    )
     assert _data_looks_stale(df) is True
 
 
@@ -49,11 +51,15 @@ def test_raw_utc_column_is_shifted_to_bd_before_comparing():
     now = _now_bd()
     # 30 min old in BD == (now - 6h30m) in UTC. After the +6h shift it must
     # read as 30 min old → fresh, not 6h30m old → stale.
-    utc_30m = (now - timedelta(minutes=30) - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    utc_30m = (now - timedelta(minutes=30) - timedelta(hours=6)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
     df = pd.DataFrame({"Order Date Modified": [utc_30m]})
     assert _data_looks_stale(df) is False
 
-    utc_2h = (now - timedelta(hours=2) - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    utc_2h = (now - timedelta(hours=2) - timedelta(hours=6)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
     df2 = pd.DataFrame({"Order Date Modified": [utc_2h]})
     assert _data_looks_stale(df2) is True
 
@@ -63,7 +69,7 @@ def test_newest_mod_wins_when_mixed_ages():
     df = pd.DataFrame(
         {
             "mod_dt_parsed": [
-                now - timedelta(hours=5),   # old line item
+                now - timedelta(hours=5),  # old line item
                 now - timedelta(minutes=10),  # recent line item → fresh overall
             ]
         }

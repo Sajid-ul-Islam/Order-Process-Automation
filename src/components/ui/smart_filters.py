@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from typing import Any
+from datetime import timedelta
 
 import pandas as pd
 import streamlit as st
@@ -34,15 +33,32 @@ def detect_filterable_columns(df: pd.DataFrame) -> dict[str, str]:
 
     # Columns to skip — likely IDs, phones, addresses, URLs
     _skip_patterns = [
-        "id", "phone", "mobile", "cell", "address", "street", "url",
-        "email", "zip", "postal", "lat", "lon", "longitude", "latitude",
+        "id",
+        "phone",
+        "mobile",
+        "cell",
+        "address",
+        "street",
+        "url",
+        "email",
+        "zip",
+        "postal",
+        "lat",
+        "lon",
+        "longitude",
+        "latitude",
     ]
 
     for col in df.columns:
         col_lower = col.lower().strip()
 
         # Skip internal/derived columns
-        if col_lower.startswith("_") or col_lower in ("filter_identity", "clean_product", "display_name", "label"):
+        if col_lower.startswith("_") or col_lower in (
+            "filter_identity",
+            "clean_product",
+            "display_name",
+            "label",
+        ):
             continue
 
         # Check date
@@ -56,7 +72,9 @@ def detect_filterable_columns(df: pd.DataFrame) -> dict[str, str]:
             continue
 
         # For object/string columns — try date parse or categorical
-        if pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_string_dtype(df[col]):
+        if pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_string_dtype(
+            df[col]
+        ):
             # Skip likely IDs/phones/addresses
             if any(pat in col_lower for pat in _skip_patterns):
                 continue
@@ -113,7 +131,9 @@ def render_smart_filters(
 
     # Group by type
     date_cols = [c for c, t in detected.items() if t == "date" and c in df.columns]
-    cat_cols = [c for c, t in detected.items() if t == "categorical" and c in df.columns]
+    cat_cols = [
+        c for c, t in detected.items() if t == "categorical" and c in df.columns
+    ]
     num_cols = [c for c, t in detected.items() if t == "numeric" and c in df.columns]
 
     # Determine number of filter columns needed
@@ -141,7 +161,10 @@ def render_smart_filters(
             key=f"{key_prefix}_date_{col}",
         )
         if isinstance(sel, tuple) and len(sel) == 2:
-            s_d, e_d = pd.to_datetime(sel[0]), pd.to_datetime(sel[1]) + timedelta(days=1)
+            s_d, e_d = (
+                pd.to_datetime(sel[0]),
+                pd.to_datetime(sel[1]) + timedelta(days=1),
+            )
             working_df = safe_filter(
                 working_df,
                 lambda d, c=col, s=s_d, e=e_d: d[

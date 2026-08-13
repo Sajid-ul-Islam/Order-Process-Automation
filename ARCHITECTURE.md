@@ -11,15 +11,17 @@
 │   live_dashboard  sales_ingestion  pathao_orders │
 │   stock_analytics  inventory_distribution        │
 │   whatsapp_messaging  delivery_parser  data_pilot│
-│   dashboard_output                               │
+│   return_analytics  woocommerce_orders  excel_   │
+│   merger                                         │
 ├─────────────────────────────────────────────────┤
 │               src/components/                     │
-│   styles  header  footer  sidebar  clock         │
-│   bike_animation  widgets  snapshot  status       │
+│   dashboard/ (metrics, charts, filters, output)  │
+│   layout/ (header, footer)  ui/ (styles, clock,  │
+│   widgets, snapshot, status, smart_filters, ...) │
 ├─────────────────────────────────────────────────┤
 │               src/services/                       │
-│   woocommerce/client  woocommerce/stock          │
-│   pathao/client  llm/manager  google/sheets      │
+│   woocommerce/ (client, stock)  pathao/ (client, │
+│   status)  llm/manager  exports/excel_exporter   │
 ├─────────────────────────────────────────────────┤
 │              src/processing/                      │
 │   data_processing  column_detection              │
@@ -29,8 +31,7 @@
 ├─────────────────────────────────────────────────┤
 │   src/utils/       src/state/    src/inventory/  │
 │   text  product    persistence   core            │
-│   file_io logging  insights                      │
-│   snapshots                                      │
+│   file_io logging  snapshots                     │
 ├─────────────────────────────────────────────────┤
 │               src/config/                         │
 │   settings  ui_config  constants                 │
@@ -64,7 +65,7 @@ prepare_granular_data()          [processing/data_processing.py]
 aggregate_data()                 [processing/data_processing.py]
     │
     ▼
-render_dashboard_output()        [pages/dashboard_output.py]
+render_dashboard_output()        [components/dashboard/dashboard_output.py]
   ├── KPI cards, charts (Plotly)
   ├── Association Rules (Market Basket)
   └── ML Forecasting Tournament  [processing/forecasting.py]
@@ -128,7 +129,7 @@ All `st.session_state` keys are preserved from the original codebase. Key groups
 | `find_columns()` | `@st.cache_data` | None | Pure function, deterministic |
 | `scrub_raw_dataframe()` | `@st.cache_data` | None | Pure function, deterministic |
 | `fetch_woocommerce_stock()` | `@st.cache_data` | 600s | Stock data changes slowly |
-| `get_category_from_name()` | `@lru_cache(1024)` | None | Hot path in categorization |
+| `get_category_for_sales()` | `@lru_cache(1024)` | None | Hot path in categorization |
 | `inject_base_styles()` | `@st.cache_resource` | None | CSS only needs to load once |
 
 ## External APIs
@@ -140,4 +141,3 @@ All `st.session_state` keys are preserved from the original codebase. Key groups
 | OpenRouter | `services/llm/` | API key (Bearer token) |
 | Gemini | `services/llm/` | API key |
 | Groq | `services/llm/` | API key (Bearer token) |
-| Google Sheets | `services/google/` | Public CSV export (no auth) |

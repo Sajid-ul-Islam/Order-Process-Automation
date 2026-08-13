@@ -71,7 +71,7 @@ def safe_render(
 **When to use:** Wrap entire dashboard sections (chart blocks, intelligence panels) so that a failure in one section does not take down the whole page.
 
 **Where used:**
-- `src/pages/dashboard_output.py` -- wraps Market Basket Intelligence and ML Forecasting sections
+- `src/components/dashboard/dashboard_output.py` -- wraps Market Basket Intelligence and ML Forecasting sections
 - `src/pages/stock_analytics.py` -- wraps the stock KPI summary and the full stock body renderer
 - `src/pages/live_dashboard.py` -- wraps the main live dashboard render call
 
@@ -117,7 +117,7 @@ The function never crashes on bad date data. Downstream features that require da
 
 4. **Wrap sections, not individual widgets.** Use `safe_render()` at the section level (e.g., "Market Basket Intelligence") rather than wrapping every single Streamlit call. This keeps code readable while still isolating failures.
 
-5. **Check column existence before access.** Use `"col" in df.columns` or `safe_column_access()` rather than bare `df["col"]` when the column may not exist. This is especially important in `dashboard_output.py` and `stock_analytics.py` where data sources vary.
+5. **Check column existence before access.** Use `"col" in df.columns` or `safe_column_access()` rather than bare `df["col"]` when the column may not exist. This is especially important in `src/components/dashboard/dashboard_output.py` and `src/pages/stock_analytics.py` where data sources vary.
 
 6. **Partial results are acceptable.** Functions like `find_columns()` and `prepare_granular_data()` are designed to return whatever they can compute. Callers should handle missing keys/columns rather than expecting a complete result.
 

@@ -10,7 +10,6 @@ Rules locked in here:
 """
 
 import streamlit as st
-import pytest
 from datetime import timedelta
 
 from conftest import build_order_df, now_bd
@@ -21,7 +20,9 @@ from src.services.woocommerce.client import _partition_operational_data
 
 def _processing_ids(df_live):
     return set(
-        df_live[df_live["Order Status"].astype(str).str.lower() == "processing"]["Order ID"]
+        df_live[df_live["Order Status"].astype(str).str.lower() == "processing"][
+            "Order ID"
+        ]
     )
 
 

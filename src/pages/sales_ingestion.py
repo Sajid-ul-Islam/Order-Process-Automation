@@ -1,20 +1,22 @@
 import streamlit as st
-from src.components.ui.ui_components import render_premium_header, render_metric_grid, apply_standard_dataframe
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
 from io import BytesIO
 
 from src.config.constants import SHIPPED_STATUSES
-from src.components.ui.dataframe_search import render_dataframe_search
-from src.components.ui.widgets import render_action_bar, render_reset_confirm, section_card
+from src.components.ui.widgets import (
+    render_action_bar,
+    render_reset_confirm,
+    section_card,
+)
 from src.processing.column_detection import find_columns
 from src.processing.data_processing import prepare_granular_data, aggregate_data
 from src.components.dashboard.dashboard_output import render_dashboard_output
 from src.services.woocommerce.client import load_from_woocommerce
 from src.utils.file_io import read_sales_file
 from src.utils.logging import log_system_event
-from src.utils.snapshots import load_sales_snapshot, save_sales_snapshot
+from src.utils.snapshots import save_sales_snapshot
 
 
 def render_manual_tab():
@@ -35,14 +37,20 @@ def render_manual_tab():
 
     col_d1, col_d2 = st.columns([2, 3])
     with col_d1:
-        preset_opts = ["Last 7 Days", "Last 14 Days", "Last 30 Days (1 Month)", "Last 90 Days", "Custom Range"]
+        preset_opts = [
+            "Last 7 Days",
+            "Last 14 Days",
+            "Last 30 Days (1 Month)",
+            "Last 90 Days",
+            "Custom Range",
+        ]
         curr_preset = st.session_state.get("ingest_preset", "Last 7 Days")
         chosen_preset = st.selectbox(
             "📅 Ingestion Timeframe",
             preset_opts,
             index=preset_opts.index(curr_preset) if curr_preset in preset_opts else 0,
             key="ingest_preset_selector",
-            help="Default timeframe is 7 days. Select presets or pick a custom range below."
+            help="Default timeframe is 7 days. Select presets or pick a custom range below.",
         )
 
     with col_d2:
@@ -59,13 +67,13 @@ def render_manual_tab():
             req_start = today_date - timedelta(days=90)
             req_end = today_date
         else:
-            req_start = st.session_state.get("wc_sync_start_date", today_date - timedelta(days=7))
+            req_start = st.session_state.get(
+                "wc_sync_start_date", today_date - timedelta(days=7)
+            )
             req_end = st.session_state.get("wc_sync_end_date", today_date)
 
         chosen_dates = st.date_input(
-            "📅 Active Date Range",
-            value=(req_start, req_end),
-            key="ingest_date_picker"
+            "📅 Active Date Range", value=(req_start, req_end), key="ingest_date_picker"
         )
         if isinstance(chosen_dates, (list, tuple)) and len(chosen_dates) == 2:
             start_d, end_d = chosen_dates[0], chosen_dates[1]
@@ -73,16 +81,20 @@ def render_manual_tab():
             start_d, end_d = req_start, req_end
 
     if (
-        st.session_state.get("wc_sync_start_date") != start_d or
-        st.session_state.get("wc_sync_end_date") != end_d or
-        st.session_state.get("ingest_preset") != chosen_preset
+        st.session_state.get("wc_sync_start_date") != start_d
+        or st.session_state.get("wc_sync_end_date") != end_d
+        or st.session_state.get("ingest_preset") != chosen_preset
     ):
         st.session_state["ingest_preset"] = chosen_preset
         st.session_state["wc_sync_start_date"] = start_d
         st.session_state["wc_sync_end_date"] = end_d
         st.session_state["wc_sync_mode"] = "Custom Range"
-        st.session_state["wc_sync_start_time"] = datetime.strptime("00:00", "%H:%M").time()
-        st.session_state["wc_sync_end_time"] = datetime.strptime("23:59", "%H:%M").time()
+        st.session_state["wc_sync_start_time"] = datetime.strptime(
+            "00:00", "%H:%M"
+        ).time()
+        st.session_state["wc_sync_end_time"] = datetime.strptime(
+            "23:59", "%H:%M"
+        ).time()
         st.session_state.manual_df = None
         st.session_state.manual_autoload_attempted = False
         load_from_woocommerce.clear()
@@ -90,37 +102,53 @@ def render_manual_tab():
 
     render_reset_confirm("Sales Data Ingestion", "manual", _reset_manual_state)
 
-    st.info(f"📊 Analyzing Sales Data for **{chosen_preset}** ({st.session_state.get('wc_sync_start_date')} to {st.session_state.get('wc_sync_end_date')}).")
+    st.info(
+        f"📊 Analyzing Sales Data for **{chosen_preset}** ({st.session_state.get('wc_sync_start_date')} to {st.session_state.get('wc_sync_end_date')})."
+    )
 
     # Auto-Load Intelligence with API / Snapshot Fallback
-    if st.session_state.get("manual_df") is None and not st.session_state.get("manual_autoload_attempted", False):
+    if st.session_state.get("manual_df") is None and not st.session_state.get(
+        "manual_autoload_attempted", False
+    ):
         st.session_state["manual_autoload_attempted"] = True
         s_d = st.session_state.get("wc_sync_start_date", today_date - timedelta(days=7))
         e_d = st.session_state.get("wc_sync_end_date", today_date)
 
         days_span = (e_d - s_d).days
-        with st.status(f"🚀 Fetching WooCommerce Sales ({s_d} to {e_d})...", expanded=True) as status:
+        with st.status(
+            f"🚀 Fetching WooCommerce Sales ({s_d} to {e_d})...", expanded=True
+        ) as status:
             try:
                 st.write("Initializing synchronization protocol...")
                 st.session_state["wc_sync_mode"] = "Custom Range"
-                st.session_state["wc_sync_start_time"] = datetime.strptime("00:00", "%H:%M").time()
-                st.session_state["wc_sync_end_time"] = datetime.strptime("23:59", "%H:%M").time()
+                st.session_state["wc_sync_start_time"] = datetime.strptime(
+                    "00:00", "%H:%M"
+                ).time()
+                st.session_state["wc_sync_end_time"] = datetime.strptime(
+                    "23:59", "%H:%M"
+                ).time()
 
                 st.write("Fetching transaction payloads from WooCommerce...")
-                wc_res = load_from_woocommerce()
+                wc_res = load_from_woocommerce(
+                    cache_buster=str(int(datetime.now().timestamp() * 1000))
+                )
                 df_res = wc_res["df_to_return"]
-                src_res = wc_res["sync_desc"]
                 if not df_res.empty:
                     st.write("Data structured. Saving snapshot...")
                     st.session_state.manual_df = df_res
-                    st.session_state.manual_source_name = f"WooCommerce_{days_span}d ({s_d} to {e_d})"
+                    st.session_state.manual_source_name = (
+                        f"WooCommerce_{days_span}d ({s_d} to {e_d})"
+                    )
                     save_sales_snapshot(df_res)
-                    status.update(label="API Sync Complete", state="complete", expanded=False)
+                    status.update(
+                        label="API Sync Complete", state="complete", expanded=False
+                    )
                     st.toast(f"✅ Ingested {len(df_res)} orders for {chosen_preset}!")
                     st.rerun()
             except Exception as e:
-                status.update(label=f"API Sync Failed: {e}", state="error", expanded=False)
-
+                status.update(
+                    label=f"API Sync Failed: {e}", state="error", expanded=False
+                )
 
     # v11.3 Sync State
     df = st.session_state.get("manual_df")
@@ -128,7 +156,11 @@ def render_manual_tab():
 
     # Optional Sources Expander
     with st.expander("📤 Optional: External Source (Upload / URL)"):
-        uploaded_file = st.file_uploader("📂 Drag and drop sales file", type=["xlsx", "csv"], key="manual_uploader_v2")
+        uploaded_file = st.file_uploader(
+            "📂 Drag and drop sales file",
+            type=["xlsx", "csv"],
+            key="manual_uploader_v2",
+        )
         if uploaded_file:
             df_up = read_sales_file(uploaded_file, uploaded_file.name)
             if df_up is not None:
@@ -137,10 +169,18 @@ def render_manual_tab():
                 df = df_up
                 source_name = uploaded_file.name
 
-        url_input = st.text_input("🌐 Or paste a public CSV/XLSX URL", key="manual_url_input")
-        if url_input and st.button("Fetch from URL", use_container_width=True, type="secondary", key="manual_url_fetch"):
+        url_input = st.text_input(
+            "🌐 Or paste a public CSV/XLSX URL", key="manual_url_input"
+        )
+        if url_input and st.button(
+            "Fetch from URL",
+            use_container_width=True,
+            type="secondary",
+            key="manual_url_fetch",
+        ):
             try:
                 from src.utils.url_fetch import fetch_dataframe_from_url
+
                 with st.status("Fetching from URL...", expanded=True) as status:
                     st.write("Establishing connection to target host...")
                     df_url = fetch_dataframe_from_url(url_input)
@@ -149,7 +189,9 @@ def render_manual_tab():
                     st.session_state.manual_source_name = "URL_Import"
                     df = df_url
                     source_name = "URL_Import"
-                    status.update(label="Fetch Complete", state="complete", expanded=False)
+                    status.update(
+                        label="Fetch Complete", state="complete", expanded=False
+                    )
                     st.toast(f"📥 Loaded {len(df_url)} rows from URL!")
 
             except requests.exceptions.MissingSchema:
@@ -163,52 +205,85 @@ def render_manual_tab():
 
         if st.session_state.get("manual_df") is not None:
             df = st.session_state.manual_df
-            source_name = st.session_state.get("manual_source_name", "WooCommerce_Custom_Pull")
+            source_name = st.session_state.get(
+                "manual_source_name", "WooCommerce_Custom_Pull"
+            )
 
     if df is not None:
         st.divider()
         st.subheader("🛠️ Data Transformation & Filtering")
 
-        with st.expander("🔢 Filter Raw Ingestion Data (Order ID / Status)", expanded=False):
+        with st.expander(
+            "🔢 Filter Raw Ingestion Data (Order ID / Status)", expanded=False
+        ):
             col1, col2 = st.columns(2)
             with col1:
-                min_order_id = st.number_input("Start Order ID", value=0, step=1, help="Leave as 0 to ignore")
+                min_order_id = st.number_input(
+                    "Start Order ID", value=0, step=1, help="Leave as 0 to ignore"
+                )
             with col2:
-                max_order_id = st.number_input("End Order ID", value=0, step=1, help="Leave as 0 to ignore")
+                max_order_id = st.number_input(
+                    "End Order ID", value=0, step=1, help="Leave as 0 to ignore"
+                )
 
             only_shipped = st.checkbox("📦 Show Shipped Orders Only", value=False)
 
             if min_order_id > 0 and max_order_id > 0:
-                order_col = "Order ID" if "Order ID" in df.columns else "Order Number" if "Order Number" in df.columns else None
+                order_col = (
+                    "Order ID"
+                    if "Order ID" in df.columns
+                    else "Order Number"
+                    if "Order Number" in df.columns
+                    else None
+                )
                 if order_col:
+                    df = df.copy()
                     df[order_col] = pd.to_numeric(df[order_col], errors="coerce")
-                    df = df[(df[order_col] >= min_order_id) & (df[order_col] <= max_order_id)]
-            
+                    df = df[
+                        (df[order_col] >= min_order_id)
+                        & (df[order_col] <= max_order_id)
+                    ]
+
             if only_shipped:
-                status_col = "Order Status" if "Order Status" in df.columns else "Status" if "Status" in df.columns else None
+                status_col = (
+                    "Order Status"
+                    if "Order Status" in df.columns
+                    else "Status"
+                    if "Status" in df.columns
+                    else None
+                )
                 if status_col:
-                    df = df[df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES)]
-                    
+                    df = df[
+                        df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES)
+                    ]
+
                     if "mod_dt_parsed" in df.columns:
                         s_d = st.session_state.get("wc_sync_start_date")
                         e_d = st.session_state.get("wc_sync_end_date")
-                        
+
                         if s_d and e_d:
                             s_dt = pd.to_datetime(s_d)
-                            e_dt = pd.to_datetime(e_d) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-                            df = df[(df["mod_dt_parsed"] >= s_dt) & (df["mod_dt_parsed"] <= e_dt)]
+                            e_dt = (
+                                pd.to_datetime(e_d)
+                                + pd.Timedelta(days=1)
+                                - pd.Timedelta(seconds=1)
+                            )
+                            df = df[
+                                (df["mod_dt_parsed"] >= s_dt)
+                                & (df["mod_dt_parsed"] <= e_dt)
+                            ]
             st.info(f"Rows matching criteria: {len(df)}")
-            
+
             buf = BytesIO()
             with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
                 df.to_excel(writer, index=False, sheet_name="Filtered Orders")
-            
+
             st.download_button(
                 label="💾 Export Filtered Orders (Excel)",
                 data=buf.getvalue(),
                 file_name="Filtered_Orders.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
+                use_container_width=True,
             )
 
     if df is None:
@@ -226,7 +301,7 @@ def render_manual_tab():
                 "date": "Order Date" if "Date" not in df.columns else "Date",
                 "order_id": "Order Number",
                 "phone": "Phone (Billing)",
-                "sku": "SKU"
+                "sku": "SKU",
             }
             df_standard, timeframe = prepare_granular_data(df, final_mapping)
             if not df_standard.empty:
@@ -238,7 +313,7 @@ def render_manual_tab():
                     str(timeframe) if timeframe is not None else None,
                     basket,
                     str(source_name) if source_name is not None else None,
-                    granular_df=df_standard
+                    granular_df=df_standard,
                 )
             else:
                 st.warning("⚠️ No records found after data processing.")
@@ -289,10 +364,10 @@ def render_manual_tab():
                 key="manual_phone",
             )
             mapped_sku = st.selectbox(
-                 "SKU (Optional)",
-                 ["None"] + all_cols,
-                 index=get_col_idx("sku") + 1 if "sku" in auto_cols else 0,
-                 key="manual_sku"
+                "SKU (Optional)",
+                ["None"] + all_cols,
+                index=get_col_idx("sku") + 1 if "sku" in auto_cols else 0,
+                key="manual_sku",
             )
 
         final_mapping = {
@@ -304,7 +379,6 @@ def render_manual_tab():
             "phone": mapped_phone if mapped_phone != "None" else None,
             "sku": mapped_sku if mapped_sku != "None" else None,
         }
-
 
         with st.expander("Search Raw Data"):
             search = st.text_input("Product search...", key="manual_search")
@@ -327,22 +401,28 @@ def render_manual_tab():
                 df_standard, timeframe = prepare_granular_data(df, final_mapping)
                 if not df_standard.empty:
                     proc_status.update(label="📈 Aggregating sales data...")
-                    drill, summ, top, basket = aggregate_data(df_standard, final_mapping)
-                    proc_status.update(label="✅ Data processed, rendering dashboard...", state="complete")
+                    drill, summ, top, basket = aggregate_data(
+                        df_standard, final_mapping
+                    )
+                    proc_status.update(
+                        label="✅ Data processed, rendering dashboard...",
+                        state="complete",
+                    )
                     manual_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     render_dashboard_output(
                         drill,
                         summ,
                         top,
-                    str(timeframe) if timeframe is not None else None,
+                        str(timeframe) if timeframe is not None else None,
                         basket,
-                    str(source_name) if source_name is not None else None,
+                        str(source_name) if source_name is not None else None,
                         manual_updated,
-                        granular_df=df_standard
+                        granular_df=df_standard,
                     )
                 else:
-                    proc_status.update(label="⚠️ No data after processing", state="error")
-
+                    proc_status.update(
+                        label="⚠️ No data after processing", state="error"
+                    )
 
     except Exception as e:
         log_system_event("FILE_ERROR", str(e))

@@ -1,7 +1,6 @@
 import streamlit as st
 from datetime import datetime, date, time, timedelta
 from src.state.persistence import save_state
-from src.services.woocommerce.client import _is_off_day
 
 # Default shift cutoff: 18:00 (6:00 PM Bangladesh time)
 DEFAULT_SHIFT_HOUR = 18
@@ -54,7 +53,9 @@ def render_operational_slots_calendar():
         new_minute = st.selectbox(
             "Minute",
             options=[0, 15, 30, 45],
-            index=[0, 15, 30, 45].index(current_minute) if current_minute in [0, 15, 30, 45] else 0,
+            index=[0, 15, 30, 45].index(current_minute)
+            if current_minute in [0, 15, 30, 45]
+            else 0,
             key="shift_cutoff_minute_input",
             label_visibility="collapsed",
             format_func=lambda x: f":{x:02d}",
@@ -145,7 +146,12 @@ def render_operational_slots_calendar():
                     st.toast("None of the selected dates were marked as holiday.")
     else:
         with c1:
-            st.button("🛑 Mark Holiday", use_container_width=True, type="primary", disabled=True)
+            st.button(
+                "🛑 Mark Holiday",
+                use_container_width=True,
+                type="primary",
+                disabled=True,
+            )
         with c2:
             st.button("⚪ Clear Holiday", use_container_width=True, disabled=True)
         st.caption("Pick a date or range above.")
@@ -154,8 +160,14 @@ def render_operational_slots_calendar():
 
     # ── Current Holiday List Preview ─────────────────────────────────────────
     today = datetime.now().date()
-    upcoming = [h for h in sorted(hols) if datetime.strptime(h, "%Y-%m-%d").date() >= today]
-    past = [h for h in sorted(hols, reverse=True) if datetime.strptime(h, "%Y-%m-%d").date() < today]
+    upcoming = [
+        h for h in sorted(hols) if datetime.strptime(h, "%Y-%m-%d").date() >= today
+    ]
+    past = [
+        h
+        for h in sorted(hols, reverse=True)
+        if datetime.strptime(h, "%Y-%m-%d").date() < today
+    ]
 
     if upcoming:
         st.markdown(f"**📌 Upcoming Holidays ({len(upcoming)})**")
@@ -200,4 +212,9 @@ def render_operational_slots_calendar():
         key="operational_slot_order_limit",
     )
     if order_limit_opt == "Custom Order":
-        st.number_input("Custom Order Count", min_value=1, value=50, key="operational_slot_custom_order_count")
+        st.number_input(
+            "Custom Order Count",
+            min_value=1,
+            value=50,
+            key="operational_slot_custom_order_count",
+        )

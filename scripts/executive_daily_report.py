@@ -7,37 +7,47 @@ using DEEN-OPS internal services, generates a predictive forecast and top produc
 summary, and sends an executive narrative via WhatsApp.
 
 Usage:
-    python src/pages/executive_daily_report.py
+    python scripts/executive_daily_report.py
 """
 
 import asyncio
 import os
 import sys
 import pandas as pd
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 
-from src.config.constants import PROJECT_ROOT
+from src.config.constants import PROJECT_ROOT, bd_now
 
 # Ensure DEEN-OPS root is in the Python path
 sys.path.insert(0, PROJECT_ROOT)
 
 # Mock Streamlit session state for headless execution before importing app modules
 import streamlit as st
+
 if "wc_sync_mode" not in st.session_state:
     st.session_state["wc_sync_mode"] = "Operational Cycle"
 
 from src.config.constants import SHIPPED_STATUSES
 from src.services.woocommerce.client import load_from_woocommerce
-from src.processing.data_processing import (aggregate_data, get_dispatch_metrics,
-                                            prepare_granular_data)
+from src.processing.data_processing import (
+    aggregate_data,
+    get_dispatch_metrics,
+    prepare_granular_data,
+)
 from src.processing.forecasting import PredictiveIntelligence
+
 
 def generate_report_data():
     print("📥 Loading WooCommerce Data via DEEN-OPS engine...")
     try:
         wc_res = load_from_woocommerce()
     except Exception as e:
-        return f"⚠️ *DEEN-OPS Daily Briefing*\n\nCould not generate report: API connection failed.\nError: {e}", None, None, None
+        return (
+            f"⚠️ *DEEN-OPS Daily Briefing*\n\nCould not generate report: API connection failed.\nError: {e}",
+            None,
+            None,
+            None,
+        )
 
     partitions = wc_res.get("partitions", {})
     slots = wc_res.get("slots", {})
@@ -50,7 +60,7 @@ def generate_report_data():
     if curr_slot:
         slot_start, slot_end = curr_slot
     else:
-        now_bd = datetime.now(timezone(timedelta(hours=6))).replace(tzinfo=None)
+        now_bd = bd_now().replace(tzinfo=None)
         slot_end = now_bd.replace(hour=17, minute=30, second=0, microsecond=0)
         slot_start = slot_end - timedelta(days=1)
 
@@ -61,14 +71,18 @@ def generate_report_data():
             df_live_raw["mod_dt"] = df_live_raw["mod_dt_parsed"]
         else:
             dt_s = pd.to_datetime(df_live_raw["Order Date Modified"], errors="coerce")
-            df_live_raw["mod_dt"] = dt_s.dt.tz_localize(None) if getattr(dt_s.dt, "tz", None) is not None else dt_s
+            df_live_raw["mod_dt"] = (
+                dt_s.dt.tz_localize(None)
+                if getattr(dt_s.dt, "tz", None) is not None
+                else dt_s
+            )
 
         df_live_raw = df_live_raw[
-            (df_live_raw["Order Status"].isin(SHIPPED_STATUSES)) & 
-            (df_live_raw["mod_dt"] >= slot_start) &
-            (df_live_raw["mod_dt"] <= slot_end)
+            (df_live_raw["Order Status"].isin(SHIPPED_STATUSES))
+            & (df_live_raw["mod_dt"] >= slot_start)
+            & (df_live_raw["mod_dt"] <= slot_end)
         ]
-            
+
     if df_prev_raw is not None and not df_prev_raw.empty:
         prev_slot = slots.get("wc_prev_slot")
         if prev_slot:
@@ -76,21 +90,37 @@ def generate_report_data():
             if "mod_dt_parsed" in df_prev_raw.columns:
                 df_prev_raw["mod_dt"] = df_prev_raw["mod_dt_parsed"]
             else:
-                dt_s_prev = pd.to_datetime(df_prev_raw["Order Date Modified"], errors="coerce")
-                df_prev_raw["mod_dt"] = dt_s_prev.dt.tz_localize(None) if getattr(dt_s_prev.dt, "tz", None) is not None else dt_s_prev
+                dt_s_prev = pd.to_datetime(
+                    df_prev_raw["Order Date Modified"], errors="coerce"
+                )
+                df_prev_raw["mod_dt"] = (
+                    dt_s_prev.dt.tz_localize(None)
+                    if getattr(dt_s_prev.dt, "tz", None) is not None
+                    else dt_s_prev
+                )
 
             df_prev_raw = df_prev_raw[
-                (df_prev_raw["Order Status"].isin(SHIPPED_STATUSES)) &
-                (df_prev_raw["mod_dt"] >= p_start) &
-                (df_prev_raw["mod_dt"] <= p_end)
+                (df_prev_raw["Order Status"].isin(SHIPPED_STATUSES))
+                & (df_prev_raw["mod_dt"] >= p_start)
+                & (df_prev_raw["mod_dt"] <= p_end)
             ]
 
     if df_live_raw is None or df_live_raw.empty:
-        return "⚠️ *DEEN-OPS Daily Briefing*\n\nNo shipped orders found for today's operational shift.", None, None, None
+        return (
+            "⚠️ *DEEN-OPS Daily Briefing*\n\nNo shipped orders found for today's operational shift.",
+            None,
+            None,
+            None,
+        )
 
     wc_raw_mapping = {
-        "name": "Item Name", "cost": "Item Cost", "qty": "Quantity", 
-        "date": "Order Date", "order_id": "Order ID", "phone": "Phone (Billing)", "sku": "SKU"
+        "name": "Item Name",
+        "cost": "Item Cost",
+        "qty": "Quantity",
+        "date": "Order Date",
+        "order_id": "Order ID",
+        "phone": "Phone (Billing)",
+        "sku": "SKU",
     }
 
     print("⚙️ Processing data aggregates...")
@@ -99,20 +129,28 @@ def generate_report_data():
 
     # Filter out ended promotional offers from top products list
     if top is not None and not top.empty:
-        top = top[~top["Product Name"].str.contains("Free T-Shirt|Free Water Bottle", case=False, na=False)]
+        top = top[
+            ~top["Product Name"].str.contains(
+                "Free T-Shirt|Free Water Bottle", case=False, na=False
+            )
+        ]
 
-    today_rev = summ['Total Amount'].sum() if summ is not None else 0
-    today_qty = summ['Total Qty'].sum() if summ is not None else 0
-    today_orders = basket.get('total_orders', 0) if basket else 0
-    today_aov = basket.get('avg_customer_value', basket.get('avg_basket_value', 0)) if basket else 0
+    today_rev = summ["Total Amount"].sum() if summ is not None else 0
+    today_qty = summ["Total Qty"].sum() if summ is not None else 0
+    today_orders = basket.get("total_orders", 0) if basket else 0
+    today_aov = (
+        basket.get("avg_customer_value", basket.get("avg_basket_value", 0))
+        if basket
+        else 0
+    )
 
     # Process yesterday's context for delta comparison
     prev_rev, prev_orders = 0, 0
     if df_prev_raw is not None and not df_prev_raw.empty:
         df_prev, _ = prepare_granular_data(df_prev_raw, wc_raw_mapping)
         _, summ_prev, _, basket_prev = aggregate_data(df_prev, wc_raw_mapping)
-        prev_rev = summ_prev['Total Amount'].sum() if summ_prev is not None else 0
-        prev_orders = basket_prev.get('total_orders', 0) if basket_prev else 0
+        prev_rev = summ_prev["Total Amount"].sum() if summ_prev is not None else 0
+        prev_orders = basket_prev.get("total_orders", 0) if basket_prev else 0
 
     dm = get_dispatch_metrics(df_live, today_orders)
 
@@ -120,16 +158,19 @@ def generate_report_data():
     forecast_str = ""
     if df_full_raw is not None and not df_full_raw.empty:
         df_full, _ = prepare_granular_data(df_full_raw, wc_raw_mapping)
-        df_full['Day'] = pd.to_datetime(df_full['Date']).dt.date
-        daily_rev = df_full.groupby('Day')['Total Amount'].sum()
+        df_full["Day"] = pd.to_datetime(df_full["Date"]).dt.date
+        daily_rev = df_full.groupby("Day")["Total Amount"].sum()
         if len(daily_rev) >= 3:
             fc_res, _ = PredictiveIntelligence.forecast(daily_rev, steps=1)
             if fc_res:
-                next_day_pred = fc_res[0]['forecast'][0]
+                next_day_pred = fc_res[0]["forecast"][0]
                 forecast_str = f"🔮 *ML Forecast (Tomorrow):* ৳{next_day_pred:,.0f}"
 
     from src.utils.customer_registry import compute_new_vs_returning_counts
-    new_customers, returning_customers = compute_new_vs_returning_counts(df_live, df_full_raw, wc_raw_mapping)
+
+    new_customers, returning_customers = compute_new_vs_returning_counts(
+        df_live, df_full_raw, wc_raw_mapping
+    )
 
     # AI-powered narrative generation
     print("🧠 Generating AI Executive Narrative...")
@@ -138,11 +179,23 @@ def generate_report_data():
         "top_products": top,
         "raw_sales_data": df_live,
     }
-    
+
     _adf = df_live if (df_live is not None and not df_live.empty) else None
-    net_rev = float(_adf["Total Amount"].sum()) if (_adf is not None and "Total Amount" in _adf.columns) else float(today_rev)
-    gross_rev = float(_adf["Gross Amount"].sum()) if (_adf is not None and "Gross Amount" in _adf.columns) else net_rev
-    cashback_disc = float(_adf["Cashback Discount"].sum()) if (_adf is not None and "Cashback Discount" in _adf.columns) else max(0.0, gross_rev - net_rev)
+    net_rev = (
+        float(_adf["Total Amount"].sum())
+        if (_adf is not None and "Total Amount" in _adf.columns)
+        else float(today_rev)
+    )
+    gross_rev = (
+        float(_adf["Gross Amount"].sum())
+        if (_adf is not None and "Gross Amount" in _adf.columns)
+        else net_rev
+    )
+    cashback_disc = (
+        float(_adf["Cashback Discount"].sum())
+        if (_adf is not None and "Cashback Discount" in _adf.columns)
+        else max(0.0, gross_rev - net_rev)
+    )
     net_aov = (net_rev / today_orders) if today_orders > 0 else today_aov
     loss_pct = (cashback_disc / gross_rev * 100) if gross_rev > 0 else 0.0
 
@@ -156,7 +209,7 @@ def generate_report_data():
     - Net Basket Size: ৳{net_aov:,.0f}.
     - Customer Breakdown: {new_customers} New Customers | {returning_customers} Returning Customers.
     - Yesterday Net Revenue: ৳{prev_rev:,.0f} revenue, {prev_orders} orders.
-    - Logistics & Shipped Status: {dm.get('dispatched', 0)} Dispatched ({dm.get('dispatch_rate', 0.0):.1f}% fulfillment rate), {dm.get('pending', 0)} Pending. ({dm.get('pathao_count', 0)} Pathao, {dm.get('other_count', 0)} Other).
+    - Logistics & Shipped Status: {dm.get("dispatched", 0)} Dispatched ({dm.get("dispatch_rate", 0.0):.1f}% fulfillment rate), {dm.get("pending", 0)} Pending. ({dm.get("pathao_count", 0)} Pathao, {dm.get("other_count", 0)} Other).
     - Prediction: {forecast_str}
 
     *Contextual Data (sales_summary, top_products):*
@@ -174,34 +227,47 @@ def generate_report_data():
 
     try:
         from src.pages.data_pilot import AIDataAgent
+
         agent = AIDataAgent(context_dfs=context_data)
-        
+
         async def get_narrative():
             full_response = ""
             async for chunk in agent.get_response_stream(prompt, history=[]):
                 full_response += chunk
             return full_response
+
         report_text = asyncio.run(get_narrative())
     except Exception as e:
         print(f"❌ AI narrative generation failed: {e}. Falling back to template.")
         from src.processing.data_processing import generate_executive_briefing
+
         report_text = generate_executive_briefing(
-            net_rev, today_qty, today_orders, net_aov, dm, top,
-            prev_rev=prev_rev, prev_orders=prev_orders, forecast_str=forecast_str,
-            gross_rev=gross_rev, cashback_disc=cashback_disc,
-            new_customers=new_customers, returning_customers=returning_customers
+            net_rev,
+            today_qty,
+            today_orders,
+            net_aov,
+            dm,
+            top,
+            prev_rev=prev_rev,
+            prev_orders=prev_orders,
+            forecast_str=forecast_str,
+            gross_rev=gross_rev,
+            cashback_disc=cashback_disc,
+            new_customers=new_customers,
+            returning_customers=returning_customers,
         )
-    
+
     return report_text, df_live, summ, top
+
 
 if __name__ == "__main__":
     report_text, df_live, summ, top = generate_report_data()
-    
-    export_filename = f"DEEN_OPS_Daily_Report_{datetime.now(timezone(timedelta(hours=6))).strftime('%Y-%m-%d')}.xlsx"
+
+    export_filename = f"DEEN_OPS_Daily_Report_{bd_now().strftime('%Y-%m-%d')}.xlsx"
     print("💾 Exporting data to Excel for Power BI / Tableau...")
-    
-    df_narrative = pd.DataFrame({"Executive Summary": report_text.split('\n')})
-    
+
+    df_narrative = pd.DataFrame({"Executive Summary": report_text.split("\n")})
+
     try:
         with pd.ExcelWriter(export_filename, engine="xlsxwriter") as writer:
             df_narrative.to_excel(writer, sheet_name="Executive Briefing", index=False)
@@ -211,8 +277,12 @@ if __name__ == "__main__":
                 top.to_excel(writer, sheet_name="Top Products", index=False)
             if df_live is not None and not df_live.empty:
                 df_live.to_excel(writer, sheet_name="Raw Shift Data", index=False)
-        
-        print(f"\n✅ Successfully exported report to: {os.path.abspath(export_filename)}")
-        print("💡 You can now import this .xlsx file directly into Power BI, Tableau, or Excel.")
+
+        print(
+            f"\n✅ Successfully exported report to: {os.path.abspath(export_filename)}"
+        )
+        print(
+            "💡 You can now import this .xlsx file directly into Power BI, Tableau, or Excel."
+        )
     except Exception as e:
         print(f"❌ Failed to export Excel file: {e}")

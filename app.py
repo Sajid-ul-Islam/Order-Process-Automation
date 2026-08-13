@@ -7,7 +7,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-from src.app_bootstrap import run_app
+from src.app_bootstrap import run_app  # noqa: E402
 
 try:
     run_app()

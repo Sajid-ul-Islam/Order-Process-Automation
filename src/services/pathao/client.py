@@ -1,4 +1,3 @@
-import requests
 import time
 import json
 import os
@@ -6,9 +5,10 @@ import os
 from src.utils.http import request_with_backoff
 from src.utils.logging import log_system_event
 
+
 class PathaoClient:
     def __init__(self, base_url, client_id, client_secret, username, password):
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self.client_id = client_id
         self.client_secret = client_secret
         self.username = username
@@ -23,12 +23,14 @@ class PathaoClient:
         self.access_token = data.get("access_token")
         self.refresh_token = data.get("refresh_token")
         # expires_in is usually in seconds
-        self.expires_at = time.time() + data.get("expires_in", 3600) - 60  # 1 min buffer
+        self.expires_at = (
+            time.time() + data.get("expires_in", 3600) - 60
+        )  # 1 min buffer
 
         token_data = {
             "access_token": self.access_token,
             "refresh_token": self.refresh_token,
-            "expires_at": self.expires_at
+            "expires_at": self.expires_at,
         }
         with open(self.token_file, "w") as f:
             json.dump(token_data, f)
@@ -58,7 +60,7 @@ class PathaoClient:
             "client_secret": self.client_secret,
             "username": self.username,
             "password": self.password,
-            "grant_type": "password"
+            "grant_type": "password",
         }
         try:
             res = request_with_backoff("POST", url, json=payload, timeout=10)
@@ -67,7 +69,9 @@ class PathaoClient:
                 self._save_token(data)
                 return True
             else:
-                log_system_event("PATHAO_AUTH_FAILED", f"{res.status_code} - {res.text}")
+                log_system_event(
+                    "PATHAO_AUTH_FAILED", f"{res.status_code} - {res.text}"
+                )
                 return False
         except Exception as e:
             log_system_event("PATHAO_AUTH_ERROR", str(e))
@@ -79,7 +83,7 @@ class PathaoClient:
             "client_id": self.client_id,
             "client_secret": self.client_secret,
             "refresh_token": self.refresh_token,
-            "grant_type": "refresh_token"
+            "grant_type": "refresh_token",
         }
         try:
             res = request_with_backoff("POST", url, json=payload, timeout=10)
@@ -87,7 +91,9 @@ class PathaoClient:
                 self._save_token(res.json())
                 return True
             else:
-                log_system_event("PATHAO_REFRESH_FAILED", f"{res.status_code} - {res.text}")
+                log_system_event(
+                    "PATHAO_REFRESH_FAILED", f"{res.status_code} - {res.text}"
+                )
                 return self.issue_access_token()
         except Exception:
             return self.issue_access_token()
@@ -97,13 +103,15 @@ class PathaoClient:
         return {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
-            "Accept": "application/json"
+            "Accept": "application/json",
         }
 
     def get_cities(self):
         url = f"{self.base_url}/aladdin/api/v1/cities"
         try:
-            res = request_with_backoff("GET", url, headers=self._get_headers(), timeout=10)
+            res = request_with_backoff(
+                "GET", url, headers=self._get_headers(), timeout=10
+            )
             if res.status_code == 200:
                 return res.json().get("data", {}).get("data", []), None
             else:
@@ -114,7 +122,9 @@ class PathaoClient:
     def get_zones(self, city_id):
         url = f"{self.base_url}/aladdin/api/v1/cities/{city_id}/zone-list"
         try:
-            res = request_with_backoff("GET", url, headers=self._get_headers(), timeout=10)
+            res = request_with_backoff(
+                "GET", url, headers=self._get_headers(), timeout=10
+            )
             if res.status_code == 200:
                 return res.json().get("data", {}).get("data", []), None
             else:
@@ -125,7 +135,9 @@ class PathaoClient:
     def get_areas(self, zone_id):
         url = f"{self.base_url}/aladdin/api/v1/zones/{zone_id}/area-list"
         try:
-            res = request_with_backoff("GET", url, headers=self._get_headers(), timeout=10)
+            res = request_with_backoff(
+                "GET", url, headers=self._get_headers(), timeout=10
+            )
             if res.status_code == 200:
                 return res.json().get("data", {}).get("data", []), None
             else:

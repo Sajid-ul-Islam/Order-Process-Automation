@@ -3,7 +3,6 @@
 import os
 import json
 import time
-from datetime import datetime, timezone, timedelta
 
 from src.config.constants import RESOURCES_DIR
 from src.config.settings import get_pathao_config
@@ -13,8 +12,14 @@ from src.utils.http import request_with_backoff
 PATHAO_CACHE_FILE = os.path.join(RESOURCES_DIR, "pathao_status_cache.json")
 
 TERMINAL_PATHAO_STATUSES = {
-    "delivered", "returned", "return_delivered", "cancelled",
-    "partial_delivered", "refunded", "failed", "status not found"
+    "delivered",
+    "returned",
+    "return_delivered",
+    "cancelled",
+    "partial_delivered",
+    "refunded",
+    "failed",
+    "status not found",
 }
 
 
@@ -72,16 +77,21 @@ def verify_pathao_connection() -> tuple[bool, str]:
     try:
         client.ensure_token()
         if client.access_token:
-            return True, "Successfully authenticated with Pathao API. Credentials are working."
+            return (
+                True,
+                "Successfully authenticated with Pathao API. Credentials are working.",
+            )
         return False, "Authentication failed. Pathao did not return an access token."
     except Exception as exc:
         return False, f"Connection error: {exc}"
 
 
-def get_pathao_order_status(consignment_id: str, force_refresh: bool = False, cache_ttl_seconds: int = 3600) -> dict:
+def get_pathao_order_status(
+    consignment_id: str, force_refresh: bool = False, cache_ttl_seconds: int = 3600
+) -> dict:
     """
     Fetch status of a Pathao order with persistent disk caching to prevent API rate limiting.
-    
+
     Terminal statuses (Delivered, Returned, etc.) are served permanently from cache.
     Non-terminal statuses are cached for `cache_ttl_seconds` (default 1 hour).
     """
@@ -123,10 +133,14 @@ def get_pathao_order_status(consignment_id: str, force_refresh: bool = False, ca
         if not client.access_token:
             if cid in disk_cache:
                 return disk_cache[cid].get("data", {})
-            return {"error": "Authentication failed. Pathao access token is unavailable."}
+            return {
+                "error": "Authentication failed. Pathao access token is unavailable."
+            }
 
         status_url = f"{client.base_url}/aladdin/api/v1/orders/{cid}/info"
-        status_response = request_with_backoff("GET", status_url, headers=headers, timeout=10)
+        status_response = request_with_backoff(
+            "GET", status_url, headers=headers, timeout=10
+        )
 
         if status_response.status_code == 200:
             resp_json = status_response.json()
@@ -140,7 +154,9 @@ def get_pathao_order_status(consignment_id: str, force_refresh: bool = False, ca
         if cid in disk_cache:
             return disk_cache[cid].get("data", {})
 
-        return {"error": f"Failed to fetch status: {status_response.status_code} - {status_response.text}"}
+        return {
+            "error": f"Failed to fetch status: {status_response.status_code} - {status_response.text}"
+        }
 
     except Exception as exc:
         if cid in disk_cache:
@@ -148,7 +164,9 @@ def get_pathao_order_status(consignment_id: str, force_refresh: bool = False, ca
         return {"error": f"Request failed: {exc}"}
 
 
-def batch_get_pathao_order_statuses(consignment_ids: list, force_refresh: bool = False, max_workers: int = 3) -> dict[str, str]:
+def batch_get_pathao_order_statuses(
+    consignment_ids: list, force_refresh: bool = False, max_workers: int = 3
+) -> dict[str, str]:
     """
     Fetch statuses for a list of consignment IDs in batch, serving cached records first
     and only querying Pathao API for uncached orders to avoid blocking/rate-limiting.
@@ -156,7 +174,9 @@ def batch_get_pathao_order_statuses(consignment_ids: list, force_refresh: bool =
     if not consignment_ids:
         return {}
 
-    unique_cids = list(set([str(c).strip() for c in consignment_ids if c and str(c).strip()]))
+    unique_cids = list(
+        set([str(c).strip() for c in consignment_ids if c and str(c).strip()])
+    )
     results = {}
     missing_cids = []
 
@@ -176,7 +196,9 @@ def batch_get_pathao_order_statuses(consignment_ids: list, force_refresh: bool =
                 ).strip()
 
             st_lower = st_str.lower()
-            if any(term in st_lower for term in TERMINAL_PATHAO_STATUSES) or (time.time() - cached_ts < 3600):
+            if any(term in st_lower for term in TERMINAL_PATHAO_STATUSES) or (
+                time.time() - cached_ts < 3600
+            ):
                 results[cid] = st_str if st_str else "Status Not Found"
                 continue
 
@@ -191,19 +213,26 @@ def batch_get_pathao_order_statuses(consignment_ids: list, force_refresh: bool =
         res = get_pathao_order_status(cid, force_refresh=force_refresh)
         status_val = "Status Not Found"
         if isinstance(res, dict):
-            if "data" in res and isinstance(res["data"], dict) and "order_status" in res["data"]:
+            if (
+                "data" in res
+                and isinstance(res["data"], dict)
+                and "order_status" in res["data"]
+            ):
                 status_val = res["data"]["order_status"]
             elif "order_status" in res:
                 status_val = res["order_status"]
         return cid, status_val
 
-    with ThreadPoolExecutor(max_workers=min(len(missing_cids), max_workers)) as executor:
-        futures = [executor.submit(_fetch_one, cid) for cid in missing_cids]
-        for future in as_completed(futures):
+    with ThreadPoolExecutor(
+        max_workers=min(len(missing_cids), max_workers)
+    ) as executor:
+        future_to_cid = {executor.submit(_fetch_one, cid): cid for cid in missing_cids}
+        for future in as_completed(future_to_cid):
+            cid = future_to_cid[future]
             try:
-                cid, status_val = future.result()
+                _, status_val = future.result()
                 results[cid] = status_val
             except Exception:
-                pass
+                results[cid] = "Status Not Found"
 
     return results

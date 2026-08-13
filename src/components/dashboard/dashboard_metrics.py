@@ -3,258 +3,28 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 import pandas as pd
 import streamlit as st
 
-from src.processing.data_processing import aggregate_data, prepare_granular_data, safe_coerce_datetime_naive
+from src.processing.data_processing import (
+    aggregate_data,
+    prepare_granular_data,
+    safe_coerce_datetime_naive,
+)
 from src.utils.metric_history import save_shift_snapshot, load_snapshot_history
-from src.utils.customer_registry import load_customer_registry, update_customer_registry, get_customer_first_order_date, normalize_phone_key
+from src.utils.customer_registry import (
+    load_customer_registry,
+    update_customer_registry,
+    get_customer_first_order_date,
+    normalize_phone_key,
+)
 from src.utils.logging import log_system_event
-
-
-def _generate_sparkline_svg(
-    values: list[float],
-    color: str = "#3b82f6",
-    prefix: str = "",
-    suffix: str = "",
-) -> tuple[str, str]:
-    """Generates an enhanced normalized SVG sparkline with peak indicator dots and micro-summary stats badges.
-    Returns (svg_html_snippet, micro_badge_html_snippet).
-    """
-    if not values or len(values) < 2:  # A line needs at least 2 points to show a trend.
-        return "", ""
-    
-    # Normalize values to fit 100x30 SVG coordinate system
-    min_v, max_v = min(values), max(values)
-    avg_v = sum(values) / len(values)
-    latest_v = values[-1]
-    rng = max_v - min_v if max_v != min_v else 1
-    
-    width = 100
-    height = 30
-    step = width / (len(values) - 1)
-    
-    coords = []
-    max_idx = 0
-    for i, v in enumerate(values):
-        x = i * step
-        # Use 4px padding top/bottom to prevent clipping line caps
-        y = height - ((v - min_v) / rng * (height - 8)) - 4
-        coords.append((x, y))
-        if v == max_v:
-            max_idx = i
-    
-    if len(coords) == 2:
-        path_data = f"M {coords[0][0]:.1f},{coords[0][1]:.1f} L {coords[1][0]:.1f},{coords[1][1]:.1f}"
-    else:
-        path_data = f"M {coords[0][0]:.1f},{coords[0][1]:.1f}"
-        for i in range(len(coords) - 1):
-            p0 = coords[i]
-            p1 = coords[i + 1]
-            cx = (p0[0] + p1[0]) / 2
-            path_data += f" C {cx:.1f},{p0[1]:.1f} {cx:.1f},{p1[1]:.1f} {p1[0]:.1f},{p1[1]:.1f}"
-    
-    area_data = path_data + f" L {width:.1f},{height:.1f} L 0.0,{height:.1f} Z"
-    
-    px, py = coords[max_idx]
-    ex, ey = coords[-1]
-    
-    tooltip_txt = f"7-Day Trend: Peak {prefix}{max_v:,.0f}{suffix} | Avg {prefix}{avg_v:,.0f}{suffix} | Today {prefix}{latest_v:,.0f}{suffix}"
-    
-    svg_raw = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 30" preserveAspectRatio="none">
-        <title>{tooltip_txt}</title>
-        <path d="{area_data}" fill="{color}" fill-opacity="0.15" />
-        <path d="{path_data}" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        <circle cx="{px:.1f}" cy="{py:.1f}" r="3" fill="{color}" stroke="#ffffff" stroke-width="1.2" />
-        <circle cx="{ex:.1f}" cy="{ey:.1f}" r="2.5" fill="#ffffff" stroke="{color}" stroke-width="1.5" />
-    </svg>"""
-    
-    import base64
-    b64_svg = base64.b64encode(svg_raw.encode("utf-8")).decode("utf-8")
-    
-    svg_html = f"""
-    <div class="metric-sparkline" title="{tooltip_txt}">
-        <img src="data:image/svg+xml;base64,{b64_svg}" style="width: 100%; height: 30px; display: block;" />
-    </div>
-    """
-    
-    badge_html = f"""<div class="metric-detail-row" style="color:var(--text-color, #000000); font-weight:700; opacity:1;">
-        <span>🔥 7D Peak: <b>{prefix}{max_v:,.0f}{suffix}</b></span>
-        <span>📊 7D Avg: <b>{prefix}{avg_v:,.0f}{suffix}</b></span>
-    </div>"""
-
-    return svg_html, badge_html
-
-
-def _generate_dual_sparkline_svg(
-    new_values: list[float],
-    ret_values: list[float],
-    color1: str = "#a855f7",
-    color2: str = "#f59e0b",
-    prefix: str = "",
-    suffix: str = "",
-) -> tuple[str, str]:
-    """Generates a dual-trend SVG sparkline displaying New vs. Returning customer trends over 7 days."""
-    if not new_values or len(new_values) < 2:
-        return "", ""
-
-    all_vals = new_values + ret_values
-    min_v = 0.0
-    max_v = max(all_vals) if all_vals else 1.0
-    if max_v == min_v:
-        max_v += 1.0
-    rng = max_v - min_v
-
-    n = len(new_values)
-    width = 100.0
-    height = 30.0
-    step = width / (n - 1)
-
-    def _get_coords(vals):
-        coords = []
-        for i, v in enumerate(vals):
-            x = i * step
-            y = height - ((v - min_v) / rng * (height - 8)) - 4
-            coords.append((x, y))
-        return coords
-
-    def _coords_to_path(coords):
-        if len(coords) == 2:
-            return f"M {coords[0][0]:.1f},{coords[0][1]:.1f} L {coords[1][0]:.1f},{coords[1][1]:.1f}"
-        path_data = f"M {coords[0][0]:.1f},{coords[0][1]:.1f}"
-        for i in range(len(coords) - 1):
-            p0 = coords[i]
-            p1 = coords[i + 1]
-            cx = (p0[0] + p1[0]) / 2
-            path_data += f" C {cx:.1f},{p0[1]:.1f} {cx:.1f},{p1[1]:.1f} {p1[0]:.1f},{p1[1]:.1f}"
-        return path_data
-
-    coords_new = _get_coords(new_values)
-    coords_ret = _get_coords(ret_values)
-    path_new = _coords_to_path(coords_new)
-    path_ret = _coords_to_path(coords_ret)
-
-    latest_new = new_values[-1]
-    latest_ret = ret_values[-1]
-    avg_new = sum(new_values) / len(new_values)
-    avg_ret = sum(ret_values) / len(ret_values)
-
-    tooltip_txt = f"7D Trend: Today {prefix}{latest_new:,.0f}{suffix} New vs {prefix}{latest_ret:,.0f}{suffix} Ret | Avg: {prefix}{avg_new:,.0f}{suffix} New / {prefix}{avg_ret:,.0f}{suffix} Ret"
-
-    ex1, ey1 = coords_new[-1]
-    ex2, ey2 = coords_ret[-1]
-
-    svg_raw = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 30" preserveAspectRatio="none">
-        <title>{tooltip_txt}</title>
-        <path d="{path_new}" fill="none" stroke="{color1}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="{path_ret}" fill="none" stroke="{color2}" stroke-width="1.8" stroke-dasharray="3,2" stroke-linecap="round" stroke-linejoin="round" />
-        <circle cx="{ex1:.1f}" cy="{ey1:.1f}" r="2.5" fill="{color1}" stroke="#ffffff" stroke-width="1" />
-        <circle cx="{ex2:.1f}" cy="{ey2:.1f}" r="2.5" fill="{color2}" stroke="#ffffff" stroke-width="1" />
-    </svg>"""
-
-    import base64
-    b64_svg = base64.b64encode(svg_raw.encode("utf-8")).decode("utf-8")
-
-    svg_html = f"""
-    <div class="metric-sparkline" title="{tooltip_txt}">
-        <img src="data:image/svg+xml;base64,{b64_svg}" style="width: 100%; height: 30px; display: block;" />
-    </div>
-    """
-
-    badge_html = f"""<div class="metric-detail-row" style="color:var(--text-color, #000000); font-weight:700; opacity:1;">
-        <span style="color:{color1};">🆕 7D New: <b>{prefix}{avg_new:,.0f}{suffix} avg</b></span>
-        <span style="color:{color2};">🔄 7D Ret: <b>{prefix}{avg_ret:,.0f}{suffix} avg</b></span>
-    </div>"""
-
-    return svg_html, badge_html
-
-
-def _generate_mini_bar_chart_svg(
-    new_values: list[float],
-    ret_values: list[float],
-    color1: str = "#a855f7",
-    color2: str = "#f59e0b",
-    suffix: str = "%",
-) -> tuple[str, str]:
-    """Generates a 7-day side-by-side dual mini bar SVG chart displaying New vs. Returning customer ratios."""
-    if not new_values or len(new_values) < 2:
-        return "", ""
-
-    n = len(new_values)
-    svg_width = 100.0
-    svg_height = 30.0
-    single_bar_w = 4.8
-    pair_inner_gap = 1.0
-    day_gap = 3.5
-
-    pair_w = 2 * single_bar_w + pair_inner_gap
-    total_w = n * pair_w + (n - 1) * day_gap
-    start_x = (svg_width - total_w) / 2.0
-    max_h = 24.0
-
-    bars_svg = []
-    for i in range(n):
-        x_pair = start_x + i * (pair_w + day_gap)
-        x_new = x_pair
-        x_ret = x_pair + single_bar_w + pair_inner_gap
-
-        val_new = new_values[i]
-        val_ret = ret_values[i]
-        tot = val_new + val_ret
-
-        pct_new = (val_new / tot * 100.0) if tot > 0 else (val_new if suffix == "%" else 0.0)
-        pct_ret = (val_ret / tot * 100.0) if tot > 0 else (val_ret if suffix == "%" else 0.0)
-
-        h_new = (pct_new / 100.0) * max_h if (pct_new > 0 or tot > 0) else 2.0
-        h_ret = (pct_ret / 100.0) * max_h if (pct_ret > 0 or tot > 0) else 2.0
-
-        y_bottom = svg_height - 2.0
-        y_new = y_bottom - h_new
-        y_ret = y_bottom - h_ret
-
-        day_label = f"Day {i+1}" if i < n - 1 else "Today"
-        bar_tooltip = f"{day_label}: 🆕 {pct_new:.0f}% New | 🔄 {pct_ret:.0f}% Returning"
-
-        bar_item = f"""<g title="{bar_tooltip}">
-            <rect x="{x_new:.1f}" y="{y_new:.1f}" width="{single_bar_w:.1f}" height="{h_new:.1f}" fill="{color1}" rx="1" opacity="0.95"><title>{bar_tooltip}</title></rect>
-            <rect x="{x_ret:.1f}" y="{y_ret:.1f}" width="{single_bar_w:.1f}" height="{h_ret:.1f}" fill="{color2}" rx="1" opacity="0.90"><title>{bar_tooltip}</title></rect>
-        </g>"""
-        bars_svg.append(bar_item)
-
-    latest_new = new_values[-1]
-    latest_ret = ret_values[-1]
-    tot_l = latest_new + latest_ret
-    p_new_l = (latest_new / tot_l * 100.0) if tot_l > 0 else (latest_new if suffix == "%" else 0.0)
-    p_ret_l = (latest_ret / tot_l * 100.0) if tot_l > 0 else (latest_ret if suffix == "%" else 0.0)
-
-    avg_new = sum(new_values) / n
-    avg_ret = sum(ret_values) / n
-
-    tooltip_txt = f"7-Day Customer Mix: Today {p_new_l:.0f}% New vs {p_ret_l:.0f}% Ret | 7D Avg: {avg_new:.0f}% New / {avg_ret:.0f}% Ret"
-    bars_str = "\n".join(bars_svg)
-
-    svg_raw = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 30" preserveAspectRatio="none">
-        <title>{tooltip_txt}</title>
-        {bars_str}
-    </svg>"""
-
-    import base64
-    b64_svg = base64.b64encode(svg_raw.encode("utf-8")).decode("utf-8")
-
-    svg_html = f"""
-    <div class="metric-sparkline" title="{tooltip_txt}">
-        <img src="data:image/svg+xml;base64,{b64_svg}" style="width: 100%; height: 30px; display: block;" />
-    </div>
-    """
-
-    badge_html = f"""<div class="metric-detail-row" style="color:var(--text-color, #000000); font-weight:700; opacity:1;">
-        <span style="color:{color1};">🆕 7D New: <b>{avg_new:.0f}% avg</b></span>
-        <span style="color:{color2};">🔄 7D Ret: <b>{avg_ret:.0f}% avg</b></span>
-    </div>"""
-
-    return svg_html, badge_html
+from src.components.dashboard.svg import (
+    _generate_mini_bar_chart_svg,
+    _generate_sparkline_svg,
+)
 
 
 def render_operational_metrics(
@@ -285,17 +55,34 @@ def render_operational_metrics(
 
     m_qty = m_df["Quantity"].sum() if "Quantity" in m_df.columns else 0
     m_ord = basket["total_orders"] if basket else 0
-    m_item_rev = (m_df["Quantity"] * m_df["Item Cost"]).sum() if "Quantity" in m_df.columns and "Item Cost" in m_df.columns else 0.0
+    m_item_rev = (
+        (m_df["Quantity"] * m_df["Item Cost"]).sum()
+        if "Quantity" in m_df.columns and "Item Cost" in m_df.columns
+        else 0.0
+    )
 
     # ── Robust Gross Revenue, Cashback, and Net Revenue Calculation ──
     if "Cashback Discount" in m_df.columns and (m_df["Cashback Discount"] > 0).any():
         m_cashback_disc = float(m_df["Cashback Discount"].sum())
     else:
-        cb_cols = [c for c in ["Order Discount Total", "Fee Discount Total", "Item Discount"] if c in m_df.columns]
+        cb_cols = [
+            c
+            for c in ["Order Discount Total", "Fee Discount Total", "Item Discount"]
+            if c in m_df.columns
+        ]
         if cb_cols:
             m_cashback_disc = float(m_df[cb_cols].sum().sum())
-        elif "Subtotal Cost" in m_df.columns and "Item Cost" in m_df.columns and "Quantity" in m_df.columns:
-            m_cashback_disc = float(((m_df["Subtotal Cost"] - m_df["Item Cost"]).clip(lower=0) * m_df["Quantity"]).sum())
+        elif (
+            "Subtotal Cost" in m_df.columns
+            and "Item Cost" in m_df.columns
+            and "Quantity" in m_df.columns
+        ):
+            m_cashback_disc = float(
+                (
+                    (m_df["Subtotal Cost"] - m_df["Item Cost"]).clip(lower=0)
+                    * m_df["Quantity"]
+                ).sum()
+            )
         else:
             m_cashback_disc = 0.0
 
@@ -318,12 +105,24 @@ def render_operational_metrics(
     dq_str, dr_str, do_str, db_str = None, None, None, None
     if c_df is not None and not c_df.empty:
         co_q = c_df["Quantity"].sum() if "Quantity" in c_df.columns else 0
-        co_item_r = (c_df["Quantity"] * c_df["Item Cost"]).sum() if "Quantity" in c_df.columns and "Item Cost" in c_df.columns else 0.0
+        co_item_r = (
+            (c_df["Quantity"] * c_df["Item Cost"]).sum()
+            if "Quantity" in c_df.columns and "Item Cost" in c_df.columns
+            else 0.0
+        )
         _, _, _, co_basket = aggregate_data(c_df, dummy_mapping)
         co_o = co_basket["total_orders"] if co_basket else 0
 
-        co_cb = float(c_df["Cashback Discount"].sum()) if "Cashback Discount" in c_df.columns else 0.0
-        co_gross = float(c_df["Gross Amount"].sum()) if "Gross Amount" in c_df.columns else co_item_r
+        co_cb = (
+            float(c_df["Cashback Discount"].sum())
+            if "Cashback Discount" in c_df.columns
+            else 0.0
+        )
+        co_gross = (
+            float(c_df["Gross Amount"].sum())
+            if "Gross Amount" in c_df.columns
+            else co_item_r
+        )
         co_net_r = max(0.0, co_gross - co_cb)
         co_b = (co_net_r / co_o) if co_o > 0 else 0.0
 
@@ -396,7 +195,7 @@ def render_operational_metrics(
                 extra_metric_icon = "⏳"
         except Exception:
             pass
-            
+
     # ── Last 7-Days KPI Sparkline Extraction ──
     # Initialize all sparkline and customer mix variables to safe defaults
     m_new_cnt, m_ret_cnt = 0, 0
@@ -408,17 +207,31 @@ def render_operational_metrics(
             # 1. Fetch the multi-day source DataFrame from session state if available, fallback to m_df
             full_df = (
                 st.session_state.get("wc_full_df")
-                if st.session_state.get("wc_full_df") is not None and not st.session_state.get("wc_full_df").empty
+                if st.session_state.get("wc_full_df") is not None
+                and not st.session_state.get("wc_full_df").empty
                 else st.session_state.get("granular_df")
-                if st.session_state.get("granular_df") is not None and not st.session_state.get("granular_df").empty
+                if st.session_state.get("granular_df") is not None
+                and not st.session_state.get("granular_df").empty
                 else st.session_state.get("raw_df")
-                if st.session_state.get("raw_df") is not None and not st.session_state.get("raw_df").empty
+                if st.session_state.get("raw_df") is not None
+                and not st.session_state.get("raw_df").empty
                 else m_df
             )
 
-            date_col = "Date" if "Date" in full_df.columns else wc_raw_mapping.get("date", "Order Date")
+            date_col = (
+                "Date"
+                if "Date" in full_df.columns
+                else wc_raw_mapping.get("date", "Order Date")
+            )
             if date_col not in full_df.columns:
-                date_col = next((c for c in ["Order Date", "Date", "Created Date"] if c in full_df.columns), full_df.columns[0])
+                date_col = next(
+                    (
+                        c
+                        for c in ["Order Date", "Date", "Created Date"]
+                        if c in full_df.columns
+                    ),
+                    full_df.columns[0],
+                )
 
             src_df = full_df.copy()
             src_df["_dt"] = safe_coerce_datetime_naive(src_df[date_col])
@@ -426,7 +239,10 @@ def render_operational_metrics(
 
             order_id_col = wc_raw_mapping.get("order_id", "Order ID")
             if order_id_col not in src_df.columns:
-                order_id_col = next((c for c in ["Order ID", "Order Number"] if c in src_df.columns), src_df.columns[0])
+                order_id_col = next(
+                    (c for c in ["Order ID", "Order Number"] if c in src_df.columns),
+                    src_df.columns[0],
+                )
 
             if "Total Amount" in src_df.columns:
                 src_df["_rev"] = src_df["Total Amount"]
@@ -459,7 +275,11 @@ def render_operational_metrics(
                     day_map_ord[d_key] = float(grp[order_id_col].nunique())
 
             # Ensure current live metrics are set for today's date
-            today_dt = src_df["_day"].max() if not src_df.empty else pd.to_datetime("today").floor("D")
+            today_dt = (
+                src_df["_day"].max()
+                if not src_df.empty
+                else pd.to_datetime("today").floor("D")
+            )
             day_map_qty[today_dt] = float(m_qty)
             day_map_rev[today_dt] = float(m_net_rev)
             day_map_ord[today_dt] = float(m_ord)
@@ -470,7 +290,9 @@ def render_operational_metrics(
             t_qty_vals = [day_map_qty.get(d, 0.0) for d in all_7days]
             t_rev_vals = [day_map_rev.get(d, 0.0) for d in all_7days]
             t_ord_vals = [day_map_ord.get(d, 0.0) for d in all_7days]
-            t_bv_vals = [(r / o if o > 0 else 0) for r, o in zip(t_rev_vals, t_ord_vals)]
+            t_bv_vals = [
+                (r / o if o > 0 else 0) for r, o in zip(t_rev_vals, t_ord_vals)
+            ]
 
             # Helper to trim leading zero padding when data collection started recently
             def _trim_leading_zeros(vals: list[float]) -> list[float]:
@@ -485,13 +307,24 @@ def render_operational_metrics(
             t_bv_vals = _trim_leading_zeros(t_bv_vals)
 
             from src.config.ui_config import CHART_THEMES
-            theme_name = st.session_state.get("chart_theme", "✨ Emerald Cyberpunk")
-            theme_cfg = CHART_THEMES.get(theme_name, CHART_THEMES["✨ Emerald Cyberpunk"])
 
-            s_qty, d_qty = _generate_sparkline_svg(t_qty_vals, theme_cfg.get("spark_qty", "#06b6d4"), prefix="", suffix="")
-            s_rev, d_rev = _generate_sparkline_svg(t_rev_vals, theme_cfg.get("spark_rev", "#10b981"), prefix="৳", suffix="")
-            s_ord, d_ord = _generate_sparkline_svg(t_ord_vals, theme_cfg.get("spark_ord", "#3b82f6"), prefix="", suffix="")
-            s_bv, d_bv = _generate_sparkline_svg(t_bv_vals, theme_cfg.get("spark_bv", "#f59e0b"), prefix="৳", suffix="")
+            theme_name = st.session_state.get("chart_theme", "✨ Emerald Cyberpunk")
+            theme_cfg = CHART_THEMES.get(
+                theme_name, CHART_THEMES["✨ Emerald Cyberpunk"]
+            )
+
+            s_qty, d_qty = _generate_sparkline_svg(
+                t_qty_vals, theme_cfg.get("spark_qty", "#06b6d4"), prefix="", suffix=""
+            )
+            s_rev, d_rev = _generate_sparkline_svg(
+                t_rev_vals, theme_cfg.get("spark_rev", "#10b981"), prefix="৳", suffix=""
+            )
+            s_ord, d_ord = _generate_sparkline_svg(
+                t_ord_vals, theme_cfg.get("spark_ord", "#3b82f6"), prefix="", suffix=""
+            )
+            s_bv, d_bv = _generate_sparkline_svg(
+                t_bv_vals, theme_cfg.get("spark_bv", "#f59e0b"), prefix="৳", suffix=""
+            )
 
             # ── New vs Returning Customer Calculation (Lifetime Registry Integrated) ──
             try:
@@ -499,14 +332,41 @@ def render_operational_metrics(
                 update_customer_registry(full_df, wc_raw_mapping)
                 lifetime_registry = load_customer_registry()
 
-                phone_col = next((c for c in ["Phone (Billing)", "Phone", "Billing Phone", "Customer Phone", "phone"] if c in m_df.columns), None)
-                email_col = next((c for c in ["Billing Email", "Email", "Customer Email", "email"] if c in m_df.columns), None)
+                phone_col = next(
+                    (
+                        c
+                        for c in [
+                            "Phone (Billing)",
+                            "Phone",
+                            "Billing Phone",
+                            "Customer Phone",
+                            "phone",
+                        ]
+                        if c in m_df.columns
+                    ),
+                    None,
+                )
+                email_col = next(
+                    (
+                        c
+                        for c in ["Billing Email", "Email", "Customer Email", "email"]
+                        if c in m_df.columns
+                    ),
+                    None,
+                )
                 cust_col = phone_col or email_col
 
                 if cust_col and not full_df.empty:
-                    full_dt_col = "Date" if "Date" in full_df.columns else wc_raw_mapping.get("date", "Order Date")
+                    full_dt_col = (
+                        "Date"
+                        if "Date" in full_df.columns
+                        else wc_raw_mapping.get("date", "Order Date")
+                    )
                     if full_dt_col not in full_df.columns:
-                        full_dt_col = next((c for c in ["Order Date", "Date"] if c in full_df.columns), full_df.columns[0])
+                        full_dt_col = next(
+                            (c for c in ["Order Date", "Date"] if c in full_df.columns),
+                            full_df.columns[0],
+                        )
 
                     f_df = full_df.copy()
                     f_df["_dt"] = safe_coerce_datetime_naive(f_df[full_dt_col])
@@ -517,14 +377,25 @@ def render_operational_metrics(
                     first_order_map = f_df.groupby("_norm_cust")["_dt"].min().to_dict()
 
                     if not m_df.empty and cust_col in m_df.columns:
-                        active_dt_col = "Date" if "Date" in m_df.columns else wc_raw_mapping.get("date", "Order Date")
+                        active_dt_col = (
+                            "Date"
+                            if "Date" in m_df.columns
+                            else wc_raw_mapping.get("date", "Order Date")
+                        )
                         t_act = m_df.copy()
                         t_act["_dt"] = safe_coerce_datetime_naive(t_act[active_dt_col])
                         t_act["_norm_cust"] = t_act[cust_col].apply(normalize_phone_key)
 
                         order_id_col = wc_raw_mapping.get("order_id", "Order ID")
                         if order_id_col not in t_act.columns:
-                            order_id_col = next((c for c in ["Order ID", "Order Number"] if c in t_act.columns), t_act.columns[0])
+                            order_id_col = next(
+                                (
+                                    c
+                                    for c in ["Order ID", "Order Number"]
+                                    if c in t_act.columns
+                                ),
+                                t_act.columns[0],
+                            )
 
                         act_uniq = t_act.drop_duplicates(subset=[order_id_col])
                         for _, urow in act_uniq.iterrows():
@@ -533,11 +404,17 @@ def render_operational_metrics(
 
                             # Check session dataset min date AND persistent lifetime registry min date (from past 1-5 years)
                             first_dt = first_order_map.get(c_id, o_dt)
-                            reg_dt = get_customer_first_order_date(c_id, lifetime_registry)
+                            reg_dt = get_customer_first_order_date(
+                                c_id, lifetime_registry
+                            )
                             if reg_dt and (pd.isna(first_dt) or reg_dt < first_dt):
                                 first_dt = reg_dt
 
-                            if pd.notna(first_dt) and pd.notna(o_dt) and first_dt < o_dt.floor("D"):
+                            if (
+                                pd.notna(first_dt)
+                                and pd.notna(o_dt)
+                                and first_dt < o_dt
+                            ):
                                 m_ret_cnt += 1
                             else:
                                 m_new_cnt += 1
@@ -547,7 +424,14 @@ def render_operational_metrics(
                         f_df["_day"] = f_df["_dt"].dt.floor("D")
                         order_id_col = wc_raw_mapping.get("order_id", "Order ID")
                         if order_id_col not in f_df.columns:
-                            order_id_col = next((c for c in ["Order ID", "Order Number"] if c in f_df.columns), f_df.columns[0])
+                            order_id_col = next(
+                                (
+                                    c
+                                    for c in ["Order ID", "Order Number"]
+                                    if c in f_df.columns
+                                ),
+                                f_df.columns[0],
+                            )
 
                         day_map_total = defaultdict(int)
                         day_map_new = defaultdict(int)
@@ -560,7 +444,9 @@ def render_operational_metrics(
                                 c_id = drow.get("_norm_cust")
                                 d_dt = drow.get("_dt")
                                 first_dt = first_order_map.get(c_id, d_dt)
-                                reg_dt = get_customer_first_order_date(c_id, lifetime_registry)
+                                reg_dt = get_customer_first_order_date(
+                                    c_id, lifetime_registry
+                                )
                                 if reg_dt and (pd.isna(first_dt) or reg_dt < first_dt):
                                     first_dt = reg_dt
 
@@ -591,15 +477,23 @@ def render_operational_metrics(
                         t_new_vals = _trim_leading_zeros(t_new_vals)
                         t_ret_vals = _trim_leading_zeros(t_ret_vals)
                         s_cust, d_cust = _generate_mini_bar_chart_svg(
-                            t_new_vals, t_ret_vals, color1="#a855f7", color2="#f59e0b", suffix="%"
+                            t_new_vals,
+                            t_ret_vals,
+                            color1="#a855f7",
+                            color2="#f59e0b",
+                            suffix="%",
                         )
             except Exception as e:
-                log_system_event("CUSTOMER_MIX_ERROR", f"Failed to compute customer mix: {e}")
+                log_system_event(
+                    "CUSTOMER_MIX_ERROR", f"Failed to compute customer mix: {e}"
+                )
         except Exception as e:
             log_system_event("SPARKLINE_ERROR", f"Failed to generate sparklines: {e}")
 
     # % of unique orders with cashback
-    _ord_id_col = next((c for c in ["Order ID", "Order Number"] if c in m_df.columns), None)
+    _ord_id_col = next(
+        (c for c in ["Order ID", "Order Number"] if c in m_df.columns), None
+    )
     if _ord_id_col and m_cashback_disc > 0 and "Cashback Discount" in m_df.columns:
         _uniq = m_df.drop_duplicates(subset=[_ord_id_col])
         _cb_ord_cnt = int((_uniq["Cashback Discount"] > 0).sum())
@@ -609,7 +503,11 @@ def render_operational_metrics(
         _total_ord = max(1, int(m_ord))
     m_cb_orders_pct = (_cb_ord_cnt / _total_ord * 100) if _cb_ord_cnt > 0 else 0.0
 
-    order_view_mode = st.session_state.get("live_order_filter", "All Orders") if nav_mode == "Today" else "All Orders"
+    order_view_mode = (
+        st.session_state.get("live_order_filter", "All Orders")
+        if nav_mode == "Today"
+        else "All Orders"
+    )
 
     if nav_mode == "Backlog":
         l1 = "Backlog Items"
@@ -644,16 +542,36 @@ def render_operational_metrics(
 
     show_cb_details = st.session_state.get("live_compare_cashback", False)
 
-    cb_badge = f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">Gross ৳{int(m_gross_rev):,} || Cashback ৳{int(m_cashback_disc):,}</div>' if (m_cashback_disc > 0 and show_cb_details) else ''
-    cb_basket_badge = f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">Gross ৳{int(m_gross_bv):,} || Lost Revenue -{m_loss_pct:.0f}%</div>' if (m_cashback_disc > 0 and extra_metric_label == "Basket Size" and show_cb_details) else ''
-    cb_orders_badge = f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">{m_cb_orders_pct:.0f}% cashbacked</div>' if (m_cb_orders_pct > 0 and show_cb_details) else ''
+    cb_badge = (
+        f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">Gross ৳{int(m_gross_rev):,} || Cashback ৳{int(m_cashback_disc):,}</div>'
+        if (m_cashback_disc > 0 and show_cb_details)
+        else ""
+    )
+    cb_basket_badge = (
+        f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">Gross ৳{int(m_gross_bv):,} || Lost Revenue -{m_loss_pct:.0f}%</div>'
+        if (
+            m_cashback_disc > 0
+            and extra_metric_label == "Basket Size"
+            and show_cb_details
+        )
+        else ""
+    )
+    cb_orders_badge = (
+        f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">{m_cb_orders_pct:.0f}% cashbacked</div>'
+        if (m_cb_orders_pct > 0 and show_cb_details)
+        else ""
+    )
 
     tot_cust = m_new_cnt + m_ret_cnt
     pct_new = (m_new_cnt / tot_cust * 100) if tot_cust > 0 else 0
     pct_ret = (m_ret_cnt / tot_cust * 100) if tot_cust > 0 else 0
 
     v_cust = f"{m_new_cnt} New / {m_ret_cnt} Ret" if tot_cust > 0 else "0 New / 0 Ret"
-    cust_badge = f'<div style="font-size:0.75rem;color:#a855f7;font-weight:700;background:rgba(168,85,247,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">🆕 {pct_new:.0f}% New || 🔄 {pct_ret:.0f}% Returning</div>' if tot_cust > 0 else ''
+    cust_badge = (
+        f'<div style="font-size:0.75rem;color:#a855f7;font-weight:700;background:rgba(168,85,247,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">🆕 {pct_new:.0f}% New || 🔄 {pct_ret:.0f}% Returning</div>'
+        if tot_cust > 0
+        else ""
+    )
 
     customer_mix_card = (
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">Customer Mix</div>'
@@ -670,38 +588,13 @@ def render_operational_metrics(
         f'<div class="metric-value">{v_ord}</div>{cb_orders_badge}{html_do}{s_ord}{d_ord}</div><div class="metric-icon">{icon_l3}</div></div>'
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{extra_metric_label}</div>'
         f'<div class="metric-value">{extra_metric_value}</div>{cb_basket_badge}{extra_metric_delta}'
-        f'{(s_bv + d_bv) if nav_mode != "Backlog" else ""}</div>'
+        f"{(s_bv + d_bv) if nav_mode != 'Backlog' else ''}</div>"
         f'<div class="metric-icon">{extra_metric_icon}</div></div>'
         f"{customer_mix_card}"
         "</div>"
     )
 
-
     st.markdown(card_html, unsafe_allow_html=True)
-
-    # ── Explicit Operational Date Range Subtitle for Transparency ───────────
-    custom_r = st.session_state.get("live_custom_range")
-    slot_key = "wc_curr_slot" if nav_mode == "Today" else "wc_prev_slot" if nav_mode == "Prev" else None
-    slot = st.session_state.get(slot_key) if slot_key else None
-
-    if custom_r and isinstance(custom_r, (tuple, list)) and len(custom_r) == 2:
-        start_d, end_d = custom_r[0], custom_r[1]
-        tz_bd = timezone(timedelta(hours=6))
-        today_bd = datetime.now(tz_bd).date()
-        if start_d != today_bd or end_d != today_bd:
-            range_sub = f"📊 Filtered Date Range: **{start_d.strftime('%b %d, %Y')}** to **{end_d.strftime('%b %d, %Y')}** (Asia/Dhaka)"
-        elif slot:
-            s_st, s_en = pd.to_datetime(slot[0]), pd.to_datetime(slot[1])
-            range_sub = f"📊 Operational Shift Window: **{s_st.strftime('%b %d, %I:%M %p')}** to **{s_en.strftime('%b %d, %I:%M %p')}** (Asia/Dhaka)"
-        else:
-            range_sub = f"📊 Active Shift Window (Asia/Dhaka)"
-    elif slot:
-        s_st, s_en = pd.to_datetime(slot[0]), pd.to_datetime(slot[1])
-        range_sub = f"📊 {nav_mode} Operational Shift Window: **{s_st.strftime('%b %d, %I:%M %p')}** to **{s_en.strftime('%b %d, %I:%M %p')}** (Asia/Dhaka)"
-    else:
-        range_sub = f"📊 {nav_mode} Shift Window (Asia/Dhaka)"
-
-    # st.caption(range_sub)  # Hidden for clean screenshot view
 
     # ── Feature #3: Goal Threshold Alerts ──────────────────────────────────────
     goals = st.session_state.get("shift_goals", {})
@@ -714,28 +607,44 @@ def render_operational_metrics(
         with g1:
             if rev_goal > 0:
                 pct = min(m_net_rev / rev_goal, 1.0)
-                color = "#10b981" if pct >= 1.0 else "#f59e0b" if pct >= 0.7 else "#ef4444"
-                label = "✅ Goal Reached!" if pct >= 1.0 else f"৳{m_net_rev:,.0f} / ৳{rev_goal:,.0f}"
+                color = (
+                    "#10b981" if pct >= 1.0 else "#f59e0b" if pct >= 0.7 else "#ef4444"
+                )
+                label = (
+                    "✅ Goal Reached!"
+                    if pct >= 1.0
+                    else f"৳{m_net_rev:,.0f} / ৳{rev_goal:,.0f}"
+                )
                 st.markdown(
-                    f'<div style="margin-bottom:8px;">'  
+                    f'<div style="margin-bottom:8px;">'
                     f'<span style="font-size:0.72rem;font-weight:700;color:{color};letter-spacing:0.05em;">'
-                    f'💰 REVENUE — {label}</span>'
+                    f"💰 REVENUE — {label}</span>"
                     f'<div style="background:rgba(255,255,255,0.08);border-radius:6px;height:8px;margin-top:4px;overflow:hidden;">'
-                    f'<div style="background:{color};width:{pct*100:.1f}%;height:100%;border-radius:6px;'
+                    f'<div style="background:{color};width:{pct * 100:.1f}%;height:100%;border-radius:6px;'
                     f'transition:width 0.6s ease;"></div></div></div>',
                     unsafe_allow_html=True,
                 )
         with g2:
             if ord_goal > 0:
                 pct_o = min(m_ord / ord_goal, 1.0)
-                color_o = "#10b981" if pct_o >= 1.0 else "#f59e0b" if pct_o >= 0.7 else "#ef4444"
-                label_o = "✅ Goal Reached!" if pct_o >= 1.0 else f"{m_ord} / {ord_goal} orders"
+                color_o = (
+                    "#10b981"
+                    if pct_o >= 1.0
+                    else "#f59e0b"
+                    if pct_o >= 0.7
+                    else "#ef4444"
+                )
+                label_o = (
+                    "✅ Goal Reached!"
+                    if pct_o >= 1.0
+                    else f"{m_ord} / {ord_goal} orders"
+                )
                 st.markdown(
                     f'<div style="margin-bottom:8px;">'
                     f'<span style="font-size:0.72rem;font-weight:700;color:{color_o};letter-spacing:0.05em;">'
-                    f'🛒 ORDERS — {label_o}</span>'
+                    f"🛒 ORDERS — {label_o}</span>"
                     f'<div style="background:rgba(255,255,255,0.08);border-radius:6px;height:8px;margin-top:4px;overflow:hidden;">'
-                    f'<div style="background:{color_o};width:{pct_o*100:.1f}%;height:100%;border-radius:6px;'
+                    f'<div style="background:{color_o};width:{pct_o * 100:.1f}%;height:100%;border-radius:6px;'
                     f'transition:width 0.6s ease;"></div></div></div>',
                     unsafe_allow_html=True,
                 )
@@ -746,10 +655,21 @@ def render_operational_metrics(
     if st.session_state.get("_last_snap_key") != snap_key and m_ord > 0:
         top_list = []
         if top is not None and not top.empty:
-            name_col = "Product Name" if "Product Name" in top.columns else top.columns[0]
+            name_col = (
+                "Product Name" if "Product Name" in top.columns else top.columns[0]
+            )
             amt_col = "Total Amount" if "Total Amount" in top.columns else None
-            for _, row in top.sort_values(amt_col, ascending=False).head(5).iterrows() if amt_col else []:
-                top_list.append({"name": str(row.get(name_col, "")), "revenue": float(row.get(amt_col, 0))})
+            for _, row in (
+                top.sort_values(amt_col, ascending=False).head(5).iterrows()
+                if amt_col
+                else []
+            ):
+                top_list.append(
+                    {
+                        "name": str(row.get(name_col, "")),
+                        "revenue": float(row.get(amt_col, 0)),
+                    }
+                )
         save_shift_snapshot(
             revenue=float(m_net_rev),
             orders=int(m_ord),
@@ -778,10 +698,19 @@ def render_operational_metrics(
     return drill, summ, top, basket, active_df
 
 
-EXCLUDED_STATUSES = ["pending", "pending payment", "cancelled", "failed", "refunded", "trash"]
+EXCLUDED_STATUSES = [
+    "pending",
+    "pending payment",
+    "cancelled",
+    "failed",
+    "refunded",
+    "trash",
+]
 
 
-def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.DataFrame | None = None) -> None:
+def render_revenue_cashback_comparison_section(
+    m_df: pd.DataFrame, raw_df: pd.DataFrame | None = None
+) -> None:
     """Render a dedicated metric & breakdown section comparing Total Revenue & Basket Size with Cashback / Discounted Fee.
 
     Args:
@@ -794,23 +723,50 @@ def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.Da
         return
 
     # Compute calculations
-    gross_rev = float(m_df["Gross Amount"].sum()) if "Gross Amount" in m_df.columns else float((m_df["Quantity"] * m_df["Item Cost"]).sum())
-    total_cashback = float(m_df["Cashback Discount"].sum()) if "Cashback Discount" in m_df.columns else 0.0
-    net_rev = float(m_df["Total Amount"].sum()) if "Total Amount" in m_df.columns else (gross_rev - total_cashback)
-    
-    cb_orders_mask = (m_df["Cashback Discount"] > 0) if "Cashback Discount" in m_df.columns else pd.Series(False, index=m_df.index)
-    id_col = "Order ID" if "Order ID" in m_df.columns else "Order Number" if "Order Number" in m_df.columns else None
-    
+    gross_rev = (
+        float(m_df["Gross Amount"].sum())
+        if "Gross Amount" in m_df.columns
+        else float((m_df["Quantity"] * m_df["Item Cost"]).sum())
+    )
+    total_cashback = (
+        float(m_df["Cashback Discount"].sum())
+        if "Cashback Discount" in m_df.columns
+        else 0.0
+    )
+    net_rev = (
+        float(m_df["Total Amount"].sum())
+        if "Total Amount" in m_df.columns
+        else (gross_rev - total_cashback)
+    )
+
+    cb_orders_mask = (
+        (m_df["Cashback Discount"] > 0)
+        if "Cashback Discount" in m_df.columns
+        else pd.Series(False, index=m_df.index)
+    )
+    id_col = (
+        "Order ID"
+        if "Order ID" in m_df.columns
+        else "Order Number"
+        if "Order Number" in m_df.columns
+        else None
+    )
+
     if id_col:
         unique_df = m_df.drop_duplicates(subset=[id_col])
         tot_orders = len(unique_df)
-        cb_orders_cnt = unique_df[unique_df[id_col].isin(m_df[cb_orders_mask][id_col])][id_col].nunique() if cb_orders_mask.any() else 0
+        cb_orders_cnt = (
+            unique_df[unique_df[id_col].isin(m_df[cb_orders_mask][id_col])][
+                id_col
+            ].nunique()
+            if cb_orders_mask.any()
+            else 0
+        )
     else:
         tot_orders = len(m_df)
         cb_orders_cnt = int(cb_orders_mask.sum())
 
     pct_rev_lost = (total_cashback / gross_rev * 100) if gross_rev > 0 else 0.0
-    avg_cashback_per_order = (total_cashback / cb_orders_cnt) if cb_orders_cnt > 0 else 0.0
 
     # Basket level metrics
     gross_basket = (gross_rev / tot_orders) if tot_orders > 0 else 0.0
@@ -824,14 +780,24 @@ def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.Da
     excl_statuses_found: list[str] = []
     if raw_df is not None and not raw_df.empty:
         raw_status_col = (
-            "Order Status" if "Order Status" in raw_df.columns
-            else "Status" if "Status" in raw_df.columns
+            "Order Status"
+            if "Order Status" in raw_df.columns
+            else "Status"
+            if "Status" in raw_df.columns
             else None
         )
         if raw_status_col:
-            excl_mask = raw_df[raw_status_col].astype(str).str.lower().isin(EXCLUDED_STATUSES)
+            excl_mask = (
+                raw_df[raw_status_col].astype(str).str.lower().isin(EXCLUDED_STATUSES)
+            )
             excl_df = raw_df[excl_mask]
-            raw_id_col = "Order ID" if "Order ID" in excl_df.columns else "Order Number" if "Order Number" in excl_df.columns else None
+            raw_id_col = (
+                "Order ID"
+                if "Order ID" in excl_df.columns
+                else "Order Number"
+                if "Order Number" in excl_df.columns
+                else None
+            )
             if raw_id_col:
                 excl_orders_cnt = excl_df[raw_id_col].nunique()
             else:
@@ -840,13 +806,19 @@ def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.Da
             if "Gross Amount" in excl_df.columns:
                 excl_gross_rev = float(excl_df["Gross Amount"].sum())
             elif "Item Cost" in excl_df.columns and "Quantity" in excl_df.columns:
-                excl_gross_rev = float((excl_df["Item Cost"] * excl_df["Quantity"]).sum())
+                excl_gross_rev = float(
+                    (excl_df["Item Cost"] * excl_df["Quantity"]).sum()
+                )
             elif "Total Amount" in excl_df.columns:
                 excl_gross_rev = float(excl_df["Total Amount"].sum())
-            excl_statuses_found = sorted(excl_df[raw_status_col].astype(str).str.lower().unique().tolist())
+            excl_statuses_found = sorted(
+                excl_df[raw_status_col].astype(str).str.lower().unique().tolist()
+            )
 
     st.markdown("### ⚖️ Revenue & Basket Size Cashback Impact Analysis")
-    st.info(f"💡 **Revenue Equation:** Gross Revenue (**TK {gross_rev:,.0f}**) - Cashback/Discount Fees (**TK {total_cashback:,.0f}**) = **Actual Net Revenue (TK {net_rev:,.0f})**")
+    st.info(
+        f"💡 **Revenue Equation:** Gross Revenue (**TK {gross_rev:,.0f}**) - Cashback/Discount Fees (**TK {total_cashback:,.0f}**) = **Actual Net Revenue (TK {net_rev:,.0f})**"
+    )
 
     # Show excluded orders banner when raw data is provided
     if excl_orders_cnt > 0:
@@ -864,9 +836,19 @@ def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.Da
     with c2:
         st.metric("🏷️ Gross Revenue (Pre-Discount)", f"TK {gross_rev:,.0f}")
     with c3:
-        st.metric("💸 Cash Back & Fee Discount", f"TK {total_cashback:,.0f}", delta=f"{pct_rev_lost:.1f}% of gross", delta_color="inverse")
+        st.metric(
+            "💸 Cash Back & Fee Discount",
+            f"TK {total_cashback:,.0f}",
+            delta=f"{pct_rev_lost:.1f}% of gross",
+            delta_color="inverse",
+        )
     with c4:
-        st.metric("📉 % Revenue Lost", f"{pct_rev_lost:.1f}%", delta=f"-TK {total_cashback:,.0f} lost", delta_color="inverse")
+        st.metric(
+            "📉 % Revenue Lost",
+            f"{pct_rev_lost:.1f}%",
+            delta=f"-TK {total_cashback:,.0f} lost",
+            delta_color="inverse",
+        )
 
     st.markdown("##### 🛍️ Basket Size / AOV Impact")
     b1, b2, b3, b4 = st.columns(4)
@@ -875,9 +857,19 @@ def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.Da
     with b2:
         st.metric("🛒 Gross Basket Value (Pre-Discount)", f"TK {gross_basket:,.0f}")
     with b3:
-        st.metric("🎁 Cashback per Basket", f"-TK {cb_per_basket:,.0f}", delta=f"Avg cashback/order", delta_color="inverse")
+        st.metric(
+            "🎁 Cashback per Basket",
+            f"-TK {cb_per_basket:,.0f}",
+            delta="Avg cashback/order",
+            delta_color="inverse",
+        )
     with b4:
-        st.metric("📉 % Basket Value Lost", f"{pct_basket_lost:.1f}%", delta=f"-TK {cb_per_basket:,.0f} lost/basket", delta_color="inverse")
+        st.metric(
+            "📉 % Basket Value Lost",
+            f"{pct_basket_lost:.1f}%",
+            delta=f"-TK {cb_per_basket:,.0f} lost/basket",
+            delta_color="inverse",
+        )
 
     # ── Category Repetition & Cashback Tier Metrics ───────────────────────────
     HIGH_VAL_CODES = {"101", "106", "108", "110"}
@@ -893,7 +885,7 @@ def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.Da
             return "Mid"
         if code in LOW_VAL_CODES:
             return "Low"
-        comb = f"{str(r.get('Item Name',''))} {str(r.get('Category',''))}".lower()
+        comb = f"{str(r.get('Item Name', ''))} {str(r.get('Category', ''))}".lower()
         if any(kw in comb for kw in ["jeans", "panjabi", "sweatshirt", "trouser"]):
             return "High"
         if "shirt" in comb and "t-shirt" not in comb:
@@ -914,12 +906,26 @@ def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.Da
             order_cb_amt = 0.0
             if "Cashback Discount" in grp.columns:
                 order_cb_amt = float(grp["Cashback Discount"].iloc[0])
-            if order_cb_amt == 0 and "Gross Amount" in grp.columns and "Total Amount" in grp.columns:
-                order_cb_amt = float(grp["Gross Amount"].iloc[0] - grp["Total Amount"].iloc[0])
+            if (
+                order_cb_amt == 0
+                and "Gross Amount" in grp.columns
+                and "Total Amount" in grp.columns
+            ):
+                order_cb_amt = float(
+                    grp["Gross Amount"].iloc[0] - grp["Total Amount"].iloc[0]
+                )
 
-            if 400 <= order_cb_amt < 650 or (order_cb_amt == 0 and "Gross Amount" in grp.columns and 2300 <= grp["Gross Amount"].iloc[0] < 2900):
+            if 400 <= order_cb_amt < 650 or (
+                order_cb_amt == 0
+                and "Gross Amount" in grp.columns
+                and 2300 <= grp["Gross Amount"].iloc[0] < 2900
+            ):
                 cnt_500_tier += 1
-            elif order_cb_amt >= 650 or (order_cb_amt == 0 and "Gross Amount" in grp.columns and grp["Gross Amount"].iloc[0] >= 2900):
+            elif order_cb_amt >= 650 or (
+                order_cb_amt == 0
+                and "Gross Amount" in grp.columns
+                and grp["Gross Amount"].iloc[0] >= 2900
+            ):
                 cnt_700_tier += 1
 
             cat_counts = {"High": 0, "Mid": 0, "Low": 0}
@@ -927,10 +933,16 @@ def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.Da
             for _, row in grp.iterrows():
                 c_type = _classify_row_cat(row)
                 q = int(row.get("Quantity", 1)) if pd.notna(row.get("Quantity")) else 1
-                c_cost = float(row.get("Item Cost", 0)) if pd.notna(row.get("Item Cost")) else 0.0
+                c_cost = (
+                    float(row.get("Item Cost", 0))
+                    if pd.notna(row.get("Item Cost"))
+                    else 0.0
+                )
                 p_name = str(row.get("Item Name", row.get("Clean_Product", "")))
                 cat_counts[c_type] += q
-                grp_items.append({"name": p_name, "cost": c_cost, "qty": q, "cat_type": c_type})
+                grp_items.append(
+                    {"name": p_name, "cost": c_cost, "qty": q, "cat_type": c_type}
+                )
 
             if cat_counts["High"] > 1:
                 high_rep_cnt += 1
@@ -944,9 +956,17 @@ def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.Da
             threshold_val = 2500 if order_cb_amt < 650 else 3000
             sorted_grp = sorted(grp_items, key=lambda x: x["cost"])
             cheapest_it = sorted_grp[0] if sorted_grp else None
-            rest_grp_cost = tot_grp_cost - (cheapest_it["cost"] * cheapest_it["qty"]) if cheapest_it else 0
+            rest_grp_cost = (
+                tot_grp_cost - (cheapest_it["cost"] * cheapest_it["qty"])
+                if cheapest_it
+                else 0
+            )
 
-            if cheapest_it and rest_grp_cost < threshold_val and tot_grp_cost >= threshold_val:
+            if (
+                cheapest_it
+                and rest_grp_cost < threshold_val
+                and tot_grp_cost >= threshold_val
+            ):
                 filler_orders_cnt += 1
                 base_name = cheapest_it["name"].split(" - ")[0]
                 filler_dict[base_name]["count"] += 1
@@ -962,19 +982,41 @@ def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.Da
     st.markdown("##### 🎯 Cashback Tier & Category Repetition Breakdown")
     t1, t2, t3, t4, t5 = st.columns(5)
     with t1:
-        st.metric("💰 500 Cashback Tier", f"{cnt_500_tier} orders", delta=f"{pct_500:.1f}% of cashback")
+        st.metric(
+            "💰 500 Cashback Tier",
+            f"{cnt_500_tier} orders",
+            delta=f"{pct_500:.1f}% of cashback",
+        )
     with t2:
-        st.metric("💜 700 Cashback Tier", f"{cnt_700_tier} orders", delta=f"{pct_700:.1f}% of cashback")
+        st.metric(
+            "💜 700 Cashback Tier",
+            f"{cnt_700_tier} orders",
+            delta=f"{pct_700:.1f}% of cashback",
+        )
     with t3:
-        st.metric("👖 High Value Repeat %", f"{pct_high_rep:.1f}%", delta=f"{high_rep_cnt} orders (Jeans/Panjabi)")
+        st.metric(
+            "👖 High Value Repeat %",
+            f"{pct_high_rep:.1f}%",
+            delta=f"{high_rep_cnt} orders (Jeans/Panjabi)",
+        )
     with t4:
-        st.metric("👔 Mid Value Repeat %", f"{pct_mid_rep:.1f}%", delta=f"{mid_rep_cnt} orders (Shirts)")
+        st.metric(
+            "👔 Mid Value Repeat %",
+            f"{pct_mid_rep:.1f}%",
+            delta=f"{mid_rep_cnt} orders (Shirts)",
+        )
     with t5:
-        st.metric("👕 Low Value Repeat %", f"{pct_low_rep:.1f}%", delta=f"{low_rep_cnt} orders (T-Shirts/Acc)")
+        st.metric(
+            "👕 Low Value Repeat %",
+            f"{pct_low_rep:.1f}%",
+            delta=f"{low_rep_cnt} orders (T-Shirts/Acc)",
+        )
 
     # Top Filler Products Breakdown Table
     if filler_dict and cb_orders_cnt > 0:
-        pct_filler_total = (filler_orders_cnt / cb_orders_cnt * 100) if cb_orders_cnt > 0 else 0
+        pct_filler_total = (
+            (filler_orders_cnt / cb_orders_cnt * 100) if cb_orders_cnt > 0 else 0
+        )
         st.markdown(
             f"##### 🛒 Top Filler Products Added to Avail Cashback Threshold "
             f"(found in **{filler_orders_cnt}** orders · **{pct_filler_total:.1f}%** of cashback orders)"
@@ -983,38 +1025,88 @@ def render_revenue_cashback_comparison_section(m_df: pd.DataFrame, raw_df: pd.Da
         for fname, fdata in sorted(filler_dict.items(), key=lambda x: -x[1]["count"]):
             cnt = fdata["count"]
             pct_f = (cnt / cb_orders_cnt) * 100
-            avg_cost = sum(fdata["costs"]) / len(fdata["costs"]) if fdata["costs"] else 0
-            filler_rows.append({
-                "Product Base Name": fname,
-                "Category Value": fdata["cat_type"],
-                "Filler Orders Count": cnt,
-                "% of Cashback Orders": f"{pct_f:.1f}%",
-                "Avg Unit Price": f"TK {avg_cost:,.0f}",
-            })
+            avg_cost = (
+                sum(fdata["costs"]) / len(fdata["costs"]) if fdata["costs"] else 0
+            )
+            filler_rows.append(
+                {
+                    "Product Base Name": fname,
+                    "Category Value": fdata["cat_type"],
+                    "Filler Orders Count": cnt,
+                    "% of Cashback Orders": f"{pct_f:.1f}%",
+                    "Avg Unit Price": f"TK {avg_cost:,.0f}",
+                }
+            )
         filler_df = pd.DataFrame(filler_rows)
         st.dataframe(filler_df.head(15), use_container_width=True, hide_index=True)
 
-    from src.components.dashboard.dashboard_charts import render_revenue_cashback_comparison_chart
+    from src.components.dashboard.dashboard_charts import (
+        render_revenue_cashback_comparison_chart,
+    )
+
     render_revenue_cashback_comparison_chart(m_df)
 
     # Show filtered Cashback / Discount Orders Table
     if cb_orders_cnt > 0:
-        with st.expander(f"📋 View Orders with Cashback / Discount Applied ({cb_orders_cnt} orders)", expanded=False):
+        with st.expander(
+            f"📋 View Orders with Cashback / Discount Applied ({cb_orders_cnt} orders)",
+            expanded=False,
+        ):
             cb_df = m_df[cb_orders_mask].copy() if cb_orders_mask.any() else m_df.copy()
-            show_cols = [c for c in ["Order ID", "Order Status", "Item Name", "SKU", "Subtotal Cost", "Item Cost", "Cashback Discount", "Gross Amount", "Total Amount", "Coupons"] if c in cb_df.columns]
+            show_cols = [
+                c
+                for c in [
+                    "Order ID",
+                    "Order Status",
+                    "Item Name",
+                    "SKU",
+                    "Subtotal Cost",
+                    "Item Cost",
+                    "Cashback Discount",
+                    "Gross Amount",
+                    "Total Amount",
+                    "Coupons",
+                ]
+                if c in cb_df.columns
+            ]
             st.dataframe(cb_df[show_cols].head(100), use_container_width=True)
 
     # Show excluded orders detail table
     if excl_orders_cnt > 0 and raw_df is not None and not raw_df.empty:
         raw_status_col = (
-            "Order Status" if "Order Status" in raw_df.columns
-            else "Status" if "Status" in raw_df.columns
+            "Order Status"
+            if "Order Status" in raw_df.columns
+            else "Status"
+            if "Status" in raw_df.columns
             else None
         )
         if raw_status_col:
-            excl_mask = raw_df[raw_status_col].astype(str).str.lower().isin(EXCLUDED_STATUSES)
+            excl_mask = (
+                raw_df[raw_status_col].astype(str).str.lower().isin(EXCLUDED_STATUSES)
+            )
             excl_detail_df = raw_df[excl_mask].copy()
-            with st.expander(f"🚫 View Excluded Orders ({excl_orders_cnt} orders · TK {excl_gross_rev:,.0f} gross)", expanded=False):
-                show_excl_cols = [c for c in ["Order ID", "Order Status", "Item Name", "SKU", "Item Cost", "Quantity", "Gross Amount", "Total Amount", "Cashback Discount"] if c in excl_detail_df.columns]
-                st.caption("These orders are excluded from all analytics due to their status (pending, cancelled, failed, refunded, etc.)")
-                st.dataframe(excl_detail_df[show_excl_cols].head(200), use_container_width=True)
+            with st.expander(
+                f"🚫 View Excluded Orders ({excl_orders_cnt} orders · TK {excl_gross_rev:,.0f} gross)",
+                expanded=False,
+            ):
+                show_excl_cols = [
+                    c
+                    for c in [
+                        "Order ID",
+                        "Order Status",
+                        "Item Name",
+                        "SKU",
+                        "Item Cost",
+                        "Quantity",
+                        "Gross Amount",
+                        "Total Amount",
+                        "Cashback Discount",
+                    ]
+                    if c in excl_detail_df.columns
+                ]
+                st.caption(
+                    "These orders are excluded from all analytics due to their status (pending, cancelled, failed, refunded, etc.)"
+                )
+                st.dataframe(
+                    excl_detail_df[show_excl_cols].head(200), use_container_width=True
+                )

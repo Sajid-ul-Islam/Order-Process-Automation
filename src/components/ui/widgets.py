@@ -69,8 +69,10 @@ def render_sticky_action_bar(
 ):
     """Like render_action_bar but wrapped in a sticky-bottom container."""
     st.markdown('<div class="sticky-action-bar">', unsafe_allow_html=True)
-    result = render_action_bar(primary_label, primary_key, secondary_label, secondary_key)
-    st.markdown('</div>', unsafe_allow_html=True)
+    result = render_action_bar(
+        primary_label, primary_key, secondary_label, secondary_key
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
     return result
 
 

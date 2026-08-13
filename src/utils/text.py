@@ -2,6 +2,37 @@ import re
 from functools import lru_cache
 
 
+# --- Phone Logic ---
+def normalize_phone_number(value) -> str:
+    """Canonicalize a phone number to the standard BD 11-digit 0-prefixed form.
+
+    Unifies 017..., 17..., 88017..., +88017... to 017... . Email addresses and
+    other non-numeric values are returned stripped/lowercased as-is. Shared by
+    the customer registry (key matching) and WhatsApp messaging (wa.me links).
+    """
+    if value is None:
+        return ""
+    cust_str = str(value).strip().lower()
+    if not cust_str or cust_str in ("nan", "none", "0", "null", "n/a", "01700000000"):
+        return ""
+
+    if "@" in cust_str:
+        return cust_str
+
+    digits = "".join(filter(str.isdigit, cust_str))
+    if not digits:
+        return cust_str
+
+    if digits.startswith("880"):
+        digits = "0" + digits[3:]
+    elif digits.startswith("88"):
+        digits = "0" + digits[2:]
+    elif not digits.startswith("0") and len(digits) == 10:
+        digits = "0" + digits
+
+    return digits
+
+
 # --- Address Logic ---
 @lru_cache(maxsize=4096)
 def normalize_city_name(city_name):
