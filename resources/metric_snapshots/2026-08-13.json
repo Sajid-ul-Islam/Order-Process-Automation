@@ -524,9 +524,61 @@
           "revenue": 2490.0
         }
       ]
+    },
+    {
+      "ts": "2026-08-13T15:13:49.663962+06:00",
+      "label": "Today",
+      "revenue": 40902.0,
+      "orders": 24,
+      "qty": 41,
+      "aov": 1704.25,
+      "top_products": [
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 30",
+          "revenue": 4946.0
+        },
+        {
+          "name": "High-End Light Blue Jeans - Regular Fit - 34",
+          "revenue": 4780.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Regular Fit - 34",
+          "revenue": 2490.0
+        },
+        {
+          "name": "High-End Vintage Wash Jeans - Regular Fit - 36",
+          "revenue": 2490.0
+        },
+        {
+          "name": "High-End Whisker Faded Jeans - Regular Fit - 34",
+          "revenue": 2490.0
+        }
+      ]
+    },
+    {
+      "ts": "2026-08-13T15:19:39.345882+06:00",
+      "label": "Today",
+      "revenue": 2433.0,
+      "orders": 1,
+      "qty": 3,
+      "aov": 2433.0,
+      "top_products": [
+        {
+          "name": "High-End Raw Washed Jeans - Slim Fit - 30",
+          "revenue": 2456.0
+        },
+        {
+          "name": "Maroon Sweatshirt in French-Terry - L",
+          "revenue": 461.0
+        },
+        {
+          "name": "Lavender Full Sleeve Turtleneck T-shirt - L",
+          "revenue": 316.0
+        }
+      ]
     }
   ],
-  "daily_revenue": 469573.0,
-  "daily_orders": 303,
-  "daily_qty": 479
+  "daily_revenue": 512908.0,
+  "daily_orders": 328,
+  "daily_qty": 523
 }
