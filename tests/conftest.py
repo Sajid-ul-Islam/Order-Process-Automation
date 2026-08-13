@@ -1,14 +1,17 @@
-"""Shared pytest fixtures for validating dashboard order-visibility invariants.
+"""Shared pytest fixtures and helpers for dashboard order-visibility tests.
 
 These tests exercise the real production functions (`_partition_operational_data`,
-`filter_all_orders_to_slot`) with a lightweight fake Streamlit session state, so
-they fail if a future refactor breaks the ordering rules documented in GOAL.md.
+`filter_all_orders_to_slot`, `filter_shipped_by_slot`) with a lightweight fake
+Streamlit session state, so they fail if a future refactor breaks the ordering
+rules documented in GOAL.md.
 """
 
+import pandas as pd
 import streamlit as st
 import pytest
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
+from src.processing.data_processing import safe_coerce_datetime_naive
 from src.services.woocommerce.client import _compute_cutoff_times
 
 
@@ -48,3 +51,41 @@ def op_state(monkeypatch):
         "cutoff_today": cutoff_today,
         "day_before_prev": day_before_prev,
     }
+
+
+def now_bd():
+    """Current time in BD (UTC+6), as a naive datetime."""
+    return datetime.now(timezone(timedelta(hours=6))).replace(tzinfo=None)
+
+
+def build_order_df(orders):
+    """Build a minimal order DataFrame with precomputed BD-naive timestamps.
+
+    `orders` is a list of (order_id, status, created_dt, modified_dt, consignment).
+    `created_dt` / `modified_dt` may be a datetime, a string, or None (missing date).
+    """
+    def _fmt(dt):
+        if dt is None:
+            return ""
+        if isinstance(dt, str):
+            return dt
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    rows = []
+    for oid, status, created, modified, consignment in orders:
+        rows.append({
+            "Order ID": oid,
+            "Line Item ID": oid * 100,
+            "Order Status": status,
+            "Order Date": _fmt(created),
+            "Order Date Modified": _fmt(modified),
+            "Pathao Consignment ID": consignment or "",
+            "Item Name": "Test Item",
+            "SKU": "TST-1",
+            "Item Cost": 100.0,
+            "Quantity": 1,
+        })
+    df = pd.DataFrame(rows)
+    df["dt_parsed"] = safe_coerce_datetime_naive(df["Order Date"])
+    df["mod_dt_parsed"] = safe_coerce_datetime_naive(df["Order Date Modified"])
+    return df

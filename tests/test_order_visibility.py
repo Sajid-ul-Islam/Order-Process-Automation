@@ -10,47 +10,19 @@ Rules locked in here:
 """
 
 import streamlit as st
-import pandas as pd
 import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
-from src.processing.data_processing import filter_all_orders_to_slot, safe_coerce_datetime_naive
+from conftest import build_order_df, now_bd
+
+from src.processing.data_processing import filter_all_orders_to_slot
 from src.services.woocommerce.client import _partition_operational_data
-
-
-def _build_df(orders):
-    """Build a minimal order DataFrame with precomputed BD-naive timestamps.
-
-    `orders` is a list of (order_id, status, created_dt, modified_dt, consignment).
-    """
-    rows = []
-    for oid, status, created, modified, consignment in orders:
-        rows.append({
-            "Order ID": oid,
-            "Line Item ID": oid * 100,
-            "Order Status": status,
-            "Order Date": created.strftime("%Y-%m-%d %H:%M:%S"),
-            "Order Date Modified": modified.strftime("%Y-%m-%d %H:%M:%S"),
-            "Pathao Consignment ID": consignment or "",
-            "Item Name": "Test Item",
-            "SKU": "TST-1",
-            "Item Cost": 100.0,
-            "Quantity": 1,
-        })
-    df = pd.DataFrame(rows)
-    df["dt_parsed"] = safe_coerce_datetime_naive(df["Order Date"])
-    df["mod_dt_parsed"] = safe_coerce_datetime_naive(df["Order Date Modified"])
-    return df
 
 
 def _processing_ids(df_live):
     return set(
         df_live[df_live["Order Status"].astype(str).str.lower() == "processing"]["Order ID"]
     )
-
-
-def _now_bd():
-    return datetime.now(timezone(timedelta(hours=6))).replace(tzinfo=None)
 
 
 # ── Invariant 1: processing orders are always visible ────────────────────────
@@ -66,7 +38,7 @@ def test_partition_keeps_processing_orders_placed_before_cutoff(op_state):
         (105, "waiting", pc + timedelta(hours=3), pc + timedelta(hours=3), ""),
         (106, "cancelled", pc - timedelta(hours=1), pc - timedelta(hours=1), ""),
     ]
-    df = _build_df(orders)
+    df = build_order_df(orders)
 
     df_live, df_prev, df_backlog, _, _ = _partition_operational_data(df)
 
@@ -89,7 +61,7 @@ def test_processing_view_contains_all_processing_orders(op_state):
         (202, "processing", pc + timedelta(hours=2), pc + timedelta(hours=2), ""),
         (203, "on-hold", pc + timedelta(hours=1), pc + timedelta(hours=1), ""),
     ]
-    df = _build_df(orders)
+    df = build_order_df(orders)
 
     df_live, _, _, _, _ = _partition_operational_data(df)
 
@@ -102,7 +74,7 @@ def test_processing_view_contains_all_processing_orders(op_state):
 
 def test_all_orders_is_processing_plus_shipped_today(op_state):
     pc = op_state["prev_cutoff"]
-    now = _now_bd()
+    now = now_bd()
     orders = [
         (301, "processing", pc - timedelta(minutes=30), pc - timedelta(minutes=30), ""),
         (302, "processing", pc + timedelta(hours=1), pc + timedelta(hours=1), ""),
@@ -110,7 +82,7 @@ def test_all_orders_is_processing_plus_shipped_today(op_state):
         (304, "shipped", now - timedelta(days=1), now - timedelta(days=1), "DD304"),
         (305, "cancelled", pc - timedelta(hours=2), pc - timedelta(hours=2), ""),
     ]
-    df = _build_df(orders)
+    df = build_order_df(orders)
 
     df_live, _, _, _, _ = _partition_operational_data(df)
     all_orders = filter_all_orders_to_slot(df_live, "Today")
@@ -137,7 +109,7 @@ def test_all_orders_custom_range_keeps_processing_outside_range(op_state):
         (401, "processing", pc - timedelta(minutes=30), pc - timedelta(minutes=30), ""),
         (402, "shipped", pc - timedelta(days=2), pc - timedelta(days=1), "DD402"),
     ]
-    df = _build_df(orders)
+    df = build_order_df(orders)
 
     df_live, _, _, _, _ = _partition_operational_data(df)
     all_orders = filter_all_orders_to_slot(df_live, "Today")
@@ -155,7 +127,7 @@ def test_all_orders_no_slot_fallback_keeps_processing(op_state):
         # Processing order placed days ago → must still be visible.
         (501, "processing", pc - timedelta(days=3), pc - timedelta(days=3), ""),
     ]
-    df = _build_df(orders)
+    df = build_order_df(orders)
 
     df_live, _, _, _, _ = _partition_operational_data(df)
     all_orders = filter_all_orders_to_slot(df_live, "Today")

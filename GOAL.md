@@ -60,7 +60,8 @@ statuses may carry a `wc-` prefix from WooCommerce plugins.)
 
 ## What CI verifies
 
-- The order-visibility invariants above (see `tests/test_order_visibility.py`).
+- The order-visibility invariants above (see `tests/test_order_visibility.py` and
+  `tests/test_shipped_scoping.py`).
 - Every check must pass on `main` and on pull requests (`.github/workflows/tests.yml`).
 
 ## Getting a change merged
