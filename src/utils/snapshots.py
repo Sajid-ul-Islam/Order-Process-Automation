@@ -1,7 +1,8 @@
 import os
+
 import pandas as pd
 
-from src.config.constants import STOCK_SNAPSHOT_PATH, SALES_SNAPSHOT_PATH, RESOURCES_DIR
+from src.config.constants import RESOURCES_DIR, SALES_SNAPSHOT_PATH, STOCK_SNAPSHOT_PATH
 from src.utils.product import get_base_product_name
 
 

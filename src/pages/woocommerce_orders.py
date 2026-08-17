@@ -1,15 +1,18 @@
-import streamlit as st
 import pandas as pd
 import plotly.express as px
-from src.services.exports.excel_exporter import export_to_styled_excel
+import streamlit as st
 
-from src.services.woocommerce.orders import extract_merchant_order_id, update_order_status
+from src.services.exports.excel_exporter import export_to_styled_excel
+from src.services.woocommerce.orders import (
+    extract_merchant_order_id,
+    update_order_status,
+)
 
 
 def _render_live_orders_view():
     from src.components.ui.ui_components import (
-        render_premium_header,
         render_metric_grid,
+        render_premium_header,
     )
 
     render_premium_header(
@@ -61,9 +64,9 @@ def _render_live_orders_view():
                 res = load_from_woocommerce()
                 wc_status.write("✅ Orders fetched successfully")
                 st.session_state["wc_tracking_df"] = res.get("df_to_return")
-                st.session_state[
-                    "wc_pathao_statuses"
-                ] = {}  # clear pathao cache for new orders
+                st.session_state["wc_pathao_statuses"] = (
+                    {}
+                )  # clear pathao cache for new orders
                 wc_status.update(
                     label="WooCommerce sync complete", state="complete", expanded=False
                 )
@@ -142,16 +145,12 @@ def _render_live_orders_view():
     status_col = (
         "Order Status"
         if "Order Status" in display_df.columns
-        else "Status"
-        if "Status" in display_df.columns
-        else None
+        else "Status" if "Status" in display_df.columns else None
     )
     amount_col = (
         "Order Total Amount"
         if "Order Total Amount" in display_df.columns
-        else "Total Amount"
-        if "Total Amount" in display_df.columns
-        else None
+        else "Total Amount" if "Total Amount" in display_df.columns else None
     )
     if amount_col:
         display_df[amount_col] = (
@@ -161,9 +160,7 @@ def _render_live_orders_view():
     date_col = (
         "Order Date"
         if "Order Date" in display_df.columns
-        else "Date"
-        if "Date" in display_df.columns
-        else None
+        else "Date" if "Date" in display_df.columns else None
     )
     mod_date_col = (
         "Order Date Modified" if "Order Date Modified" in display_df.columns else None
@@ -655,15 +652,23 @@ def _render_live_orders_view():
 
         def highlight_pathao_status(col):
             return [
-                "background-color: rgba(239, 68, 68, 0.15); color: #ef4444; font-weight: 600;"
-                if "🔴" in str(v)
-                else "background-color: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 600;"
-                if "🟢" in str(v)
-                else "color: #3b82f6; font-weight: 500;"
-                if "🔵" in str(v)
-                else "color: rgba(255,255,255,0.5); font-style: italic;"
-                if "⚪" in str(v)
-                else "color: #f59e0b; font-weight: 500;"
+                (
+                    "background-color: rgba(239, 68, 68, 0.15); color: #ef4444; font-weight: 600;"
+                    if "🔴" in str(v)
+                    else (
+                        "background-color: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 600;"
+                        if "🟢" in str(v)
+                        else (
+                            "color: #3b82f6; font-weight: 500;"
+                            if "🔵" in str(v)
+                            else (
+                                "color: rgba(255,255,255,0.5); font-style: italic;"
+                                if "⚪" in str(v)
+                                else "color: #f59e0b; font-weight: 500;"
+                            )
+                        )
+                    )
+                )
                 for v in col
             ]
 
@@ -673,15 +678,23 @@ def _render_live_orders_view():
 
         def highlight_wc_status(col):
             return [
-                "background-color: rgba(239, 68, 68, 0.15); color: #ef4444; font-weight: 600;"
-                if "🔴" in str(v)
-                else "background-color: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 600;"
-                if "🟢" in str(v)
-                else "color: #3b82f6; font-weight: 500;"
-                if "🔵" in str(v)
-                else "color: #f59e0b; font-weight: 500;"
-                if "🟡" in str(v)
-                else ""
+                (
+                    "background-color: rgba(239, 68, 68, 0.15); color: #ef4444; font-weight: 600;"
+                    if "🔴" in str(v)
+                    else (
+                        "background-color: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 600;"
+                        if "🟢" in str(v)
+                        else (
+                            "color: #3b82f6; font-weight: 500;"
+                            if "🔵" in str(v)
+                            else (
+                                "color: #f59e0b; font-weight: 500;"
+                                if "🟡" in str(v)
+                                else ""
+                            )
+                        )
+                    )
+                )
                 for v in col
             ]
 

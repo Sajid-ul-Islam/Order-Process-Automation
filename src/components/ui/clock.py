@@ -1,5 +1,6 @@
-import streamlit as st
 from datetime import datetime
+
+import streamlit as st
 
 from src.config.constants import bd_now
 
@@ -23,7 +24,7 @@ def _get_sync_badge_html(sync_time: datetime | None) -> str:
 
     # Pass the sync timestamp as a data attribute for JS to read
     ts_ms = int(sync_time.timestamp() * 1000) if hasattr(sync_time, "timestamp") else 0
-    return f'''<div style="display:inline-flex;align-items:center;gap:6px;"
+    return f"""<div style="display:inline-flex;align-items:center;gap:6px;"
           data-sync-ts="{ts_ms}" id="sync-badge-container">
   <span id="sync-badge-dot" style="width:8px;height:8px;border-radius:50%;
         background:#10b981;box-shadow:0 0 6px rgba(16,185,129,0.6);
@@ -61,7 +62,7 @@ function updateSync() {{
 updateSync();
 window.__syncInterval = setInterval(updateSync, 1000);
 }})();
-</script>'''
+</script>"""
 
 
 def get_clock_html():

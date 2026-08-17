@@ -8,7 +8,6 @@ stock_analytics.py and inventory_distribution.py.
 
 from functools import lru_cache
 
-
 _MAPPING_RULES = {
     "active wear": "Active Wear T-Shirt",
     "drop shoulder": "Drop Shoulder",

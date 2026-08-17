@@ -1,8 +1,9 @@
-import streamlit as st
-import pandas as pd
 import json
-from requests.auth import HTTPBasicAuth
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import pandas as pd
+import streamlit as st
+from requests.auth import HTTPBasicAuth
 
 from src.config.settings import get_woocommerce_config
 from src.processing.categorization import get_category_for_sales
@@ -46,7 +47,11 @@ def fetch_woocommerce_stock(filter_skus=None, filter_titles=None):
                 data = json.loads(v_r.text.lstrip("\ufeff"))
                 for v in data:
                     attrs = v.get("attributes") or []
-                    size_val = attrs[0].get("option", "N/A") if attrs and isinstance(attrs[0], dict) else "N/A"
+                    size_val = (
+                        attrs[0].get("option", "N/A")
+                        if attrs and isinstance(attrs[0], dict)
+                        else "N/A"
+                    )
                     full_name = f"{p_name} - {size_val}"
                     results.append(
                         {
@@ -54,9 +59,9 @@ def fetch_woocommerce_stock(filter_skus=None, filter_titles=None):
                             "Product": full_name,
                             "Size": size_val,
                             "SKU": v.get("sku") or f"P{p_id}-V{v.get('id')}",
-                            "Stock": v.get("stock_quantity")
-                            if v.get("manage_stock")
-                            else 0,
+                            "Stock": (
+                                v.get("stock_quantity") if v.get("manage_stock") else 0
+                            ),
                             "Price": v.get("price", "0"),
                             "Status": v.get("stock_status", "unknown").title(),
                         }
@@ -118,9 +123,9 @@ def fetch_woocommerce_stock(filter_skus=None, filter_titles=None):
                         "Category": _get_category(p_name),
                         "Product": p_name,
                         "SKU": p.get("sku") or f"P{p_id}",
-                        "Stock": p.get("stock_quantity")
-                        if p.get("manage_stock")
-                        else 0,
+                        "Stock": (
+                            p.get("stock_quantity") if p.get("manage_stock") else 0
+                        ),
                         "Price": p.get("price", "0"),
                         "Status": p.get("stock_status", "unknown").title(),
                     }
@@ -128,11 +133,12 @@ def fetch_woocommerce_stock(filter_skus=None, filter_titles=None):
 
         # Concurrent Variation Fetching
         if variable_tasks:
+            import threading
+
             from streamlit.runtime.scriptrunner import (
                 add_script_run_ctx,
                 get_script_run_ctx,
             )
-            import threading
 
             ctx = get_script_run_ctx()
 

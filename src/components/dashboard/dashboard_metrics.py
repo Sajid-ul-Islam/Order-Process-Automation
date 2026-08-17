@@ -8,15 +8,21 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from src.components.dashboard.svg import (_generate_mini_bar_chart_svg,
-                                          _generate_sparkline_svg)
-from src.processing.data_processing import (aggregate_data,
-                                            prepare_granular_data,
-                                            safe_coerce_datetime_naive)
-from src.utils.customer_registry import (get_customer_first_order_date,
-                                         load_customer_registry,
-                                         normalize_phone_key,
-                                         update_customer_registry)
+from src.components.dashboard.svg import (
+    _generate_mini_bar_chart_svg,
+    _generate_sparkline_svg,
+)
+from src.processing.data_processing import (
+    aggregate_data,
+    prepare_granular_data,
+    safe_coerce_datetime_naive,
+)
+from src.utils.customer_registry import (
+    get_customer_first_order_date,
+    load_customer_registry,
+    normalize_phone_key,
+    update_customer_registry,
+)
 from src.utils.logging import log_system_event
 from src.utils.metric_history import load_snapshot_history, save_shift_snapshot
 
@@ -1037,8 +1043,9 @@ def render_revenue_cashback_comparison_section(
         filler_df = pd.DataFrame(filler_rows)
         st.dataframe(filler_df.head(15), use_container_width=True, hide_index=True)
 
-    from src.components.dashboard.dashboard_charts import \
-        render_revenue_cashback_comparison_chart
+    from src.components.dashboard.dashboard_charts import (
+        render_revenue_cashback_comparison_chart,
+    )
 
     render_revenue_cashback_comparison_chart(m_df)
 

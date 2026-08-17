@@ -1,18 +1,19 @@
-import streamlit as st
-import pandas as pd
-import requests
 from datetime import datetime, timedelta
 from io import BytesIO
 
-from src.config.constants import SHIPPED_STATUSES
+import pandas as pd
+import requests
+import streamlit as st
+
+from src.components.dashboard.dashboard_output import render_dashboard_output
 from src.components.ui.widgets import (
     render_action_bar,
     render_reset_confirm,
     section_card,
 )
+from src.config.constants import SHIPPED_STATUSES
 from src.processing.column_detection import find_columns
-from src.processing.data_processing import prepare_granular_data, aggregate_data
-from src.components.dashboard.dashboard_output import render_dashboard_output
+from src.processing.data_processing import aggregate_data, prepare_granular_data
 from src.services.woocommerce.client import load_from_woocommerce
 from src.utils.file_io import read_sales_file
 from src.utils.logging import log_system_event
@@ -232,9 +233,7 @@ def render_manual_tab():
                 order_col = (
                     "Order ID"
                     if "Order ID" in df.columns
-                    else "Order Number"
-                    if "Order Number" in df.columns
-                    else None
+                    else "Order Number" if "Order Number" in df.columns else None
                 )
                 if order_col:
                     df = df.copy()
@@ -248,9 +247,7 @@ def render_manual_tab():
                 status_col = (
                     "Order Status"
                     if "Order Status" in df.columns
-                    else "Status"
-                    if "Status" in df.columns
-                    else None
+                    else "Status" if "Status" in df.columns else None
                 )
                 if status_col:
                     df = df[

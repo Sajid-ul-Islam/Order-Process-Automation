@@ -49,14 +49,14 @@ def normalize_city_name(city_name):
     bd_states = {
         "BD-01": "Bandarban",
         "BD-02": "Barguna",
-        "BD-03": "Bogura",           # Corrected from "Bogra"
+        "BD-03": "Bogura",  # Corrected from "Bogra"
         "BD-04": "Brahmanbaria",
         "BD-05": "Bagerhat",
-        "BD-06": "Barishal",         # Corrected from "Barisal"
+        "BD-06": "Barishal",  # Corrected from "Barisal"
         "BD-07": "Bhola",
-        "BD-08": "Cumilla",          # Updated official spelling
+        "BD-08": "Cumilla",  # Updated official spelling
         "BD-09": "Chandpur",
-        "BD-10": "Chattogram",       # Official name (was Chittagong)
+        "BD-10": "Chattogram",  # Official name (was Chittagong)
         "BD-11": "Cox's Bazar",
         "BD-12": "Chuadanga",
         "BD-13": "Dhaka",
@@ -68,7 +68,7 @@ def normalize_city_name(city_name):
         "BD-19": "Gaibandha",
         "BD-20": "Habiganj",
         "BD-21": "Jamalpur",
-        "BD-22": "Jashore",          # Updated official spelling
+        "BD-22": "Jashore",  # Updated official spelling
         "BD-23": "Jhenaidah",
         "BD-24": "Joypurhat",
         "BD-25": "Jhalokathi",
@@ -110,7 +110,7 @@ def normalize_city_name(city_name):
         "BD-61": "Sunamganj",
         "BD-62": "Shariatpur",
         "BD-63": "Tangail",
-        "BD-64": "Thakurgaon"
+        "BD-64": "Thakurgaon",
     }
 
     c_upper = c.upper()
@@ -157,16 +157,59 @@ def peek_zone_from_address(address: str, current_city: str = "") -> str:
 
     # Priority Zones (Common Pathao targets)
     zones = [
-        "Mirpur", "Uttara", "Gulshan", "Banani", "Dhanmondi", "Mohammadpur",
-        "Badda", "Rampura", "Khilgaon", "Jatrabari", "Demra", "Hazaribagh",
-        "Kamrangirchar", "Kotwali", "Lalbagh", "Motijheel", "Paltan", "Ramna",
-        "Sabujbagh", "Shahbagh", "Sher-E-Bangla Nagar", "Sutrapur", "Tejgaon",
-        "Tejgaon Industrial Area", "Uttara West", "Uttara East", "Pallabi",
-        "Kafrul", "Cantonment", "Basundhara", "Baridhara", "Nikunja", "Khilkhet",
-        "Bashundhara R/A", "Mohakhali", "Malibagh", "Moghbazar", "Farmgate",
-        "Savar", "Gazipur", "Narayanganj", "Keraniganj", "Tongi", "Ashulia",
-        "Pahartali", "Halishahar", "Patenga", "Bakalia", "Panchlaish", "Bayezid",
-        "Chandgaon", "Double Mooring", "Khulshi"
+        "Mirpur",
+        "Uttara",
+        "Gulshan",
+        "Banani",
+        "Dhanmondi",
+        "Mohammadpur",
+        "Badda",
+        "Rampura",
+        "Khilgaon",
+        "Jatrabari",
+        "Demra",
+        "Hazaribagh",
+        "Kamrangirchar",
+        "Kotwali",
+        "Lalbagh",
+        "Motijheel",
+        "Paltan",
+        "Ramna",
+        "Sabujbagh",
+        "Shahbagh",
+        "Sher-E-Bangla Nagar",
+        "Sutrapur",
+        "Tejgaon",
+        "Tejgaon Industrial Area",
+        "Uttara West",
+        "Uttara East",
+        "Pallabi",
+        "Kafrul",
+        "Cantonment",
+        "Basundhara",
+        "Baridhara",
+        "Nikunja",
+        "Khilkhet",
+        "Bashundhara R/A",
+        "Mohakhali",
+        "Malibagh",
+        "Moghbazar",
+        "Farmgate",
+        "Savar",
+        "Gazipur",
+        "Narayanganj",
+        "Keraniganj",
+        "Tongi",
+        "Ashulia",
+        "Pahartali",
+        "Halishahar",
+        "Patenga",
+        "Bakalia",
+        "Panchlaish",
+        "Bayezid",
+        "Chandgaon",
+        "Double Mooring",
+        "Khulshi",
     ]
 
     for zone in zones:

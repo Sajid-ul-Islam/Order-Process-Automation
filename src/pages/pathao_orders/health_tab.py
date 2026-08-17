@@ -8,6 +8,7 @@ import streamlit as st
 from src.components.ui.widgets import section_card
 from src.services.woocommerce.orders import extract_order_id, update_order_status
 
+
 def _render_delivery_health_tab():
     """Feature #2: Delivery Health Dashboard — return rates, delivery rates, district breakdown."""
     section_card(

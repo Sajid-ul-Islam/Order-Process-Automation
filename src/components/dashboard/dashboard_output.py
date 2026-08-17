@@ -5,16 +5,19 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from src.components.dashboard.dashboard_charts import (render_category_charts,
-                                                       render_spotlight)
+from src.components.dashboard.dashboard_charts import (
+    render_category_charts,
+    render_spotlight,
+)
 from src.components.dashboard.dashboard_filters import render_ingestion_filters
-from src.components.dashboard.dashboard_metrics import \
-    render_operational_metrics
+from src.components.dashboard.dashboard_metrics import render_operational_metrics
 from src.config.constants import bd_now
-from src.processing.data_processing import (filter_all_orders_to_slot,
-                                            filter_shipped_by_slot,
-                                            generate_executive_briefing,
-                                            get_dispatch_metrics)
+from src.processing.data_processing import (
+    filter_all_orders_to_slot,
+    filter_shipped_by_slot,
+    generate_executive_briefing,
+    get_dispatch_metrics,
+)
 from src.services.exports.excel_exporter import export_to_styled_excel
 from src.utils.metric_history import load_snapshot_history
 
@@ -76,8 +79,7 @@ def _render_operational_cycle_metrics(
         )
     else:
         # Still compute the values needed downstream without rendering the cards
-        from src.processing.data_processing import (aggregate_data,
-                                                    prepare_granular_data)
+        from src.processing.data_processing import aggregate_data, prepare_granular_data
 
         m_df_std, _ = prepare_granular_data(m_df, wc_raw_mapping)
         if not m_df_std.empty:
@@ -109,8 +111,9 @@ def _render_ingestion_mode_metrics(granular_df, dummy_mapping, last_updated):
             # Ingestion mode uses the same KPI card renderer as the live dashboard for consistency.
             # We pass the filtered `active_df` as the main dataframe (`m_df`) and `None` for comparison (`c_df`).
             # The `nav_mode` is set to a neutral value like "Ingestion" to avoid comparison logic.
-            from src.components.dashboard.dashboard_metrics import \
-                render_operational_metrics
+            from src.components.dashboard.dashboard_metrics import (
+                render_operational_metrics,
+            )
 
             wc_raw_mapping = {
                 "name": "Item Name",
@@ -238,8 +241,10 @@ def _render_spotlight_and_sku_report(top, color_map, wc_raw_mapping):
         )
 
         if comp_df is not None and not comp_df.empty:
-            from src.processing.data_processing import (aggregate_data,
-                                                        prepare_granular_data)
+            from src.processing.data_processing import (
+                aggregate_data,
+                prepare_granular_data,
+            )
 
             comp_df_std, _ = prepare_granular_data(comp_df, wc_raw_mapping)
             if not comp_df_std.empty:
@@ -1023,8 +1028,7 @@ def render_dashboard_output(
             new_cust_cnt = hero["new_customers"]
             ret_cust_cnt = hero["returning_customers"]
         else:
-            from src.utils.customer_registry import \
-                compute_new_vs_returning_counts
+            from src.utils.customer_registry import compute_new_vs_returning_counts
 
             full_df_for_cust = st.session_state.get("wc_curr_df")
             new_cust_cnt, ret_cust_cnt = compute_new_vs_returning_counts(
@@ -1082,7 +1086,9 @@ def render_dashboard_output(
 
             if comp_df is not None and not comp_df.empty:
                 from src.processing.data_processing import (
-                    aggregate_data, prepare_granular_data)
+                    aggregate_data,
+                    prepare_granular_data,
+                )
 
                 comp_df_std, _ = prepare_granular_data(comp_df, wc_raw_mapping)
                 if not comp_df_std.empty:
@@ -1107,8 +1113,9 @@ def render_dashboard_output(
                 key="ingest_compare_cashback",
             )
             if compare_cb:
-                from src.components.dashboard.dashboard_metrics import \
-                    render_revenue_cashback_comparison_section
+                from src.components.dashboard.dashboard_metrics import (
+                    render_revenue_cashback_comparison_section,
+                )
 
                 render_revenue_cashback_comparison_section(active_df, raw_df=active_df)
 

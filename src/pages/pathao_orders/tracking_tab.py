@@ -8,6 +8,7 @@ import streamlit as st
 
 from src.components.ui.dataframe_search import render_dataframe_search
 from src.components.ui.widgets import section_card
+from src.pages.pathao_orders.shared import _get_pathao_client, _highlight_status
 from src.services.exports.excel_exporter import export_to_styled_excel
 from src.services.pathao.status import get_pathao_order_status
 from src.services.woocommerce.orders import extract_order_id, update_order_status
@@ -15,7 +16,6 @@ from src.utils.file_io import read_uploaded
 from src.utils.http import request_with_backoff
 from src.utils.logging import log_error
 
-from src.pages.pathao_orders.shared import _get_pathao_client, _highlight_status
 
 def _render_status_tracking_tab():
     with st.sidebar:

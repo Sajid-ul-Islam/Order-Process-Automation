@@ -1,7 +1,9 @@
-import streamlit as st
-import pandas as pd
 import io
 from datetime import datetime
+
+import pandas as pd
+import streamlit as st
+
 from src.components.ui.ui_components import render_premium_header
 
 
@@ -111,10 +113,10 @@ def _render_direct_wc_audit_tab():
             ) as status_box:
                 try:
                     from src.services.woocommerce.client import (
-                        get_woocommerce_config,
                         HTTPBasicAuth,
-                        request_with_backoff,
                         _flatten_order,
+                        get_woocommerce_config,
+                        request_with_backoff,
                     )
 
                     cfg = get_woocommerce_config(required=False)

@@ -1,13 +1,15 @@
-import pandas as pd
-import streamlit as st
-import os
 import json
+import os
 import re
 from typing import Any, Dict, List, Tuple
+
+import pandas as pd
+import streamlit as st
+from rapidfuzz import process
+
 from src.config.constants import RESOURCES_DIR
 from src.processing.categorization import get_category_for_sales
 from src.utils.text import normalize_city_name, peek_zone_from_address
-from rapidfuzz import process
 
 
 def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
@@ -733,9 +735,9 @@ def process_single_order_group(
             "StoreName": "Deen Commerce",
             "MerchantOrderId": combined_merchant_id,
             "RecipientName(*)": recipient_name,
-            "RecipientPhone(*)": phone
-            if phone and str(phone).lower() != "nan"
-            else "01700000000",
+            "RecipientPhone(*)": (
+                phone if phone and str(phone).lower() != "nan" else "01700000000"
+            ),
             "RecipientAddress(*)": address_val if address_val else "Address Missing",
             "RecipientCity(*)": recipient_city,
             "RecipientZone(*)": extracted_zone,

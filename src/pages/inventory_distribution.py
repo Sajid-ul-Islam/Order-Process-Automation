@@ -1,19 +1,17 @@
 import io
+
 import pandas as pd
 import streamlit as st
 
-from src.utils.logging import log_error
-from src.state.persistence import clear_state_keys, save_state
-from src.components.ui.widgets import (
-    render_action_bar,
-    render_reset_confirm,
-)
-from src.config.ui_config import INVENTORY_LOCATIONS
+from src.components.ui.widgets import render_action_bar, render_reset_confirm
 from src.config.constants import OFFER_KEYWORDS
+from src.config.ui_config import INVENTORY_LOCATIONS
 from src.inventory import core as inv_core
-from src.utils.file_io import read_uploaded
-from src.services.exports.excel_exporter import export_to_styled_excel
 from src.processing.stock_categorization import map_to_csv_category
+from src.services.exports.excel_exporter import export_to_styled_excel
+from src.state.persistence import clear_state_keys, save_state
+from src.utils.file_io import read_uploaded
+from src.utils.logging import log_error
 
 
 def _reset_inventory_state():
@@ -50,9 +48,11 @@ def _render_upload_summary(master_df, title_col):
     c1, c2 = st.columns(2)
     c1.metric(
         "Master rows",
-        0
-        if master_df is None
-        else (master_df.shape[0] if hasattr(master_df, "shape") else len(master_df)),
+        (
+            0
+            if master_df is None
+            else (master_df.shape[0] if hasattr(master_df, "shape") else len(master_df))
+        ),
     )
     c2.metric("Title column", title_col if title_col else "Not detected")
 
@@ -149,9 +149,7 @@ def render_distribution_tab(search_q):
                 status_col = (
                     "Order Status"
                     if "Order Status" in df_live.columns
-                    else "Status"
-                    if "Status" in df_live.columns
-                    else None
+                    else "Status" if "Status" in df_live.columns else None
                 )
                 if status_col:
                     df_live = df_live[
@@ -181,9 +179,7 @@ def render_distribution_tab(search_q):
                     status_col = (
                         "Order Status"
                         if "Order Status" in df_live.columns
-                        else "Status"
-                        if "Status" in df_live.columns
-                        else None
+                        else "Status" if "Status" in df_live.columns else None
                     )
                     if status_col:
                         df_live = df_live[
@@ -248,8 +244,8 @@ def render_distribution_tab(search_q):
                     for w in warnings:
                         st.sidebar.warning(w)
 
-                from src.utils.snapshots import load_stock_snapshot
                 from src.utils.product import get_base_product_name
+                from src.utils.snapshots import load_stock_snapshot
 
                 wc_stock = load_stock_snapshot()
                 wc_sku_to_name = {}
@@ -1008,7 +1004,8 @@ def render_distribution_tab(search_q):
 
                         if valid_dispatch_df.empty:
                             pathao_status.update(
-                                label="⚠️ No fulfillable items to process", state="error"
+                                label="⚠️ No fulfillable items to process",
+                                state="error",
                             )
                             st.error("No fulfillable items to process.")
                         else:

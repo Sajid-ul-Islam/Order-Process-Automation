@@ -15,6 +15,7 @@ from src.pages.pathao_orders.processing_tab import (
 )
 from src.pages.pathao_orders.tracking_tab import _render_status_tracking_tab
 
+
 def render_pathao_tab():
     processing_tab, helper_tab, tracking_tab, dispatch_tab, health_tab, notes_tab = (
         st.tabs(

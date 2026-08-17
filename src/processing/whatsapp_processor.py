@@ -1,8 +1,9 @@
+import re
+import urllib.parse
+from typing import Dict, Optional
+
 import pandas as pd
 import polars as pl
-from typing import Dict, Optional
-import urllib.parse
-import re
 
 from src.utils.text import normalize_phone_number
 

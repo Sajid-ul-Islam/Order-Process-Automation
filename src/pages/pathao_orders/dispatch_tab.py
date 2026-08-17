@@ -7,9 +7,9 @@ import streamlit as st
 
 from src.components.ui.dataframe_search import render_dataframe_search
 from src.components.ui.widgets import section_card
+from src.pages.pathao_orders.shared import _get_pathao_client
 from src.services.woocommerce.orders import extract_order_id, update_order_status
 
-from src.pages.pathao_orders.shared import _get_pathao_client
 
 def _render_auto_dispatch_tab():
     """Feature #1: Push processed Pathao orders directly via Pathao API (bulk create)."""
@@ -81,9 +81,9 @@ def _render_auto_dispatch_tab():
                         "recipient_address": str(row.get("Address", "")),
                         "recipient_city": int(row.get("CityId", 1)),
                         "recipient_zone": int(row.get("ZoneId", 1)),
-                        "recipient_area": int(row.get("AreaId", 0))
-                        if row.get("AreaId")
-                        else None,
+                        "recipient_area": (
+                            int(row.get("AreaId", 0)) if row.get("AreaId") else None
+                        ),
                         "delivery_type": delivery_type,
                         "item_type": item_type,
                         "special_instruction": str(
@@ -115,9 +115,7 @@ def _render_auto_dispatch_tab():
 
                     # Update the WooCommerce order status so the dispatched order
                     # shows up in the dashboard's shipped views.
-                    wc_order_id = extract_order_id(
-                        payload["merchant_order_id"]
-                    )
+                    wc_order_id = extract_order_id(payload["merchant_order_id"])
                     if wc_order_id:
                         wc_ok, wc_msg = update_order_status(
                             wc_order_id,

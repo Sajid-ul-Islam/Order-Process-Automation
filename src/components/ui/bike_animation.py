@@ -1,5 +1,6 @@
-import os
 import base64
+import os
+
 import streamlit as st
 
 from src.config.constants import PROJECT_ROOT

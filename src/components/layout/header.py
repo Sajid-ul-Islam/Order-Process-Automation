@@ -1,10 +1,10 @@
-import os
 import base64
+import os
 import textwrap
+from datetime import datetime, timedelta
+
 import streamlit as st
 
-
-from datetime import datetime, timedelta
 from src.components.ui.clock import get_clock_html
 
 
@@ -76,7 +76,8 @@ def render_app_banner():
         except Exception:
             pass
 
-    banner_html = textwrap.dedent(f"""
+    banner_html = textwrap.dedent(
+        f"""
 <div class="app-banner-wrapper" style="position: relative; width: 100%; height: 170px; border-radius: 18px; overflow: hidden; background: linear-gradient(135deg, rgba(8,15,30,0.97) 0%, rgba(15,25,50,0.93) 50%, rgba(10,20,40,0.97) 100%); border: 1px solid {p_35}; box-shadow: 0 20px 48px -12px rgba(0,0,0,0.7), 0 4px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08); margin-bottom: 16px;">
 {img_html}
 <div style="position: absolute; inset: 0; z-index: 2; background: linear-gradient(90deg, rgba(8,15,30,0.85) 0%, rgba(8,15,30,0.40) 50%, rgba(8,15,30,0.80) 100%);"></div>
@@ -100,5 +101,6 @@ Advanced Operational Command &amp; Strategic Business Intelligence
 </div>
 </div>
 </div>
-""").strip()
+"""
+    ).strip()
     st.markdown(banner_html, unsafe_allow_html=True)

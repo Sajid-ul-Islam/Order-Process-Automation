@@ -17,6 +17,7 @@ def bd_today():
     """Today's calendar date in Bangladesh."""
     return bd_now().date()
 
+
 # Data directories
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 FEEDBACK_DIR = os.path.join(DATA_DIR, "feedback")

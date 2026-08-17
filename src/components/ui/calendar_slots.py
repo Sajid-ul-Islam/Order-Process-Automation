@@ -1,5 +1,7 @@
+from datetime import date, datetime, time, timedelta
+
 import streamlit as st
-from datetime import datetime, date, time, timedelta
+
 from src.state.persistence import save_state
 
 # Default shift cutoff: 18:00 (6:00 PM Bangladesh time)
@@ -53,9 +55,11 @@ def render_operational_slots_calendar():
         new_minute = st.selectbox(
             "Minute",
             options=[0, 15, 30, 45],
-            index=[0, 15, 30, 45].index(current_minute)
-            if current_minute in [0, 15, 30, 45]
-            else 0,
+            index=(
+                [0, 15, 30, 45].index(current_minute)
+                if current_minute in [0, 15, 30, 45]
+                else 0
+            ),
             key="shift_cutoff_minute_input",
             label_visibility="collapsed",
             format_func=lambda x: f":{x:02d}",

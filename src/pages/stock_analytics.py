@@ -1,13 +1,15 @@
-import streamlit as st
-from src.components.ui.ui_components import render_premium_header
-import pandas as pd
-import plotly.express as px
+import io
+import os
+from collections import Counter
 from datetime import datetime
 from itertools import combinations
-from collections import Counter
-import os
-import io
 
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+from src.components.ui.ui_components import render_premium_header
+from src.config.constants import COMMON_CATS, OFFER_KEYWORDS
 from src.inventory import core as inv_core
 from src.processing.categorization import (
     get_category_for_sales,
@@ -16,11 +18,10 @@ from src.processing.categorization import (
 from src.processing.stock_categorization import map_to_csv_category
 from src.services.exports.excel_exporter import export_to_styled_excel
 from src.services.woocommerce.stock import fetch_woocommerce_stock
-from src.utils.product import get_base_product_name, get_size_from_name
-from src.utils.snapshots import load_stock_snapshot
 from src.utils.display import truncate_label
+from src.utils.product import get_base_product_name, get_size_from_name
 from src.utils.safe_ops import safe_filter, safe_render
-from src.config.constants import COMMON_CATS, OFFER_KEYWORDS
+from src.utils.snapshots import load_stock_snapshot
 
 
 def render_bundle_inventory_intelligence(sales_df, stock_df):
@@ -78,7 +79,11 @@ def render_bundle_inventory_intelligence(sales_df, stock_df):
         st.warning("No suitable product name column found for bundle analysis.")
         return
 
-    stock_col = "Stock" if "Stock" in stock_df.columns else "Quantity" if "Quantity" in stock_df.columns else None
+    stock_col = (
+        "Stock"
+        if "Stock" in stock_df.columns
+        else "Quantity" if "Quantity" in stock_df.columns else None
+    )
     if not stock_col:
         return
 

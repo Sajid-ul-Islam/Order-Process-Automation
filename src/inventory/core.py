@@ -1,8 +1,8 @@
+import copy
 import math
 import re
-import copy
 from functools import lru_cache
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional, Tuple
 
 import pandas as pd
 from rapidfuzz import process
@@ -180,9 +180,9 @@ def load_inventory_from_uploads(uploaded_files: Dict[str, object]):
     Matching is based only on 'Title - Size' (computed from Title + Size).
     """
     inventory: Dict[str, Dict[str, int]] = {}
-    sku_to_title_size: Dict[
-        str, str
-    ] = {}  # sku_key -> Title-Size key (for SKU match validation)
+    sku_to_title_size: Dict[str, str] = (
+        {}
+    )  # sku_key -> Title-Size key (for SKU match validation)
     all_locations = list(uploaded_files.keys())
     warnings = []
     enriched_dfs: Dict[str, pd.DataFrame] = {}
@@ -450,9 +450,11 @@ def _assign_location_columns(df, locations, stock_sources, inventory):
     df = df.copy()
     for loc in locations:
         vals = [
-            inventory[source_key].get(loc, 0)
-            if source_key and source_key in inventory
-            else 0
+            (
+                inventory[source_key].get(loc, 0)
+                if source_key and source_key in inventory
+                else 0
+            )
             for source_key in stock_sources
         ]
         df[loc] = vals

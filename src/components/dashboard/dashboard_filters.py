@@ -12,7 +12,7 @@ from src.processing.categorization import (
     get_category_for_sales,
     get_sub_category_for_sales,
 )
-from src.processing.data_processing import prepare_granular_data, aggregate_data
+from src.processing.data_processing import aggregate_data, prepare_granular_data
 from src.services.woocommerce.client import load_from_woocommerce
 from src.utils.product import get_base_product_name, get_size_from_name
 from src.utils.snapshots import save_sales_snapshot

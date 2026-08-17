@@ -15,15 +15,6 @@ from src.components.ui.widgets import (
     render_sticky_action_bar,
     section_card,
 )
-from src.processing.order_processor import (
-    normalize_manual_item_input,
-    process_orders_dataframe,
-)
-from src.services.exports.excel_exporter import export_to_styled_excel
-from src.state.persistence import save_state
-from src.utils.file_io import read_uploaded
-from src.utils.logging import log_error
-
 from src.pages.pathao_orders.shared import (
     REQUIRED_COLUMNS,
     SOURCE_UPLOAD,
@@ -33,6 +24,15 @@ from src.pages.pathao_orders.shared import (
     _reset_pathao_state,
     _sync_pathao_map,
 )
+from src.processing.order_processor import (
+    normalize_manual_item_input,
+    process_orders_dataframe,
+)
+from src.services.exports.excel_exporter import export_to_styled_excel
+from src.state.persistence import save_state
+from src.utils.file_io import read_uploaded
+from src.utils.logging import log_error
+
 
 def _render_processing_tab():
     render_reset_confirm("Pathao Processor", "pathao", _reset_pathao_state)

@@ -1,26 +1,24 @@
-import streamlit as st
-import pandas as pd
 import asyncio
-import re
 import io
+import re
 from datetime import datetime
-import plotly.express as px
-
-from src.components.ui.empty_state import render_empty_state
-
-# Add direct WooCommerce sync imports
-from src.services.woocommerce.client import load_live_source
-from src.services.woocommerce.stock import fetch_woocommerce_stock
 
 # Vectorization for RAG
 import numpy as np
+import pandas as pd
+import plotly.express as px
+import streamlit as st
 
+from src.components.ui.empty_state import render_empty_state
+from src.services.llm.agent import AgenticMemory, AIDataAgent
 from src.services.llm.manager import init_llm_controller
 
 # Import Pathao tracking
 from src.services.pathao.status import get_pathao_order_status
 
-from src.services.llm.agent import AIDataAgent, AgenticMemory
+# Add direct WooCommerce sync imports
+from src.services.woocommerce.client import load_live_source
+from src.services.woocommerce.stock import fetch_woocommerce_stock
 
 
 @st.cache_resource

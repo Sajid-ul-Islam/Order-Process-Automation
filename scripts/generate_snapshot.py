@@ -1,9 +1,11 @@
 import os
-import pandas as pd
+import warnings
+from datetime import datetime
+
 import duckdb
 import numpy as np
-from datetime import datetime
-import warnings
+import pandas as pd
+
 from src.services.woocommerce.client import load_from_woocommerce
 
 warnings.filterwarnings("ignore")

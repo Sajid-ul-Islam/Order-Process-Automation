@@ -13,8 +13,9 @@ Usage:
 import asyncio
 import os
 import sys
-import pandas as pd
 from datetime import timedelta
+
+import pandas as pd
 
 from src.config.constants import PROJECT_ROOT, bd_now
 
@@ -28,13 +29,13 @@ if "wc_sync_mode" not in st.session_state:
     st.session_state["wc_sync_mode"] = "Operational Cycle"
 
 from src.config.constants import SHIPPED_STATUSES
-from src.services.woocommerce.client import load_from_woocommerce
 from src.processing.data_processing import (
     aggregate_data,
     get_dispatch_metrics,
     prepare_granular_data,
 )
 from src.processing.forecasting import PredictiveIntelligence
+from src.services.woocommerce.client import load_from_woocommerce
 
 
 def generate_report_data():

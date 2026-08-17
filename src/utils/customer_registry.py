@@ -14,8 +14,7 @@ import pandas as pd
 from src.config.constants import RESOURCES_DIR
 from src.processing.column_detection import pick_column
 from src.processing.data_processing import safe_coerce_datetime_naive
-from src.utils.customer_registry_full import \
-    classify_customer  # noqa: F401,E402
+from src.utils.customer_registry_full import classify_customer  # noqa: F401,E402
 from src.utils.logging import log_system_event
 from src.utils.text import normalize_phone_number
 

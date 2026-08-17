@@ -1,6 +1,8 @@
-import streamlit as st
-import pandas as pd
 from datetime import datetime
+
+import pandas as pd
+import streamlit as st
+
 from src.services.exports.excel_exporter import export_to_styled_excel
 
 
@@ -235,10 +237,10 @@ def render_excel_merger_tab():
                             wocom_df = st.session_state.get("merger_wc_stock_df")
 
                         if wocom_df is None or wocom_df.empty:
+                            from src.inventory.core import item_name_to_title_size
                             from src.services.woocommerce.stock import (
                                 fetch_woocommerce_stock,
                             )
-                            from src.inventory.core import item_name_to_title_size
 
                             t_skus = (
                                 set(merged_df[sku_col].dropna().astype(str).unique())

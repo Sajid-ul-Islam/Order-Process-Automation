@@ -15,15 +15,25 @@ REQUIRED_COLUMNS = ["Phone (Billing)"]
 SOURCE_WOOCOM = "WooCommerce Processing"
 SOURCE_UPLOAD = "Upload / URL"
 
+
 def _highlight_status(col):
     return [
-        "background-color: rgba(239, 68, 68, 0.15); color: #ef4444; font-weight: 600;"
-        if any(x in str(v).lower() for x in ["return", "failed", "cancel", "error"])
-        else "color: #10b981; font-weight: 600;"
-        if "delivered" in str(v).lower()
-        else "color: #3b82f6; font-weight: 500;"
-        if any(x in str(v).lower() for x in ["transit", "processing", "assigned"])
-        else ""
+        (
+            "background-color: rgba(239, 68, 68, 0.15); color: #ef4444; font-weight: 600;"
+            if any(x in str(v).lower() for x in ["return", "failed", "cancel", "error"])
+            else (
+                "color: #10b981; font-weight: 600;"
+                if "delivered" in str(v).lower()
+                else (
+                    "color: #3b82f6; font-weight: 500;"
+                    if any(
+                        x in str(v).lower()
+                        for x in ["transit", "processing", "assigned"]
+                    )
+                    else ""
+                )
+            )
+        )
         for v in col
     ]
 
@@ -68,9 +78,7 @@ def _filter_processing_orders(df):
     status_col = (
         "Order Status"
         if "Order Status" in df.columns
-        else "Status"
-        if "Status" in df.columns
-        else None
+        else "Status" if "Status" in df.columns else None
     )
     if not status_col:
         return df.copy(), False

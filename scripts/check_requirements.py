@@ -1,6 +1,6 @@
 import ast
-import sys
 import re
+import sys
 from pathlib import Path
 
 # Map PyPI package names to their Python import names

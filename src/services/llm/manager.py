@@ -1,15 +1,16 @@
 # llm_manager.py - Dynamic Multi-Provider LLM Manager for Free Tiers
-import streamlit as st
-import requests
+import asyncio
+import hashlib
 import json
 import time
-import asyncio
-import aiohttp
-import hashlib
-from typing import Dict, List, Optional, Tuple, Any
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
+
+import aiohttp
+import requests
+import streamlit as st
 
 from src.config.settings import get_llm_provider_keys
 from src.utils.logging import log_system_event
@@ -404,6 +405,7 @@ class DynamicLLMController:
                 def thread_run():
                     new_loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(new_loop)
+
                 t = threading.Thread(target=thread_run)
 
                 try:
@@ -414,6 +416,7 @@ class DynamicLLMController:
                             add_script_run_ctx,
                         )
                     except ImportError:
+
                         def add_script_run_ctx(thread):
                             pass
 

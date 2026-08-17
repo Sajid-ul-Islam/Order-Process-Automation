@@ -1,5 +1,5 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
 class PredictiveIntelligence:
@@ -54,8 +54,9 @@ class PredictiveIntelligence:
 
         # 3. ARIMA (Statsmodels)
         try:
-            from statsmodels.tsa.arima.model import ARIMA
             import warnings
+
+            from statsmodels.tsa.arima.model import ARIMA
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
@@ -70,8 +71,9 @@ class PredictiveIntelligence:
 
         # 4. Exponential Smoothing (Holt-Winters Replacement for Prophet/TBATS)
         try:
-            from statsmodels.tsa.holtwinters import ExponentialSmoothing
             import warnings
+
+            from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")

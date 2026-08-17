@@ -1,8 +1,8 @@
 from collections.abc import Callable
+from io import BytesIO
 
 import pandas as pd
 import streamlit as st
-from io import BytesIO
 
 
 @st.cache_data(show_spinner=False)

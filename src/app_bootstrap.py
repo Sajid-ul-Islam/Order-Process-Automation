@@ -12,12 +12,10 @@ from datetime import datetime
 import streamlit as st
 
 from src.config.constants import ERROR_LOG_FILE
-from src.config.settings import (
-    is_auth_configured as auth_is_configured,
-    validate_runtime_configuration,
-)
-from src.config.ui_config import PRIMARY_NAV, CLOUD_APP_URL
-from src.state.persistence import init_state, save_state, STATE_FILE
+from src.config.settings import is_auth_configured as auth_is_configured
+from src.config.settings import validate_runtime_configuration
+from src.config.ui_config import CLOUD_APP_URL, PRIMARY_NAV
+from src.state.persistence import STATE_FILE, init_state, save_state
 from src.utils.logging import get_logs
 from src.utils.safe_ops import safe_render
 
@@ -120,8 +118,8 @@ def _render_nav_pills(nav_items: list[str], default: str) -> str:
 
 def _render_sidebar_branding() -> None:
     """Render the DEEN-OPS logo, title, and version badge in the sidebar."""
-    import os
     import base64
+    import os
 
     logo_jpg = os.path.join("assets", "deen_logo.jpg")
     logo_img_html = '<div style="font-size: 28px; line-height: 1; filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.5));">🛡️</div>'
@@ -297,9 +295,9 @@ def _render_sidebar(
         chosen_theme = st.selectbox(
             "🎨 Chart Theme",
             options=theme_names,
-            index=theme_names.index(current_theme)
-            if current_theme in theme_names
-            else 0,
+            index=(
+                theme_names.index(current_theme) if current_theme in theme_names else 0
+            ),
             help="Select color palette theme for charts and metrics across the app.",
             key="sidebar_theme_selector",
         )
@@ -438,10 +436,10 @@ def run_app() -> None:
         _render_auth_gate()
 
     # ── Lazy imports (kept inside function for cloud resilience) ────────────
+    from src.components.layout.footer import render_footer
+    from src.components.layout.header import render_header
     from src.components.ui.bike_animation import render_bike_animation
     from src.components.ui.styles import inject_base_styles
-    from src.components.layout.header import render_header
-    from src.components.layout.footer import render_footer
 
     # Ensure Pathao Processor is in the nav
     if not any("Pathao Processor" in item for item in PRIMARY_NAV):
