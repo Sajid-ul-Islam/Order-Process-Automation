@@ -231,14 +231,10 @@ def render_woocommerce_stock_tab():
         st.info("📬 No inventory data found in snapshots. Try syncing or uploading.")
         return
 
-    df_raw["Stock"] = (
-        pd.to_numeric(
-            df_raw["Stock"].astype(str).str.replace(r"[^\d.-]", "", regex=True),
-            errors="coerce",
-        )
-        .fillna(0)
-        .astype(float)
-    )
+    df_raw["Stock"] = pd.to_numeric(
+        df_raw["Stock"].astype(str).str.replace(r"[^\d.-]", "", regex=True),
+        errors="coerce",
+    ).astype(float)
     df_raw["Price"] = (
         pd.to_numeric(
             df_raw["Price"].astype(str).str.replace(r"[^\d.]", "", regex=True),
@@ -332,14 +328,10 @@ def render_woocommerce_stock_tab():
             )
 
     if not df.empty:
-        df["Stock"] = (
-            pd.to_numeric(
-                df["Stock"].astype(str).str.replace(r"[^\d.-]", "", regex=True),
-                errors="coerce",
-            )
-            .fillna(0)
-            .astype(float)
-        )
+        df["Stock"] = pd.to_numeric(
+            df["Stock"].astype(str).str.replace(r"[^\d.-]", "", regex=True),
+            errors="coerce",
+        ).astype(float)
         df["Price"] = (
             pd.to_numeric(
                 df["Price"].astype(str).str.replace(r"[^\d.]", "", regex=True),

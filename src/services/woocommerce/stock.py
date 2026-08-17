@@ -60,7 +60,13 @@ def fetch_woocommerce_stock(filter_skus=None, filter_titles=None):
                             "Size": size_val,
                             "SKU": v.get("sku") or f"P{p_id}-V{v.get('id')}",
                             "Stock": (
-                                v.get("stock_quantity") if v.get("manage_stock") else 0
+                                0
+                                if v.get("stock_status") == "outofstock"
+                                else (
+                                    v.get("stock_quantity")
+                                    if v.get("manage_stock")
+                                    else None
+                                )
                             ),
                             "Price": v.get("price", "0"),
                             "Status": v.get("stock_status", "unknown").title(),
@@ -123,8 +129,19 @@ def fetch_woocommerce_stock(filter_skus=None, filter_titles=None):
                         "Category": _get_category(p_name),
                         "Product": p_name,
                         "SKU": p.get("sku") or f"P{p_id}",
+                        # When stock is not individually managed, WooCommerce does
+                        # not track a quantity, so stock_status is the source of
+                        # truth. Use 0 only when explicitly out of stock; otherwise
+                        # leave None (NaN) so the UI shows "in stock (untracked)"
+                        # instead of a misleading 0 that looks out of stock.
                         "Stock": (
-                            p.get("stock_quantity") if p.get("manage_stock") else 0
+                            0
+                            if p.get("stock_status") == "outofstock"
+                            else (
+                                p.get("stock_quantity")
+                                if p.get("manage_stock")
+                                else None
+                            )
                         ),
                         "Price": p.get("price", "0"),
                         "Status": p.get("stock_status", "unknown").title(),
@@ -159,9 +176,10 @@ def fetch_woocommerce_stock(filter_skus=None, filter_titles=None):
 
         df = pd.DataFrame(stock_data)
         if not df.empty:
-            df["Stock"] = (
-                pd.to_numeric(df["Stock"], errors="coerce").fillna(0).astype(float)
-            )
+            # Keep NaN for untracked (manage_stock=False, non-out-of-stock) items
+            # so the UI shows "in stock (untracked)" instead of a misleading 0.
+            # All downstream sums/skus skip NaN, so totals stay accurate.
+            df["Stock"] = pd.to_numeric(df["Stock"], errors="coerce").astype(float)
             df["Price"] = (
                 pd.to_numeric(df["Price"], errors="coerce").fillna(0).astype(float)
             )

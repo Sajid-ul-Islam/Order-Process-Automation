@@ -38,10 +38,8 @@ def load_stock_snapshot():
                 )
 
                 if not df.empty and "Stock" in df.columns:
-                    df["Stock"] = (
-                        pd.to_numeric(df["Stock"], errors="coerce")
-                        .fillna(0)
-                        .astype(float)
+                    df["Stock"] = pd.to_numeric(df["Stock"], errors="coerce").astype(
+                        float
                     )
                     if "Price" in df.columns:
                         df["Price"] = (
