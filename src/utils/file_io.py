@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import pandas as pd
 import streamlit as st
 from io import BytesIO
@@ -26,7 +28,7 @@ def read_uploaded(uploaded_file):
 def to_excel_bytes(
     df: pd.DataFrame,
     sheet_name: str = "Sheet1",
-    style_fn: callable | None = None,
+    style_fn: Callable | None = None,
 ) -> bytes:
     """Convert a DataFrame to an in-memory Excel file.
 

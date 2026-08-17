@@ -15,6 +15,7 @@ it never touches disk or the network.
 import pandas as pd
 import pytest
 import streamlit as st
+from datetime import date
 
 from src.processing.data_processing import (
     apply_order_view,
@@ -44,6 +45,14 @@ def fake_session(monkeypatch):
         pd.Timestamp("2026-08-13 18:00:00"),
     )
     st.session_state["live_custom_range"] = None
+
+    # Freeze the BD calendar day to the fixture's "today" so the
+    # Today-mode "shipped today" filter (which compares against the live
+    # bd_today() clock) is deterministic instead of depending on the wall clock.
+    fixture_today = date(2026, 8, 13)
+    monkeypatch.setattr(
+        "src.processing.data_processing.bd_today", lambda: fixture_today
+    )
     return st.session_state
 
 
