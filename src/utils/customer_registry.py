@@ -208,6 +208,17 @@ def compute_new_vs_returning_counts(
     if full_df is None or full_df.empty:
         full_df = m_df
 
+    # Keep the full 3-bucket registry current: merge the incoming live orders so
+    # customers whose first order falls in the live window are not misclassified
+    # as 'unknown' (and silently counted as new). This is incremental — it only
+    # lowers first_seen, never erases history from the offline build.
+    try:
+        from src.utils.customer_registry_full import update_full_registry_from_df
+
+        update_full_registry_from_df(full_df)
+    except Exception:
+        pass
+
     wc_raw_mapping = wc_raw_mapping or {}
     new_cnt, ret_cnt = 0, 0
 

@@ -78,6 +78,121 @@ def load_full_registry() -> dict:
         return {}
 
 
+def update_full_registry_from_df(df: "pd.DataFrame | None") -> int:
+    """Incrementally merge a freshly-synced orders DataFrame into the full registry.
+
+    The full 3-bucket registry is built offline (historical orders, incl. the
+    registered_customers bucket keyed by WooCommerce customer_id). But the live
+    dashboard only pulls a recent window and never re-seeds history, so customers
+    whose first order falls inside the live window are missing from the registry
+    and get misclassified as 'unknown' (silently counted as new). This function
+    closes that gap by merging the incoming live rows into the existing registry,
+    keeping each record's earliest ``first_seen``.
+
+    Only the three existing buckets are updated (email / phone / customer_id);
+    we never invent name|city keys, since that is only a loose secondary *lookup*
+    signal, not a stable identity key.
+
+    Returns the number of records whose ``first_seen`` was updated/added.
+    """
+    if df is None or df.empty:
+        return 0
+
+    from src.processing.data_processing import (  # local import
+        safe_coerce_datetime_naive,
+    )
+
+    _BUCKET_KEYS = {
+        "registered_customers": ("Customer ID",),
+        "guest_with_email": ("Billing Email", "Email", "Customer Email", "email"),
+        "guest_without_email": ("Phone (Billing)", "Phone", "Billing Phone", "phone"),
+    }
+    name_col = next(
+        (
+            c
+            for c in ["Full Name (Billing)", "Full Name", "Customer Name", "name"]
+            if c in df.columns
+        ),
+        None,
+    )
+    city_col = next(
+        (
+            c
+            for c in ["Shipping City", "Billing City", "City", "city"]
+            if c in df.columns
+        ),
+        None,
+    )
+    date_col = next(
+        (c for c in ["Date", "Order Date", "Created Date"] if c in df.columns),
+        None,
+    )
+    if date_col is None:
+        date_col = next((c for c in df.columns if "date" in c.lower()), None)
+    if not date_col:
+        return 0
+
+    reg = load_full_registry()
+    if not reg:
+        reg = {b: {} for b in _BUCKETS}
+
+    updated = 0
+    for _, row in df.iterrows():
+        o_dt = safe_coerce_datetime_naive(pd.Series([row.get(date_col)])).iloc[0]
+        if pd.isna(o_dt):
+            continue
+        fs = o_dt.isoformat()
+
+        name = _norm_name(str(row.get(name_col) or "")) if name_col else ""
+        city = normalize_city_name(row.get(city_col) or "") if city_col else ""
+
+        # Determine bucket + key for THIS row.
+        bucket = None
+        key = None
+        cid = row.get("Customer ID")
+        if cid is not None and str(cid).strip() not in ("", "0", "nan", "None"):
+            bucket, key = "registered_customers", str(int(float(cid)))
+        else:
+            email = _norm_text(row.get("Billing Email") or row.get("Email") or "")
+            if email and "@" in email:
+                bucket, key = "guest_with_email", email
+            else:
+                phone = row.get("Phone (Billing)") or row.get("Phone") or ""
+                p = normalize_phone_number(phone)
+                if p:
+                    bucket, key = "guest_without_email", p
+
+        if not bucket or not key:
+            continue
+
+        rec = reg.setdefault(bucket, {}).get(key)
+        if rec is None:
+            reg.setdefault(bucket, {})[key] = {
+                "name": name,
+                "city": city,
+                "first_seen": fs,
+            }
+            updated += 1
+        else:
+            if fs < rec.get("first_seen", fs):
+                rec["first_seen"] = fs
+                updated += 1
+            # Keep name/city fresh if previously missing.
+            if not rec.get("name") and name:
+                rec["name"] = name
+            if not rec.get("city") and city:
+                rec["city"] = city
+
+    if updated > 0:
+        try:
+            os.makedirs(RESOURCES_DIR, exist_ok=True)
+            with open(FULL_REGISTRY_PATH, "w", encoding="utf-8") as f:
+                json.dump(reg, f, indent=2, ensure_ascii=False)
+        except Exception:
+            return 0
+    return updated
+
+
 def _lookup_in_bucket(reg: dict, bucket: str, key: str) -> Optional[dict]:
     b = reg.get(bucket) or {}
     rec = b.get(key)
