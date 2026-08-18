@@ -32,7 +32,7 @@ def inject_base_styles():
             50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
             100% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.4); }
         }
-        
+
         /* Modern Scrollbars for Terminal Feel */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); }

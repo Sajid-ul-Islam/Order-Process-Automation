@@ -10,10 +10,7 @@ from src.services.woocommerce.orders import (
 
 
 def _render_live_orders_view():
-    from src.components.ui.ui_components import (
-        render_metric_grid,
-        render_premium_header,
-    )
+    from src.components.ui.ui_components import render_premium_header
 
     render_premium_header(
         "Order Tracking & Logistics Terminal",

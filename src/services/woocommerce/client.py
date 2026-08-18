@@ -789,7 +789,7 @@ def _staleness_info(df):
 
 
 def _data_looks_stale(df, max_age_min: float = WC_STALE_MAX_AGE_MIN) -> bool:
-    """Heuristic staleness check: the newest order modification is much older than now."""
+    """Heuristic staleness check: newest order modification is much older than now."""
     _, age_min = _staleness_info(df)
     return age_min is not None and age_min > max_age_min
 
@@ -807,7 +807,7 @@ def _should_autorefresh() -> bool:
 
 
 def load_live_source(force_refresh=False):
-    """Stateless fetch with stateful session update and automatic offline snapshot fallback.
+    """Stateless fetch with stateful session update and offline snapshot fallback.
 
     Every sync triggers the WooCommerce REST API with a unique cache-buster
     query param, so Cloudflare's URL-keyed cache is bypassed and the API

@@ -299,6 +299,6 @@ def get_gcp_service_account_info():
         try:
             return json.loads(raw)
         except Exception as e:
-            raise ValueError(f"Invalid GCP_SERVICE_ACCOUNT_JSON: {e}")
+            raise ValueError(f"Invalid GCP_SERVICE_ACCOUNT_JSON: {e}") from e
 
     return None

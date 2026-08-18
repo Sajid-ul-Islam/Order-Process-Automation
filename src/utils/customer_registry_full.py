@@ -102,11 +102,6 @@ def update_full_registry_from_df(df: "pd.DataFrame | None") -> int:
         safe_coerce_datetime_naive,
     )
 
-    _BUCKET_KEYS = {
-        "registered_customers": ("Customer ID",),
-        "guest_with_email": ("Billing Email", "Email", "Customer Email", "email"),
-        "guest_without_email": ("Phone (Billing)", "Phone", "Billing Phone", "phone"),
-    }
     name_col = next(
         (
             c

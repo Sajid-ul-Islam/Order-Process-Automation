@@ -127,13 +127,6 @@ def render_operational_metrics(
         do_str = f"{prefix}{d_o:+,.0f}{suffix}"
         db_str = f"{prefix}{'+' if db >= 0 else '-'}TK {abs(db):,.0f}{suffix}"
 
-    if st.session_state.get("live_sync_time"):
-        diff = datetime.now() - st.session_state.live_sync_time
-        mins = int(diff.total_seconds() / 60)
-        _sync_label = "Just now" if mins < 1 else f"{mins}m ago"
-    else:
-        _sync_label = "Just now"
-
     def format_delta(delta_str):
         if not delta_str:
             return ""
@@ -278,7 +271,8 @@ def render_operational_metrics(
             t_rev_vals = [day_map_rev.get(d, 0.0) for d in all_7days]
             t_ord_vals = [day_map_ord.get(d, 0.0) for d in all_7days]
             t_bv_vals = [
-                (r / o if o > 0 else 0) for r, o in zip(t_rev_vals, t_ord_vals)
+                (r / o if o > 0 else 0)
+                for r, o in zip(t_rev_vals, t_ord_vals, strict=True)
             ]
 
             # Helper to trim leading zero padding when data collection started recently

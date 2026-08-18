@@ -202,7 +202,7 @@ def generate_report_data():
 
     prompt = f"""
     Generate a high-impact executive briefing for today's e-commerce operations.
-    
+
     *Core Metrics:*
     - Today Net Realized Revenue (After Cashback): ৳{net_rev:,.0f} ({today_orders} orders, {today_qty} items).
     - Gross Revenue (Pre-Discount): ৳{gross_rev:,.0f}.
@@ -222,7 +222,7 @@ def generate_report_data():
     2. 🏆 *Top Movers*: Highlight categories or SKUs driving today's volume.
     3. 🚚 *Logistics Status*: Detail the actual shipped status counts (total dispatched orders, Pathao vs. other courier breakdown, pending fulfillment status, and dispatch rate).
     4. 💡 *Strategic Outlook*: A concise, actionable tactical note for tomorrow based on metrics and forecasts.
-    
+
     Use emojis appropriately and keep it readable. Use *bold* for emphasis.
     """
 

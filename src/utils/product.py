@@ -3,7 +3,7 @@ from functools import lru_cache
 
 @lru_cache(maxsize=4096)
 def get_base_product_name(name: str) -> str:
-    """Removes the size portion (e.g. ' - XL') from a product name for cleaner filter grouping."""
+    """Removes the size portion (e.g. ' - XL') from a product name for grouping."""
     if not name or " - " not in name:
         return str(name) if name else ""
     return str(name).rsplit(" - ", 1)[0]

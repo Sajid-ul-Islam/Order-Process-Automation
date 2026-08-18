@@ -85,7 +85,7 @@ def find_columns(df: pd.DataFrame) -> dict[str, str]:
 
         for key, aliases in mapping.items():
             if key not in found:
-                for col, l_col in zip(actual_cols, lower_cols):
+                for col, l_col in zip(actual_cols, lower_cols, strict=True):
                     if any(alias in l_col for alias in aliases):
                         found[key] = col
                         break

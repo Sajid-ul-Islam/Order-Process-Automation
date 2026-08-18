@@ -647,8 +647,8 @@ def render_distribution_tab(search_q):
                 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
             }
             .sim-badge {
-                background: rgba(245, 158, 11, 0.15); color: #d97706; 
-                padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; 
+                background: rgba(245, 158, 11, 0.15); color: #d97706;
+                padding: 2px 10px; border-radius: 20px; font-size: 0.75rem;
                 font-weight: 700; border: 1px solid rgba(217, 119, 6, 0.3);
             }
             </style>

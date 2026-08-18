@@ -1,7 +1,7 @@
 """Persistent customer lifetime history registry.
 
-Stores a mapping of customer phone numbers and emails to their earliest known order date.
-Accurately identifies returning customers even if their previous order was placed years ago.
+Maps customer phone numbers and emails to their earliest known order date.
+Identifies returning customers even when their previous order was years ago.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def load_customer_registry() -> dict[str, str]:
 def get_customer_first_order_date(
     cust_id: str | None, registry: dict[str, str] | None = None
 ) -> pd.Timestamp | None:
-    """Lookup earliest known order date for a customer across all normalized key variations."""
+    """Lookup earliest known order date across all normalized key variations."""
     if not cust_id or pd.isna(cust_id):
         return None
 

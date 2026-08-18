@@ -37,7 +37,7 @@ def normalize_phone_number(value) -> str:
 @lru_cache(maxsize=4096)
 def normalize_city_name(city_name):
     """
-    Standardizes city/district names to match Pathao specific formats or correct spelling.
+    Standardizes city/district names to match Pathao formats or correct spelling.
     """
     if not city_name:
         return ""

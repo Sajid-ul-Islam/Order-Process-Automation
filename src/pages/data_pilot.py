@@ -22,7 +22,6 @@ from src.services.woocommerce.stock import fetch_woocommerce_stock
 
 
 @st.cache_resource
-
 # ------------------------------
 # 2. UI COMPONENTS
 # ------------------------------

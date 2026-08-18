@@ -39,7 +39,8 @@ def fetch_dataframe_from_url(url: str, timeout: int = 15) -> pd.DataFrame:
             doc_id = match.group(1)
             gid_match = re.search(r"[#&]gid=([0-9]+)", url)
             gid = f"&gid={gid_match.group(1)}" if gid_match else ""
-            url = f"https://docs.google.com/spreadsheets/d/{doc_id}/export?format=csv{gid}"
+            base = "https://docs.google.com/spreadsheets/d/"
+            url = f"{base}{doc_id}/export?format=csv{gid}"
 
     resp = request_with_backoff("GET", url, timeout=timeout)
 

@@ -558,7 +558,7 @@ def compile_outlet_stock(loc_files):
 
         # Build Title-Size to SKU lookup from enriched dataframes
         title_size_to_sku = {}
-        for loc, df in enriched_dfs.items():
+        for _, df in enriched_dfs.items():
             _, _, _, sku_col = inv_core.identify_columns(df)
             if sku_col and sku_col in df.columns:
                 for _, row in df.iterrows():
@@ -661,7 +661,7 @@ def compile_outlet_stock(loc_files):
         # Build SKU verification report
         verification_rows = []
         verified_skus = set()
-        for k, locs in inv_map.items():
+        for k, _ in inv_map.items():
             if str(k).upper().startswith("SKU:"):
                 continue
             if k in sku_to_title_size:
