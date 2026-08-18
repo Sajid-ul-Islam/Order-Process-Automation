@@ -12,29 +12,41 @@ def _generate_sparkline_svg(
     color: str = "#3b82f6",
     prefix: str = "",
     suffix: str = "",
+    labels: list[str] | None = None,
 ) -> tuple[str, str]:
-    """Generates an enhanced normalized SVG sparkline with peak indicator dots and micro-summary stats badges.
+    """Generates an informative normalized SVG sparkline.
+
+    Enhancements over a bare line:
+      - 7-day area + smoothed line with peak and latest markers
+      - dashed 7-day average baseline for at-a-glance context
+      - day-of-week axis labels beneath the plot (pass `labels`)
+      - current value labelled at the endpoint
+      - badge showing 7D peak / avg AND today vs previous-day delta (▲/▼ %)
+
     Returns (svg_html_snippet, micro_badge_html_snippet).
     """
     if not values or len(values) < 2:  # A line needs at least 2 points to show a trend.
         return "", ""
 
-    # Normalize values to fit 100x30 SVG coordinate system
+    # Normalize values to fit the SVG coordinate system (top 24px reserved for plot,
+    # bottom 10px for day labels).
     min_v, max_v = min(values), max(values)
     avg_v = sum(values) / len(values)
     latest_v = values[-1]
+    prev_v = values[-2]
     rng = max_v - min_v if max_v != min_v else 1
 
     width = 100
-    height = 30
+    plot_h = 24
+    label_h = 10
+    height = plot_h + label_h
     step = width / (len(values) - 1)
 
     coords = []
     max_idx = 0
     for i, v in enumerate(values):
         x = i * step
-        # Use 4px padding top/bottom to prevent clipping line caps
-        y = height - ((v - min_v) / rng * (height - 8)) - 4
+        y = plot_h - ((v - min_v) / rng * (plot_h - 6)) - 3
         coords.append((x, y))
         if v == max_v:
             max_idx = i
@@ -51,19 +63,60 @@ def _generate_sparkline_svg(
                 f" C {cx:.1f},{p0[1]:.1f} {cx:.1f},{p1[1]:.1f} {p1[0]:.1f},{p1[1]:.1f}"
             )
 
-    area_data = path_data + f" L {width:.1f},{height:.1f} L 0.0,{height:.1f} Z"
+    area_data = path_data + f" L {width:.1f},{plot_h:.1f} L 0.0,{plot_h:.1f} Z"
+
+    # 7-day average baseline (dashed) for context.
+    avg_y = plot_h - ((avg_v - min_v) / rng * (plot_h - 6)) - 3
+    avg_line = (
+        f'<line x1="0" y1="{avg_y:.1f}" x2="{width:.1f}" y2="{avg_y:.1f}" '
+        f'stroke="{color}" stroke-width="0.6" stroke-dasharray="2 2" opacity="0.45" />'
+    )
 
     px, py = coords[max_idx]
     ex, ey = coords[-1]
 
-    tooltip_txt = f"7-Day Trend: Peak {prefix}{max_v:,.0f}{suffix} | Avg {prefix}{avg_v:,.0f}{suffix} | Today {prefix}{latest_v:,.0f}{suffix}"
+    # Day labels beneath the plot.
+    label_svg = ""
+    if labels:
+        n = len(labels)
+        for i, lab in enumerate(labels):
+            lx = (i * (width / (n - 1))) if n > 1 else width / 2
+            label_svg += (
+                f'<text x="{lx:.1f}" y="{height - 1:.1f}" font-size="4.2" '
+                f'text-anchor="middle" fill="#9ca3af" font-family="monospace">{lab}</text>'
+            )
 
-    svg_raw = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 30" preserveAspectRatio="none">
+    # Current value label near the endpoint.
+    val_label = f"{prefix}{latest_v:,.0f}{suffix}"
+    val_text_x = max(2.0, min(ex - 1, width - 2))
+    val_text = (
+        f'<text x="{val_text_x:.1f}" y="{max(4.0, ey - 2):.1f}" font-size="4.6" '
+        f'text-anchor="end" fill="{color}" font-weight="700" '
+        f'font-family="monospace">{val_label}</text>'
+    )
+
+    # Today vs previous-day delta.
+    if prev_v and prev_v != 0:
+        delta_pct = (latest_v - prev_v) / abs(prev_v) * 100.0
+    else:
+        delta_pct = 0.0
+    arrow = "▲" if delta_pct >= 0 else "▼"
+    delta_color = "#10b981" if delta_pct >= 0 else "#ef4444"
+
+    tooltip_txt = (
+        f"7-Day Trend: Peak {prefix}{max_v:,.0f}{suffix} | Avg {prefix}{avg_v:,.0f}{suffix} | "
+        f"Today {prefix}{latest_v:,.0f}{suffix} ({arrow}{abs(delta_pct):.0f}% vs prev day)"
+    )
+
+    svg_raw = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 {width} {height}" preserveAspectRatio="none">
         <title>{tooltip_txt}</title>
         <path d="{area_data}" fill="{color}" fill-opacity="0.15" />
         <path d="{path_data}" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        {avg_line}
         <circle cx="{px:.1f}" cy="{py:.1f}" r="3" fill="{color}" stroke="#ffffff" stroke-width="1.2" />
         <circle cx="{ex:.1f}" cy="{ey:.1f}" r="2.5" fill="#ffffff" stroke="{color}" stroke-width="1.5" />
+        {val_text}
+        {label_svg}
     </svg>"""
 
     import base64
@@ -71,14 +124,15 @@ def _generate_sparkline_svg(
     b64_svg = base64.b64encode(svg_raw.encode("utf-8")).decode("utf-8")
 
     svg_html = f"""
-    <div class="metric-sparkline" title="{tooltip_txt}">
-        <img src="data:image/svg+xml;base64,{b64_svg}" style="width: 100%; height: 30px; display: block;" />
+    <div class="metric-sparkline" title="{tooltip_txt}" style="height:34px;">
+        <img src="data:image/svg+xml;base64,{b64_svg}" style="width: 100%; height: 34px; display: block;" />
     </div>
     """
 
     badge_html = f"""<div class="metric-detail-row" style="color:var(--text-color, #000000); font-weight:700; opacity:1;">
         <span>🔥 7D Peak: <b>{prefix}{max_v:,.0f}{suffix}</b></span>
         <span>📊 7D Avg: <b>{prefix}{avg_v:,.0f}{suffix}</b></span>
+        <span style="color:{delta_color};">Today {arrow}{abs(delta_pct):.0f}% vs prev</span>
     </div>"""
 
     return svg_html, badge_html

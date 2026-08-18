@@ -287,6 +287,13 @@ def render_operational_metrics(
             t_ord_vals = _trim_leading_zeros(t_ord_vals)
             t_bv_vals = _trim_leading_zeros(t_bv_vals)
 
+            # Day labels for the sparkline axis (weekday initials; last = "Tdy").
+            _wd = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+            day_labels = [
+                (_wd[d.weekday()] if i < len(t_qty_vals) - 1 else "Tdy")
+                for i, d in enumerate(all_7days[-len(t_qty_vals) :])
+            ]
+
             from src.config.ui_config import CHART_THEMES
 
             theme_name = st.session_state.get("chart_theme", "✨ Emerald Cyberpunk")
@@ -295,16 +302,32 @@ def render_operational_metrics(
             )
 
             s_qty, d_qty = _generate_sparkline_svg(
-                t_qty_vals, theme_cfg.get("spark_qty", "#06b6d4"), prefix="", suffix=""
+                t_qty_vals,
+                theme_cfg.get("spark_qty", "#06b6d4"),
+                prefix="",
+                suffix="",
+                labels=day_labels,
             )
             s_rev, d_rev = _generate_sparkline_svg(
-                t_rev_vals, theme_cfg.get("spark_rev", "#10b981"), prefix="৳", suffix=""
+                t_rev_vals,
+                theme_cfg.get("spark_rev", "#10b981"),
+                prefix="৳",
+                suffix="",
+                labels=day_labels,
             )
             s_ord, d_ord = _generate_sparkline_svg(
-                t_ord_vals, theme_cfg.get("spark_ord", "#3b82f6"), prefix="", suffix=""
+                t_ord_vals,
+                theme_cfg.get("spark_ord", "#3b82f6"),
+                prefix="",
+                suffix="",
+                labels=day_labels,
             )
             s_bv, d_bv = _generate_sparkline_svg(
-                t_bv_vals, theme_cfg.get("spark_bv", "#f59e0b"), prefix="৳", suffix=""
+                t_bv_vals,
+                theme_cfg.get("spark_bv", "#f59e0b"),
+                prefix="৳",
+                suffix="",
+                labels=day_labels,
             )
 
             # ── New vs Returning Customer Calculation (Lifetime Registry Integrated) ──
