@@ -8,10 +8,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from src.components.dashboard.svg import (
-    _generate_mini_bar_chart_svg,
-    _generate_sparkline_svg,
-)
+from src.components.dashboard.svg import _generate_sparkline_svg
 from src.processing.data_processing import (
     aggregate_data,
     prepare_granular_data,
@@ -459,13 +456,15 @@ def render_operational_metrics(
 
                         t_new_vals = _trim_leading_zeros(t_new_vals)
                         t_ret_vals = _trim_leading_zeros(t_ret_vals)
-                        s_cust, d_cust = _generate_mini_bar_chart_svg(
+                        # Pure-gradient sparkline of the 7-day new-customer trend
+                        # (matches the other metric cards' minimal visual style).
+                        s_cust, _ = _generate_sparkline_svg(
                             t_new_vals,
-                            t_ret_vals,
-                            color1="#a855f7",
-                            color2="#f59e0b",
+                            color="#a855f7",
+                            prefix="",
                             suffix="%",
                         )
+                        d_cust = ""
             except Exception as e:
                 log_system_event(
                     "CUSTOMER_MIX_ERROR", f"Failed to compute customer mix: {e}"
