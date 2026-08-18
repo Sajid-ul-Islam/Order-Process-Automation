@@ -454,6 +454,19 @@ def run_app() -> None:
 
     # ── State & styles ──────────────────────────────────────────────────────
     init_state()
+    # Streamlit Cloud uses ephemeral disk, so the committed customer registry is
+    # the baseline after every restart. Merge the last persisted sales snapshot
+    # (the app's own recent-order cache) into the full registry at startup so the
+    # new/returning metric is as fresh as the last sync, not just the git baseline.
+    try:
+        from src.utils.customer_registry_full import update_full_registry_from_df
+        from src.utils.snapshots import load_sales_snapshot
+
+        _snap = load_sales_snapshot()
+        if _snap is not None and not _snap.empty:
+            update_full_registry_from_df(_snap)
+    except Exception:
+        pass
     inject_base_styles()
     _rotate_error_logs()
 
