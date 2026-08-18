@@ -24,7 +24,7 @@ from src.utils.customer_registry import (
     update_customer_registry,
 )
 from src.utils.logging import log_system_event
-from src.utils.metric_history import load_snapshot_history, save_shift_snapshot
+from src.utils.metric_history import save_shift_snapshot
 
 
 def render_operational_metrics(
@@ -231,51 +231,41 @@ def render_operational_metrics(
             else:
                 src_df["_rev"] = src_df["Quantity"] * src_df["Item Cost"]
 
-            src_df["_day"] = src_df["_dt"].dt.floor("D")
+            # ── 36-hour hourly sparkline series (orders & products sold per hour) ──
+            src_df["_hr"] = src_df["_dt"].dt.floor("h")
 
-            day_map_qty = {}
-            day_map_rev = {}
-            day_map_ord = {}
+            hour_map_qty = {}
+            hour_map_rev = {}
+            hour_map_ord = {}
 
-            # Populate from historical snapshot files
-            hist_df = load_snapshot_history(14)
-            if not hist_df.empty and "date" in hist_df.columns:
-                hist_df["_day"] = pd.to_datetime(hist_df["date"]).dt.floor("D")
-                for _, hrow in hist_df.iterrows():
-                    d_key = hrow["_day"]
-                    day_map_qty[d_key] = float(hrow.get("qty", 0))
-                    day_map_rev[d_key] = float(hrow.get("revenue", 0))
-                    day_map_ord[d_key] = float(hrow.get("orders", 0))
-
-            # Populate / override with multi-day source DataFrame
             if not src_df.empty:
-                for d_key, grp in src_df.groupby("_day"):
-                    day_map_qty[d_key] = float(grp["Quantity"].sum())
-                    day_map_rev[d_key] = float(grp["_rev"].sum())
-                    day_map_ord[d_key] = float(grp[order_id_col].nunique())
+                for h_key, grp in src_df.groupby("_hr"):
+                    hour_map_qty[h_key] = float(grp["Quantity"].sum())
+                    hour_map_rev[h_key] = float(grp["_rev"].sum())
+                    hour_map_ord[h_key] = float(grp[order_id_col].nunique())
 
-            # Ensure current live metrics are set for today's date
-            today_dt = (
-                src_df["_day"].max()
+            # Window end = latest data hour (falls back to now), 36h span.
+            end_hr = (
+                src_df["_hr"].max()
                 if not src_df.empty
-                else pd.to_datetime("today").floor("D")
+                else pd.Timestamp.now().floor("h")
             )
-            day_map_qty[today_dt] = float(m_qty)
-            day_map_rev[today_dt] = float(m_net_rev)
-            day_map_ord[today_dt] = float(m_ord)
+            all_36h = pd.date_range(end=end_hr, periods=36, freq="h")
 
-            # Build exact continuous 7-day date window (last 7 days up to today)
-            all_7days = pd.date_range(end=today_dt, periods=7, freq="D")
+            # Current live metrics override the latest hour bucket.
+            hour_map_qty[end_hr] = float(m_qty)
+            hour_map_rev[end_hr] = float(m_net_rev)
+            hour_map_ord[end_hr] = float(m_ord)
 
-            t_qty_vals = [day_map_qty.get(d, 0.0) for d in all_7days]
-            t_rev_vals = [day_map_rev.get(d, 0.0) for d in all_7days]
-            t_ord_vals = [day_map_ord.get(d, 0.0) for d in all_7days]
+            t_qty_vals = [hour_map_qty.get(h, 0.0) for h in all_36h]
+            t_rev_vals = [hour_map_rev.get(h, 0.0) for h in all_36h]
+            t_ord_vals = [hour_map_ord.get(h, 0.0) for h in all_36h]
             t_bv_vals = [
                 (r / o if o > 0 else 0)
                 for r, o in zip(t_rev_vals, t_ord_vals, strict=True)
             ]
 
-            # Helper to trim leading zero padding when data collection started recently
+            # Trim leading zeros (data collection started recently).
             def _trim_leading_zeros(vals: list[float]) -> list[float]:
                 first_nz = next((i for i, v in enumerate(vals) if v > 0), None)
                 if first_nz is not None and first_nz > 0:
@@ -286,13 +276,6 @@ def render_operational_metrics(
             t_rev_vals = _trim_leading_zeros(t_rev_vals)
             t_ord_vals = _trim_leading_zeros(t_ord_vals)
             t_bv_vals = _trim_leading_zeros(t_bv_vals)
-
-            # Day labels for the sparkline axis (weekday initials; last = "Tdy").
-            _wd = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-            day_labels = [
-                (_wd[d.weekday()] if i < len(t_qty_vals) - 1 else "Tdy")
-                for i, d in enumerate(all_7days[-len(t_qty_vals) :])
-            ]
 
             from src.config.ui_config import CHART_THEMES
 
@@ -306,28 +289,24 @@ def render_operational_metrics(
                 theme_cfg.get("spark_qty", "#06b6d4"),
                 prefix="",
                 suffix="",
-                labels=day_labels,
             )
             s_rev, d_rev = _generate_sparkline_svg(
                 t_rev_vals,
                 theme_cfg.get("spark_rev", "#10b981"),
                 prefix="৳",
                 suffix="",
-                labels=day_labels,
             )
             s_ord, d_ord = _generate_sparkline_svg(
                 t_ord_vals,
                 theme_cfg.get("spark_ord", "#3b82f6"),
                 prefix="",
                 suffix="",
-                labels=day_labels,
             )
             s_bv, d_bv = _generate_sparkline_svg(
                 t_bv_vals,
                 theme_cfg.get("spark_bv", "#f59e0b"),
                 prefix="৳",
                 suffix="",
-                labels=day_labels,
             )
 
             # ── New vs Returning Customer Calculation (Lifetime Registry Integrated) ──
@@ -425,7 +404,7 @@ def render_operational_metrics(
 
                     # 7-Day % New Customers Sparkline
                     if not f_df.empty:
-                        f_df["_day"] = f_df["_dt"].dt.floor("D")
+                        f_df["_day"] = f_df["_dt"].dt.floor("d")
                         order_id_col = wc_raw_mapping.get("order_id", "Order ID")
                         if order_id_col not in f_df.columns:
                             order_id_col = next(
@@ -454,11 +433,11 @@ def render_operational_metrics(
                                 if reg_dt and (pd.isna(first_dt) or reg_dt < first_dt):
                                     first_dt = reg_dt
 
-                                if pd.isna(first_dt) or first_dt.floor("D") == d_key:
+                                if pd.isna(first_dt) or first_dt.floor("d") == d_key:
                                     day_map_new[d_key] += 1
 
                         today_dt = f_df["_day"].max()
-                        all_7days = pd.date_range(end=today_dt, periods=7, freq="D")
+                        all_7days = pd.date_range(end=today_dt, periods=7, freq="d")
 
                         t_new_vals = []
                         t_ret_vals = []
