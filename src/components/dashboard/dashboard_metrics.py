@@ -15,6 +15,7 @@ from src.processing.data_processing import (
     safe_coerce_datetime_naive,
 )
 from src.utils.customer_registry import (
+    compute_new_vs_returning_counts,
     get_customer_first_order_date,
     load_customer_registry,
     normalize_phone_key,
@@ -357,6 +358,7 @@ def render_operational_metrics(
                     first_order_map = f_df.groupby("_norm_cust")["_dt"].min().to_dict()
 
                     if not m_df.empty and cust_col in m_df.columns:
+                        # first_order_map is still needed by the 7-day sparkline below.
                         active_dt_col = (
                             "Date"
                             if "Date" in m_df.columns
@@ -365,7 +367,6 @@ def render_operational_metrics(
                         t_act = m_df.copy()
                         t_act["_dt"] = safe_coerce_datetime_naive(t_act[active_dt_col])
                         t_act["_norm_cust"] = t_act[cust_col].apply(normalize_phone_key)
-
                         order_id_col = wc_raw_mapping.get("order_id", "Order ID")
                         if order_id_col not in t_act.columns:
                             order_id_col = next(
@@ -376,28 +377,23 @@ def render_operational_metrics(
                                 ),
                                 t_act.columns[0],
                             )
+                        first_order_map = (
+                            t_act.dropna(subset=["_dt"])
+                            .query("_norm_cust != ''")
+                            .groupby("_norm_cust")["_dt"]
+                            .min()
+                            .to_dict()
+                        )
 
-                        act_uniq = t_act.drop_duplicates(subset=[order_id_col])
-                        for _, urow in act_uniq.iterrows():
-                            c_id = urow.get("_norm_cust")
-                            o_dt = urow.get("_dt")
-
-                            # Check session dataset min date AND persistent lifetime registry min date (from past 1-5 years)
-                            first_dt = first_order_map.get(c_id, o_dt)
-                            reg_dt = get_customer_first_order_date(
-                                c_id, lifetime_registry
-                            )
-                            if reg_dt and (pd.isna(first_dt) or reg_dt < first_dt):
-                                first_dt = reg_dt
-
-                            if (
-                                pd.notna(first_dt)
-                                and pd.notna(o_dt)
-                                and first_dt < o_dt
-                            ):
-                                m_ret_cnt += 1
-                            else:
-                                m_new_cnt += 1
+                        # Authoritative new vs returning using the full 3-bucket
+                        # registry (email -> phone -> name/city). This is the same
+                        # source the Customer Insights panels use, and it correctly
+                        # detects returning customers whose earlier order was keyed
+                        # by a different identity (e.g. email) than the current one.
+                        # The legacy flat-registry + session-window loop below
+                        # under-counted returning customers (it only saw phone keys
+                        # within the cached window).
+                        m_new_cnt, m_ret_cnt = compute_new_vs_returning_counts(m_df)
 
                     # 7-Day % New Customers Sparkline
                     if not f_df.empty:
