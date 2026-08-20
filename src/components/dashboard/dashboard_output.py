@@ -384,7 +384,10 @@ def _stream_ai_briefing(
     if new_customers is None or returning_customers is None:
         from src.utils.customer_registry import compute_new_vs_returning_counts
 
-        new_customers, returning_customers = compute_new_vs_returning_counts(active_df)
+        full_df_for_cust = st.session_state.get("wc_curr_df")
+        new_customers, returning_customers = compute_new_vs_returning_counts(
+            active_df, full_df_for_cust
+        )
 
     context_data = {
         "sales_summary": summ,

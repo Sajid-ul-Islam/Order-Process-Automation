@@ -393,7 +393,9 @@ def render_operational_metrics(
                         # The legacy flat-registry + session-window loop below
                         # under-counted returning customers (it only saw phone keys
                         # within the cached window).
-                        m_new_cnt, m_ret_cnt = compute_new_vs_returning_counts(m_df)
+                        m_new_cnt, m_ret_cnt = compute_new_vs_returning_counts(
+                            m_df, full_df, wc_raw_mapping
+                        )
 
                     # 7-Day % New Customers Sparkline
                     if not f_df.empty:
