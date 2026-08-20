@@ -100,7 +100,7 @@ def _generate_sparkline_svg(
         )
         extra = avg_line + val_text + label_svg
 
-    svg_raw = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 {width} {height}" preserveAspectRatio="none">
+    svg_raw = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 {width} {height}" preserveAspectRatio="none" style="display:block; width:100%; height:34px;">
         {grad}
         <title>7-day trend (latest {prefix}{latest_v:,.0f}{suffix})</title>
         <path d="{area_data}" fill="url(#{gid})" />
@@ -109,13 +109,9 @@ def _generate_sparkline_svg(
         <circle cx="{ex:.1f}" cy="{ey:.1f}" r="2.5" fill="#ffffff" stroke="{color}" stroke-width="1.5" />
     </svg>"""
 
-    import base64
-
-    b64_svg = base64.b64encode(svg_raw.encode("utf-8")).decode("utf-8")
-
     svg_html = f"""
-    <div class="metric-sparkline" title="7-day trend (latest {prefix}{latest_v:,.0f}{suffix})" style="height:34px;">
-        <img src="data:image/svg+xml;base64,{b64_svg}" style="width: 100%; height: 34px; display: block;" />
+    <div class="metric-sparkline" title="7-day trend (latest {prefix}{latest_v:,.0f}{suffix})" style="height:34px; width:100%; display:block;">
+        {svg_raw}
     </div>
     """
 
@@ -213,18 +209,14 @@ def _generate_mini_bar_chart_svg(
     tooltip_txt = f"7-Day Customer Mix: Today {p_new_l:.0f}% New vs {p_ret_l:.0f}% Ret | 7D Avg: {avg_new:.0f}% New / {avg_ret:.0f}% Ret"
     bars_str = "\n".join(bars_svg)
 
-    svg_raw = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 30" preserveAspectRatio="none">
+    svg_raw = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 30" preserveAspectRatio="none" style="display:block; width:100%; height:30px;">
         <title>{tooltip_txt}</title>
         {bars_str}
     </svg>"""
 
-    import base64
-
-    b64_svg = base64.b64encode(svg_raw.encode("utf-8")).decode("utf-8")
-
     svg_html = f"""
-    <div class="metric-sparkline" title="{tooltip_txt}">
-        <img src="data:image/svg+xml;base64,{b64_svg}" style="width: 100%; height: 30px; display: block;" />
+    <div class="metric-sparkline" title="{tooltip_txt}" style="height:30px; width:100%; display:block;">
+        {svg_raw}
     </div>
     """
 

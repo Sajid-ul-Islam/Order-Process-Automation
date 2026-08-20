@@ -983,10 +983,6 @@ def generate_executive_briefing(
 
     dm = dm or {}
 
-    rev_trend = ""
-    if prev_rev is not None:
-        rev_trend = " 📈" if today_rev >= prev_rev else " 📉"
-
     net_rev = today_rev
     g_rev = gross_rev if gross_rev is not None else net_rev
     cb_disc = cashback_disc if cashback_disc is not None else max(0.0, g_rev - net_rev)
@@ -997,25 +993,17 @@ def generate_executive_briefing(
     cb_per_basket = (cb_disc / today_orders) if today_orders > 0 else 0.0
     pct_basket_lost = (cb_per_basket / gross_aov * 100) if gross_aov > 0 else 0.0
 
-    rev_line = (
-        f"💵 *NET REALIZED REVENUE (After Cashback):* ৳{net_rev:,.0f}{rev_trend}"
-        if prev_rev is not None
-        else f"💵 *NET REALIZED REVENUE (After Cashback):* ৳{net_rev:,.0f}"
-    )
-
     report_lines = [
         "📊 *DEEN-OPS Executive Briefing*",
         f"📅 {bd_now().strftime('%A, %d %B %Y')}",
         "",
-        rev_line,
+        f"💵 *NET REALIZED REVENUE (After Cashback):* ৳{net_rev:,.0f}",
         f"🏷️ *Gross Revenue (Pre-Discount):* ৳{g_rev:,.0f}",
     ]
 
     if cb_disc > 0:
-        report_lines.extend(
-            [
-                f"💸 *Total Cashback & Fee Discounts:* -৳{cb_disc:,.0f} ({loss_pct:.1f}% revenue lost)",
-            ]
+        report_lines.append(
+            f"💸 *Total Cashback & Fee Discounts:* -৳{cb_disc:,.0f} ({loss_pct:.1f}% revenue lost)"
         )
 
     report_lines.extend(
@@ -1034,56 +1022,21 @@ def generate_executive_briefing(
             ]
         )
 
-    dispatched_cnt = dm.get("dispatched", 0)
-    pending_cnt = dm.get("pending", 0)
-    pathao_cnt = dm.get("pathao_count", 0)
-    other_cnt = dm.get("other_count", 0)
-    dispatch_rate = dm.get("dispatch_rate", 0.0)
-
     report_lines.extend(
         [
             "",
-            f"🚚 *Dispatched Orders (Actual):* {dispatched_cnt:,.0f} ({dispatch_rate:.1f}% fulfillment rate)",
-            f"  • Pathao Courier: {pathao_cnt:,.0f}",
-            f"  • Other / Self-Handover: {other_cnt:,.0f}",
-            f"⏳ *Pending / Processing:* {pending_cnt:,.0f}",
+            "",
             f"📋 *Last Shipped Order:* {dm.get('last_shipped_order', 'N/A')}",
             f"🖨️ *Last Pathao Print:* {dm.get('last_pathao_print', 'N/A')}",
             "",
-            f"🛒 *Total Shift Orders:* {today_orders:,.0f}",
+            f"🛒 *Total Orders:* {today_orders:,.0f}",
+            f"🔄 *Exchange:* {dm.get('exchange_dispatch', 0):,.0f}",
+            f"🚀 *Ecom:* {dm.get('ecom_dispatch', 0):,.0f}",
+            f"🏪 *Outlet:* {dm.get('outlet_dispatch', 0):,.0f}",
+            "",
+            "🔥 *Top Performing Products:*",
         ]
     )
-
-    if new_customers is not None or returning_customers is not None:
-        n_c = int(new_customers or 0)
-        r_c = int(returning_customers or 0)
-        tot_c = n_c + r_c
-        pct_n = (n_c / tot_c * 100) if tot_c > 0 else 0
-        pct_r = (r_c / tot_c * 100) if tot_c > 0 else 0
-        report_lines.append(
-            f"👥 *Customer Mix:* 🆕 {n_c:,} New ({pct_n:.0f}%) | 🔄 {r_c:,} Returning ({pct_r:.0f}%)"
-        )
-
-    report_lines.extend(
-        [
-            f"🔄 *Exchange Orders:* {dm.get('exchange_dispatch', 0):,.0f}",
-            f"🚀 *Ecom Orders:* {dm.get('ecom_dispatch', 0):,.0f}",
-            f"🏪 *Outlet Orders:* {dm.get('outlet_dispatch', 0):,.0f}",
-        ]
-    )
-
-    if prev_rev is not None:
-        report_lines.extend(
-            [
-                "",
-                f"📉 *Yesterday's Net Shipped Revenue:* ৳{prev_rev:,.0f} ({prev_orders} orders)",
-            ]
-        )
-
-    if forecast_str:
-        report_lines.append(forecast_str)
-
-    report_lines.extend(["", "🔥 *Top Performing Products:*"])
 
     if top is not None and not top.empty:
         if "Clean_Product" in top.columns:
@@ -1120,3 +1073,4 @@ def generate_executive_briefing(
     )
 
     return "\n".join(report_lines)
+

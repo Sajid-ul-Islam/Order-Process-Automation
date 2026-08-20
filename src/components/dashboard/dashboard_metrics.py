@@ -267,7 +267,11 @@ def render_operational_metrics(
             def _trim_leading_zeros(vals: list[float]) -> list[float]:
                 first_nz = next((i for i, v in enumerate(vals) if v > 0), None)
                 if first_nz is not None and first_nz > 0:
-                    return vals[first_nz:]
+                    trimmed = vals[first_nz:]
+                    if len(trimmed) >= 2:
+                        return trimmed
+                    # Keep at least 2 points so sparkline renders even with only 1 recent point
+                    return vals[max(0, first_nz - 1) :]
                 return vals
 
             t_qty_vals = _trim_leading_zeros(t_qty_vals)
