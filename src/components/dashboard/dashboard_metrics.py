@@ -35,18 +35,23 @@ def render_operational_metrics(
     avg_proc_time: float = 0,
 ):
     """Render the operational KPI cards and return updated aggregates."""
+    if m_df is None:
+        m_df = pd.DataFrame()
     if (
         "Category" not in m_df.columns
         or "Product Name" not in m_df.columns
         or "Clean_Product" not in m_df.columns
     ):
         m_df, _ = prepare_granular_data(m_df, wc_raw_mapping)
-    if c_df is not None and (
-        "Category" not in c_df.columns
-        or "Product Name" not in c_df.columns
-        or "Clean_Product" not in c_df.columns
-    ):
-        c_df, _ = prepare_granular_data(c_df, wc_raw_mapping)
+    if c_df is not None and not c_df.empty:
+        if (
+            "Category" not in c_df.columns
+            or "Product Name" not in c_df.columns
+            or "Clean_Product" not in c_df.columns
+        ):
+            c_df, _ = prepare_granular_data(c_df, wc_raw_mapping)
+    else:
+        c_df = None
 
     active_df = m_df
     drill, summ, top, basket = aggregate_data(m_df, dummy_mapping)

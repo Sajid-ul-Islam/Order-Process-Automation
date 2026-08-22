@@ -79,8 +79,8 @@ def test_all_orders_is_processing_plus_shipped_today(op_state):
     orders = [
         (301, "processing", pc - timedelta(minutes=30), pc - timedelta(minutes=30), ""),
         (302, "processing", pc + timedelta(hours=1), pc + timedelta(hours=1), ""),
-        (303, "shipped", now - timedelta(hours=3), now - timedelta(hours=1), "DD303"),
-        (304, "shipped", now - timedelta(days=1), now - timedelta(days=1), "DD304"),
+        (303, "shipped", pc + timedelta(hours=1), pc + timedelta(hours=2), "DD303"),
+        (304, "shipped", pc - timedelta(hours=2), pc - timedelta(hours=2), "DD304"),
         (305, "cancelled", pc - timedelta(hours=2), pc - timedelta(hours=2), ""),
     ]
     df = build_order_df(orders)

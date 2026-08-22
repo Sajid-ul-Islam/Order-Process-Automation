@@ -100,20 +100,22 @@ def _generate_sparkline_svg(
         )
         extra = avg_line + val_text + label_svg
 
-    svg_raw = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 {width} {height}" preserveAspectRatio="none" style="display:block; width:100%; height:34px;">
-        {grad}
-        <title>7-day trend (latest {prefix}{latest_v:,.0f}{suffix})</title>
-        <path d="{area_data}" fill="url(#{gid})" />
-        <path d="{path_data}" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        {extra}
-        <circle cx="{ex:.1f}" cy="{ey:.1f}" r="2.5" fill="#ffffff" stroke="{color}" stroke-width="1.5" />
-    </svg>"""
+    svg_raw = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 {width} {height}" '
+        f'preserveAspectRatio="none" style="display:block; width:100%; height:34px;">'
+        f'{grad}'
+        f'<title>7-day trend (latest {prefix}{latest_v:,.0f}{suffix})</title>'
+        f'<path d="{area_data}" fill="url(#{gid})" />'
+        f'<path d="{path_data}" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />'
+        f'{extra}'
+        f'<circle cx="{ex:.1f}" cy="{ey:.1f}" r="2.5" fill="#ffffff" stroke="{color}" stroke-width="1.5" />'
+        f'</svg>'
+    )
 
-    svg_html = f"""
-    <div class="metric-sparkline" title="7-day trend (latest {prefix}{latest_v:,.0f}{suffix})" style="height:34px; width:100%; display:block;">
-        {svg_raw}
-    </div>
-    """
+    svg_html = (
+        f'<div class="metric-sparkline" title="7-day trend (latest {prefix}{latest_v:,.0f}{suffix})" '
+        f'style="height:34px; width:100%; display:block;">{svg_raw}</div>'
+    )
 
     if minimal:
         badge_html = ""
@@ -122,11 +124,13 @@ def _generate_sparkline_svg(
         delta_pct = ((latest_v - prev_v) / abs(prev_v) * 100.0) if prev_v else 0.0
         arrow = "▲" if delta_pct >= 0 else "▼"
         delta_color = "#10b981" if delta_pct >= 0 else "#ef4444"
-        badge_html = f"""<div class="metric-detail-row" style="color:var(--text-color, #000000); font-weight:700; opacity:1;">
-            <span>🔥 7D Peak: <b>{prefix}{max_v:,.0f}{suffix}</b></span>
-            <span>📊 7D Avg: <b>{prefix}{sum(values)/len(values):,.0f}{suffix}</b></span>
-            <span style="color:{delta_color};">Today {arrow}{abs(delta_pct):.0f}% vs prev</span>
-        </div>"""
+        badge_html = (
+            f'<div class="metric-detail-row" style="color:var(--text-color, #000000); font-weight:700; opacity:1;">'
+            f'<span>🔥 7D Peak: <b>{prefix}{max_v:,.0f}{suffix}</b></span>'
+            f'<span>📊 7D Avg: <b>{prefix}{sum(values)/len(values):,.0f}{suffix}</b></span>'
+            f'<span style="color:{delta_color};">Today {arrow}{abs(delta_pct):.0f}% vs prev</span>'
+            f'</div>'
+        )
 
     return svg_html, badge_html
 
@@ -183,10 +187,12 @@ def _generate_mini_bar_chart_svg(
             f"{day_label}: 🆕 {pct_new:.0f}% New | 🔄 {pct_ret:.0f}% Returning"
         )
 
-        bar_item = f"""<g title="{bar_tooltip}">
-            <rect x="{x_new:.1f}" y="{y_new:.1f}" width="{single_bar_w:.1f}" height="{h_new:.1f}" fill="{color1}" rx="1" opacity="0.95"><title>{bar_tooltip}</title></rect>
-            <rect x="{x_ret:.1f}" y="{y_ret:.1f}" width="{single_bar_w:.1f}" height="{h_ret:.1f}" fill="{color2}" rx="1" opacity="0.90"><title>{bar_tooltip}</title></rect>
-        </g>"""
+        bar_item = (
+            f'<g title="{bar_tooltip}">'
+            f'<rect x="{x_new:.1f}" y="{y_new:.1f}" width="{single_bar_w:.1f}" height="{h_new:.1f}" fill="{color1}" rx="1" opacity="0.95"><title>{bar_tooltip}</title></rect>'
+            f'<rect x="{x_ret:.1f}" y="{y_ret:.1f}" width="{single_bar_w:.1f}" height="{h_ret:.1f}" fill="{color2}" rx="1" opacity="0.90"><title>{bar_tooltip}</title></rect>'
+            f'</g>'
+        )
         bars_svg.append(bar_item)
 
     latest_new = new_values[-1]
@@ -209,20 +215,24 @@ def _generate_mini_bar_chart_svg(
     tooltip_txt = f"7-Day Customer Mix: Today {p_new_l:.0f}% New vs {p_ret_l:.0f}% Ret | 7D Avg: {avg_new:.0f}% New / {avg_ret:.0f}% Ret"
     bars_str = "\n".join(bars_svg)
 
-    svg_raw = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 30" preserveAspectRatio="none" style="display:block; width:100%; height:30px;">
-        <title>{tooltip_txt}</title>
-        {bars_str}
-    </svg>"""
+    svg_raw = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 30" '
+        f'preserveAspectRatio="none" style="display:block; width:100%; height:30px;">'
+        f'<title>{tooltip_txt}</title>'
+        f'{bars_str}'
+        f'</svg>'
+    )
 
-    svg_html = f"""
-    <div class="metric-sparkline" title="{tooltip_txt}" style="height:30px; width:100%; display:block;">
-        {svg_raw}
-    </div>
-    """
+    svg_html = (
+        f'<div class="metric-sparkline" title="{tooltip_txt}" '
+        f'style="height:30px; width:100%; display:block;">{svg_raw}</div>'
+    )
 
-    badge_html = f"""<div class="metric-detail-row" style="color:var(--text-color, #000000); font-weight:700; opacity:1;">
-        <span style="color:{color1};">🆕 7D New: <b>{avg_new:.0f}% avg</b></span>
-        <span style="color:{color2};">🔄 7D Ret: <b>{avg_ret:.0f}% avg</b></span>
-    </div>"""
+    badge_html = (
+        f'<div class="metric-detail-row" style="color:var(--text-color, #000000); font-weight:700; opacity:1;">'
+        f'<span style="color:{color1};">🆕 7D New: <b>{avg_new:.0f}% avg</b></span>'
+        f'<span style="color:{color2};">🔄 7D Ret: <b>{avg_ret:.0f}% avg</b></span>'
+        f'</div>'
+    )
 
     return svg_html, badge_html

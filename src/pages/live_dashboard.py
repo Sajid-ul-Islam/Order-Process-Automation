@@ -107,14 +107,14 @@ def _refresh_core_metrics():
             raw = st.session_state.get("wc_backlog_df")
         else:
             raw = st.session_state.get("wc_prev_df")
-        if raw is None or raw.empty:
+        if raw is None:
             st.caption("⏳ Waiting for data...")
             return
         m_df = apply_order_view(raw, nav_mode, order_view_mode)
-        if m_df is None or m_df.empty:
-            return
+        if m_df is None:
+            m_df = pd.DataFrame()
         m_df, _ = prepare_granular_data(
-            m_df, find_columns(m_df) if m_df is not None else {}
+            m_df, find_columns(m_df) if not m_df.empty else {}
         )
 
     dummy_mapping = {
