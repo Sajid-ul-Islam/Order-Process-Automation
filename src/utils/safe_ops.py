@@ -7,7 +7,35 @@ from typing import Callable, TypeVar
 import pandas as pd
 import streamlit as st
 
+from src.utils.logging import log_error
+
 T = TypeVar("T")
+
+
+def safe_render(
+    render_fn: Callable[[], T],
+    fallback_msg: str = "Section unavailable.",
+) -> T | None:
+    """Execute a rendering function with graceful failure.
+
+    On exception, displays a warning instead of crashing the page.
+
+    Args:
+        render_fn: Zero-argument callable that renders a UI section.
+        fallback_msg: Message shown if the render function fails.
+
+    Returns:
+        The return value of render_fn, or None on failure.
+    """
+    try:
+        return render_fn()
+    except Exception as e:
+        try:
+            log_error(e, context="safe_render", details={"fallback_msg": fallback_msg})
+        except Exception:
+            pass
+        st.warning(f"{fallback_msg} Error: {e}")
+        return None
 
 
 def safe_filter(
