@@ -260,11 +260,6 @@ def render_operational_metrics(
             )
             all_36h = pd.date_range(end=end_hr, periods=36, freq="h")
 
-            # Current live metrics override the latest hour bucket.
-            hour_map_qty[end_hr] = float(m_qty)
-            hour_map_rev[end_hr] = float(m_net_rev)
-            hour_map_ord[end_hr] = float(m_ord)
-
             t_qty_vals = [hour_map_qty.get(h, 0.0) for h in all_36h]
             t_rev_vals = [hour_map_rev.get(h, 0.0) for h in all_36h]
             t_ord_vals = [hour_map_ord.get(h, 0.0) for h in all_36h]
@@ -276,13 +271,14 @@ def render_operational_metrics(
             # Trim leading zeros (data collection started recently).
             def _trim_leading_zeros(vals: list[float]) -> list[float]:
                 first_nz = next((i for i, v in enumerate(vals) if v > 0), None)
-                if first_nz is not None and first_nz > 0:
+                if first_nz is not None:
+                    nz_count = sum(1 for v in vals if v > 0)
+                    if nz_count < 2:
+                        return []
                     trimmed = vals[first_nz:]
                     if len(trimmed) >= 2:
                         return trimmed
-                    # Keep at least 2 points so sparkline renders even with only 1 recent point
-                    return vals[max(0, first_nz - 1) :]
-                return vals
+                return []
 
             t_qty_vals = _trim_leading_zeros(t_qty_vals)
             t_rev_vals = _trim_leading_zeros(t_rev_vals)
@@ -301,24 +297,28 @@ def render_operational_metrics(
                 theme_cfg.get("spark_qty", "#06b6d4"),
                 prefix="",
                 suffix="",
+                title="36-hour trend",
             )
             s_rev, d_rev = _generate_sparkline_svg(
                 t_rev_vals,
                 theme_cfg.get("spark_rev", "#10b981"),
                 prefix="৳",
                 suffix="",
+                title="36-hour trend",
             )
             s_ord, d_ord = _generate_sparkline_svg(
                 t_ord_vals,
                 theme_cfg.get("spark_ord", "#3b82f6"),
                 prefix="",
                 suffix="",
+                title="36-hour trend",
             )
             s_bv, d_bv = _generate_sparkline_svg(
                 t_bv_vals,
                 theme_cfg.get("spark_bv", "#f59e0b"),
                 prefix="৳",
                 suffix="",
+                title="36-hour trend",
             )
 
             # ── New vs Returning Customer Calculation (Lifetime Registry Integrated) ──
@@ -454,6 +454,7 @@ def render_operational_metrics(
                             color="#a855f7",
                             prefix="",
                             suffix="%",
+                            title="7-day trend",
                         )
                         d_cust = ""
             except Exception as e:

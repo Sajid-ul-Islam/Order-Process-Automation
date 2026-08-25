@@ -18,6 +18,7 @@ def _generate_sparkline_svg(
     suffix: str = "",
     labels: list[str] | None = None,
     minimal: bool = True,
+    title: str = "Trend",
 ) -> tuple[str, str]:
     """Generates a pure-gradient SVG sparkline (no numbers / text by default).
 
@@ -29,6 +30,11 @@ def _generate_sparkline_svg(
     Returns (svg_html_snippet, micro_badge_html_snippet).
     """
     if not values or len(values) < 2:  # A line needs at least 2 points to show a trend.
+        return "", ""
+
+    # Don't show chart if there is only 1 non-zero value
+    non_zero = [v for v in values if v > 0]
+    if len(non_zero) < 2:
         return "", ""
 
     # Normalize values to fit the SVG coordinate system (top 24px reserved for plot,
@@ -104,7 +110,7 @@ def _generate_sparkline_svg(
         f'<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 {width} {height}" '
         f'preserveAspectRatio="none" style="display:block; width:100%; height:34px;">'
         f"{grad}"
-        f"<title>7-day trend (latest {prefix}{latest_v:,.0f}{suffix})</title>"
+        f"<title>{title} (latest {prefix}{latest_v:,.0f}{suffix})</title>"
         f'<path d="{area_data}" fill="url(#{gid})" />'
         f'<path d="{path_data}" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />'
         f"{extra}"
@@ -113,7 +119,7 @@ def _generate_sparkline_svg(
     )
 
     svg_html = (
-        f'<div class="metric-sparkline" title="7-day trend (latest {prefix}{latest_v:,.0f}{suffix})" '
+        f'<div class="metric-sparkline" title="{title} (latest {prefix}{latest_v:,.0f}{suffix})" '
         f'style="height:34px; width:100%; display:block;">{svg_raw}</div>'
     )
 

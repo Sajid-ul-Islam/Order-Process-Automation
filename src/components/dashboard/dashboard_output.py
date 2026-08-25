@@ -636,9 +636,9 @@ def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, toda
     with bottom_tabs[1]:
         st.markdown("#### 📈 30-Day Revenue & Order Trend")
         hist_df = load_snapshot_history(30)
-        if hist_df.empty:
+        if hist_df.empty or len(hist_df) < 2:
             st.info(
-                "📂 No history snapshots yet. Metrics are saved automatically each time the dashboard loads with live data."
+                "📂 Need at least 2 days of history to show trends. Metrics are saved automatically each time the dashboard loads with live data."
             )
         else:
             import plotly.graph_objects as go
