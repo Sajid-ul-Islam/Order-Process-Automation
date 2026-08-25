@@ -24,6 +24,7 @@ _MAPPING_RULES = {
     "jeans": "Jeans Pant",
     "chino": "Twill Pant",
     "twill": "Twill Pant",
+    "cargo": "Cargo Trouser",
     "trouser": "Trouser",
     "jogger": "Trouser",
     "panjabi": "Panjabi",

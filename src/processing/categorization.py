@@ -77,6 +77,11 @@ def get_category_for_sales(name) -> str:
     if "chino" in name_str:
         return "Twill"
 
+    # Cargo Trouser must be matched BEFORE Trousers/pants keywords so
+    # "Cargo Trouser" is its own category, not swallowed by "Trousers".
+    if "cargo" in name_str:
+        return "Cargo Trouser"
+
     specific_cats = {
         "Boxer": ["boxer"],
         "Panjabi": ["panjabi", "punjabi"],
@@ -185,5 +190,8 @@ def get_sub_category_for_sales(name, category) -> str:
         if "regular fit" in name_str:
             return "Regular Fit Trousers"
         return "Trousers"
+
+    elif category == "Cargo Trouser":
+        return "Cargo Trouser"
 
     return category

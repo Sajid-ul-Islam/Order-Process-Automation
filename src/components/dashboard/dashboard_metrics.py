@@ -866,7 +866,10 @@ def render_revenue_cashback_comparison_section(
         if code in LOW_VAL_CODES:
             return "Low"
         comb = f"{str(r.get('Item Name', ''))} {str(r.get('Category', ''))}".lower()
-        if any(kw in comb for kw in ["jeans", "panjabi", "sweatshirt", "trouser"]):
+        if any(
+            kw in comb
+            for kw in ["jeans", "panjabi", "sweatshirt", "trouser", "cargo"]
+        ):
             return "High"
         if "shirt" in comb and "t-shirt" not in comb:
             return "Mid"

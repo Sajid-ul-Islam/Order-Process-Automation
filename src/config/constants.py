@@ -103,6 +103,8 @@ COMMON_CATS = [
     "Trousers",
     "  \u21b3 Regular Fit Trousers",
     "  \u21b3 Joggers",
+    "Cargo Trouser",
+    "  \u21b3 Cargo Trouser",
     "Wallet",
     "  \u21b3 Bifold Wallet",
     "  \u21b3 Card Holder",
