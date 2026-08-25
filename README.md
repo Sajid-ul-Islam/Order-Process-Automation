@@ -1,28 +1,40 @@
 # DEEN OPS Terminal
 
-AI-assisted operations workspace for WooCommerce, Pathao, inventory, and reporting workflows.
+AI-assisted operations workspace for WooCommerce, Pathao courier logistics, inventory reconciliation, and shift analytics workflows.
 
-## Highlights
+## 🚀 Key Highlights
 
-- Streamlit dashboard with live operational views, inventory analysis, and courier tooling
-- WooCommerce and Pathao integrations with local snapshot fallbacks
-- **Return Analytics Engine:** Match raw return data from Google Sheets against exact WooCommerce orders and live Pathao courier tracking statuses concurrently.
-- **Outlet-wise Stock Tracking:** Advanced pills-based filtering to monitor inventory discrepancies between E-com and physical retail outlets.
-- **Manual Stock Fallback:** Upload manual stock CSV/Excel files directly to the dashboard if WooCommerce API is unreachable or out of sync.
-- Multi-provider LLM routing for Data Pilot workflows
-- Runtime configuration validation backed by [src/config/secrets_schema.json](src/config/secrets_schema.json)
-- Shared HTTP backoff for WooCommerce, Pathao, and URL ingestion calls
-- Container healthcheck support via [scripts/healthcheck.py](scripts/healthcheck.py)
+- **Live Operational Dashboard:**
+  - Real-time shift tracking across **Today**, **Prev**, and **Backlog** operational windows.
+  - Interactive KPI cards for **Gross Items**, **Actual Net Revenue** (with consolidated cashback breakdown), **Orders**, **Basket Size (AOV)**, and **Customer Mix**.
+  - Integrated 36-hour hourly trend sparklines and 7-day new-customer acquisition curves with cubic Bézier smoothing and adaptive theme styling.
+  - Shift Targets with goal progress bars, 30-Day snapshot history charts, and 1-click **Shift Handover Report** generation.
+- **Strict Order Lifecycle & Shipped Tracking:**
+  - Strict status whitelist enforcement ensuring only confirmed/completed orders count toward dispatch and revenue metrics.
+  - Automatic protection against status reversions: orders changed back to `on-hold`, `waiting`, `pending`, or `processing` are never counted as shipped (even if a courier consignment ID was previously generated) and are kept in active/pending queues.
+  - Persistent disk-cached shipped history with automatic cache purging for reverted orders.
+- **Pathao Logistics & Dispatch Suite:**
+  - Live consignment tracking, bulk label generation, and automated delivery health audits.
+- **Return Analytics Engine:**
+  - Concurrently reconciles returned parcels against live WooCommerce order statuses and Pathao delivery logs to flag prepaid refund risks and status mismatches.
+- **Inventory & Outlet Stock Distribution:**
+  - Monitors stock discrepancies between physical retail outlets and central E-commerce warehouses with instant CSV/Excel fallback support.
+- **Lifetime Customer Identity Registry:**
+  - Multi-tier identity matching (Phone ➔ Email ➔ Name/City) to calculate accurate new vs. returning customer retention rates.
+- **Data Pilot AI Assistant:**
+  - Natural-language business intelligence queries powered by multi-provider LLM routing (OpenRouter, Gemini, Groq, Ollama, Hugging Face).
+- **Enterprise Resilience:**
+  - Shared exponential backoff for external APIs, configuration validation ([src/config/secrets_schema.json](src/config/secrets_schema.json)), and container healthcheck support.
 
-## Tech Stack
+## 🛠️ Tech Stack
 
-- Frontend: Streamlit, custom CSS, Plotly
-- Data: pandas, polars, numpy
-- Integrations: WooCommerce REST API, Pathao Courier API
-- AI: OpenRouter, Gemini, Groq, Ollama, Hugging Face
-- Tooling: pytest, pre-commit, black, isort, flake8
+- **Frontend / UI:** Streamlit, Vanilla CSS, Plotly Express & Graph Objects, Pure SVG Sparklines
+- **Data Engine:** pandas, Polars, numpy
+- **Integrations:** WooCommerce REST API, Pathao Courier REST API
+- **AI & LLM:** OpenRouter, Google Gemini, Groq, Ollama, Hugging Face
+- **Quality & Testing:** pytest, pre-commit, Black, isort, Flake8, Ruff
 
-## Quick Start
+## ⚡ Quick Start
 
 ```bash
 git clone https://github.com/Sajid-ul-Islam/DEEN-OPS.git
@@ -35,9 +47,9 @@ pre-commit install
 streamlit run app.py
 ```
 
-## Configuration
+## ⚙️ Configuration
 
-The app supports `.streamlit/secrets.toml` and environment variable fallbacks for WooCommerce, Pathao, and LLM providers. The contract is documented in [src/config/secrets_schema.json](src/config/secrets_schema.json).
+Configuration is managed via `.streamlit/secrets.toml` with environment variable fallbacks. The schema is validated at startup via [src/config/secrets_schema.json](src/config/secrets_schema.json).
 
 Example `.streamlit/secrets.toml`:
 
@@ -69,27 +81,14 @@ client_secret = "..."
 server_metadata_url = "..."
 ```
 
-Supported env vars:
+Supported Environment Variables:
 
-- `WC_URL`, `WC_KEY`, `WC_SECRET`
-- `PATHAO_BASE_URL`, `PATHAO_CLIENT_ID`, `PATHAO_CLIENT_SECRET`, `PATHAO_USERNAME`, `PATHAO_PASSWORD`
-- `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `HF_API_KEY`
-- `API_RETRY_MAX_ATTEMPTS`, `API_BACKOFF_FACTOR_SECONDS`, `API_BACKOFF_MAX_SECONDS`
+- **WooCommerce:** `WC_URL`, `WC_KEY`, `WC_SECRET`
+- **Pathao:** `PATHAO_BASE_URL`, `PATHAO_CLIENT_ID`, `PATHAO_CLIENT_SECRET`, `PATHAO_USERNAME`, `PATHAO_PASSWORD`
+- **LLM APIs:** `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `HF_API_KEY`
+- **Resilience:** `API_RETRY_MAX_ATTEMPTS`, `API_BACKOFF_FACTOR_SECONDS`, `API_BACKOFF_MAX_SECONDS`
 
-The app now validates partially configured integrations at startup and surfaces issues in the sidebar under `Maintenance & Settings`.
-
-## Dependency Layout
-
-- `requirements.txt` installs runtime dependencies
-- `requirements_dev.txt` installs runtime and development tooling
-
-Optional: generate a pinned `requirements.lock` for reproducible installs with:
-
-```bash
-python scripts/generate_requirements_lock.py
-```
-
-## Project Structure
+## 📂 Project Structure
 
 ```text
 DEEN-OPS/
@@ -117,7 +116,9 @@ DEEN-OPS/
 `-- tests/
 ```
 
-## Development
+## 🧪 Testing & CI
+
+Run the automated test suite locally:
 
 ```bash
 pytest tests/ -v
@@ -125,19 +126,10 @@ pytest tests/ --cov=src --cov-report=term-missing
 pre-commit run --all-files
 ```
 
-See [DEVELOPMENT.md](DEVELOPMENT.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [ERROR_HANDLING_GUIDE.md](ERROR_HANDLING_GUIDE.md).
+Continuous integration is enforced on `main` and pull requests via GitHub Actions ([.github/workflows/tests.yml](.github/workflows/tests.yml)).
 
-## CI
+## 🚢 Deployment
 
-[![Tests](https://github.com/Sajid-ul-Islam/Order-Process-Automation/actions/workflows/tests.yml/badge.svg)](https://github.com/Sajid-ul-Islam/Order-Process-Automation/actions/workflows/tests.yml)
-
-GitHub Actions runs the test suite from [.github/workflows/tests.yml](.github/workflows/tests.yml) using `requirements_dev.txt`.
-
-## Deployment Notes
-
-- Local: `streamlit run app.py`
-- Staging: Docker or Docker Compose with env-based secrets injection
-- Production: Kubernetes with external secret management, TLS ingress, and autoscaling
-- CI/CD: run pytest, build the image, and deploy only after tests pass
-
-The Docker image uses the Streamlit `/_stcore/health` endpoint through [scripts/healthcheck.py](scripts/healthcheck.py), so container health probes do not depend on `curl`.
+- **Local:** `streamlit run app.py`
+- **Docker:** Build using the included `Dockerfile` with container health probes configured via [scripts/healthcheck.py](scripts/healthcheck.py).
+- **Staging / Production:** Kubernetes or Docker Compose with environment-based secret injection and TLS ingress.
