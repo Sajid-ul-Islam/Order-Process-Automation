@@ -738,34 +738,13 @@ def render_revenue_cashback_comparison_chart(m_df: pd.DataFrame) -> None:
             cb_orders = int(cb_mask.sum())
             clean_orders = len(m_df) - cb_orders
 
-        pie_orders_df = pd.DataFrame(
-            {
-                "Segment": ["With Cashback", "No Cashback"],
-                "Orders": [cb_orders, clean_orders],
-            }
-        )
+        # Lightweight Chart.js donut for the orders side (rendered inside
+        # pie_c1 below): a 2-segment at-a-glance summary where a full Plotly
+        # figure is disproportionate overhead.
+        from src.components.dashboard.chartjs import render_donut_chartjs
 
-        fig_pie_orders = px.pie(
-            pie_orders_df,
-            names="Segment",
-            values="Orders",
-            title="Orders: Cashback vs No-Cashback",
-            color="Segment",
-            color_discrete_map={
-                "With Cashback": "#f59e0b",
-                "No Cashback": "#10b981",
-            },
-            hole=0.45,
-        )
-        fig_pie_orders.update_traces(
-            textinfo="percent+label",
-            hovertemplate="%{label}<br>%{value:,} orders (%{percent})<extra></extra>",
-        )
-        fig_pie_orders.update_layout(
-            margin=dict(t=50, b=20, l=10, r=10),
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=-0.25),
-        )
+        cb_total = max(1, cb_orders + clean_orders)
+        _cb_share = round(cb_orders / cb_total * 100)
 
         # — Pie 2: Gross revenue of cashback'd orders vs clean orders —
         gross_col = (
@@ -818,6 +797,14 @@ def render_revenue_cashback_comparison_chart(m_df: pd.DataFrame) -> None:
         )
 
         with pie_c1:
-            st.plotly_chart(fig_pie_orders, use_container_width=True)
+            st.caption(f"🧾 Orders: Cashback vs No-Cashback — {_cb_share}% cashbacked")
+            render_donut_chartjs(
+                labels=["With Cashback", "No Cashback"],
+                values=[float(cb_orders), float(clean_orders)],
+                colors=["#f59e0b", "#10b981"],
+                height=240,
+                center_text=f"{cb_orders + clean_orders}<br><small>orders</small>",
+                key="cb-orders-donut",
+            )
         with pie_c2:
             st.plotly_chart(fig_pie_rev, use_container_width=True)
