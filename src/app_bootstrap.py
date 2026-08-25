@@ -160,6 +160,30 @@ def _render_sidebar_user_context(is_auth_on: bool) -> None:
 def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> None:
     """Render the Maintenance & Settings expander in the sidebar."""
     with st.sidebar.expander(":material/build: Maintenance & Settings", expanded=False):
+        # ── Chart theme (compact pills — moved out of the sidebar body) ─────
+        from src.config.ui_config import CHART_THEMES
+
+        _theme_names = list(CHART_THEMES.keys())
+        _current_theme = st.session_state.get("chart_theme", "✨ Emerald Cyberpunk")
+        _chosen_theme = st.pills(
+            "🎨 Chart theme",
+            options=_theme_names,
+            selection_mode="single",
+            default=_current_theme if _current_theme in _theme_names else None,
+            key="sidebar_theme_pills",
+        )
+        if _chosen_theme and _chosen_theme != _current_theme:
+            st.session_state["chart_theme"] = _chosen_theme
+            st.rerun()
+
+        with st.expander("📅 Operational Shift Slots", expanded=False):
+            from src.components.ui.calendar_slots import (
+                render_operational_slots_calendar,
+            )
+
+            render_operational_slots_calendar()
+
+        st.divider()
         st.caption("Configuration Health")
         if config_issues:
             st.warning("Some integrations are partially configured.")
@@ -287,24 +311,6 @@ def _render_sidebar(
             "🌐 Launch DEEN BI", CLOUD_APP_URL, use_container_width=True, type="primary"
         )
 
-        # ── Chart Color Theme Selector (Placed right after Launch DEEN BI) ──
-        from src.config.ui_config import CHART_THEMES
-
-        theme_names = list(CHART_THEMES.keys())
-        current_theme = st.session_state.get("chart_theme", "✨ Emerald Cyberpunk")
-        chosen_theme = st.selectbox(
-            "🎨 Chart Theme",
-            options=theme_names,
-            index=(
-                theme_names.index(current_theme) if current_theme in theme_names else 0
-            ),
-            help="Select color palette theme for charts and metrics across the app.",
-            key="sidebar_theme_selector",
-        )
-        if chosen_theme != current_theme:
-            st.session_state["chart_theme"] = chosen_theme
-            st.rerun()
-
         st.divider()
 
         st.caption("🧭 WORKSPACE NAVIGATION")
@@ -312,13 +318,6 @@ def _render_sidebar(
         selected_nav = _render_nav_pills(nav_items, default_nav)
 
         st.divider()
-
-        with st.expander("📅 Operational Shift Slots", expanded=False):
-            from src.components.ui.calendar_slots import (
-                render_operational_slots_calendar,
-            )
-
-            render_operational_slots_calendar()
 
         _render_sidebar_maintenance(is_auth_on, config_issues)
         return selected_nav

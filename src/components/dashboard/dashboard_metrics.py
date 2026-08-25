@@ -513,27 +513,19 @@ def render_operational_metrics(
     if extra_metric_label == "Basket Size" and m_cashback_disc > 0:
         extra_metric_value = f"TK {int(m_net_bv):,}"
 
-    show_cb_details = st.session_state.get("live_compare_cashback", False)
-
+    # One consolidated cashback badge on the Revenue card only (was three
+    # separate amber badges spread across cards).
     cb_badge = (
-        f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">Gross ৳{int(m_gross_rev):,} || Cashback ৳{int(m_cashback_disc):,}</div>'
-        if (m_cashback_disc > 0 and show_cb_details)
+        f'<div style="font-size:0.72rem;color:#f59e0b;font-weight:600;'
+        f"background:rgba(245,158,11,0.10);padding:3px 8px;border-radius:4px;"
+        f'margin-top:4px;display:inline-block;">'
+        f"Gross ৳{int(m_gross_rev):,} · Cashback −৳{int(m_cashback_disc):,} "
+        f"({m_cb_orders_pct:.0f}% of orders)</div>"
+        if m_cashback_disc > 0
         else ""
     )
-    cb_basket_badge = (
-        f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">Gross ৳{int(m_gross_bv):,} || Lost Revenue -{m_loss_pct:.0f}%</div>'
-        if (
-            m_cashback_disc > 0
-            and extra_metric_label == "Basket Size"
-            and show_cb_details
-        )
-        else ""
-    )
-    cb_orders_badge = (
-        f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">{m_cb_orders_pct:.0f}% cashbacked</div>'
-        if (m_cb_orders_pct > 0 and show_cb_details)
-        else ""
-    )
+    cb_basket_badge = ""
+    cb_orders_badge = ""
 
     tot_cust = m_new_cnt + m_ret_cnt
     pct_new = (m_new_cnt / tot_cust * 100) if tot_cust > 0 else 0
@@ -729,10 +721,8 @@ def render_revenue_cashback_comparison_section(
     pct_rev_lost = (total_cashback / gross_rev * 100) if gross_rev > 0 else 0.0
 
     # Basket level metrics (per-order values, consistent with KPI "Basket Size")
-    gross_basket = (gross_rev / tot_orders) if tot_orders > 0 else 0.0
     net_basket = (net_rev / tot_orders) if tot_orders > 0 else 0.0
     cb_per_basket = (total_cashback / tot_orders) if tot_orders > 0 else 0.0
-    pct_basket_lost = (cb_per_basket / gross_basket * 100) if gross_basket > 0 else 0.0
 
     # Per-order cashback distribution (used by tier/filler/cashback-orders logic below).
     # Independent of the hero-metrics branch above — always derived from the granular frame.
@@ -809,45 +799,22 @@ def render_revenue_cashback_comparison_section(
             f"Status: {status_label} — these are intentionally excluded from revenue figures above."
         )
 
-    st.markdown("##### 💵 Overall Revenue Impact")
-    c1, c2, c3, c4 = st.columns(4)
+    # Compact summary: the revenue equation box above already carries
+    # gross/cashback/net and the hero KPIs carry basket values — the two old
+    # 4-column st.metric grids duplicated those numbers eight times.
+    c1, c2 = st.columns(2)
     with c1:
-        st.metric("💵 Actual Realized Revenue", f"TK {net_rev:,.0f}")
+        st.metric(
+            "🛍️ Net Basket Value",
+            f"TK {net_basket:,.0f}",
+            delta=f"-TK {cb_per_basket:,.0f} cashback/order",
+            delta_color="inverse",
+        )
     with c2:
-        st.metric("🏷️ Gross Revenue (Pre-Discount)", f"TK {gross_rev:,.0f}")
-    with c3:
         st.metric(
-            "💸 Cash Back & Fee Discount",
-            f"TK {total_cashback:,.0f}",
-            delta=f"{pct_rev_lost:.1f}% of gross",
-            delta_color="inverse",
-        )
-    with c4:
-        st.metric(
-            "📉 % Revenue Lost",
+            "📉 Revenue Lost to Cashback",
             f"{pct_rev_lost:.1f}%",
-            delta=f"-TK {total_cashback:,.0f} lost",
-            delta_color="inverse",
-        )
-
-    st.markdown("##### 🛍️ Basket Size / AOV Impact")
-    b1, b2, b3, b4 = st.columns(4)
-    with b1:
-        st.metric("🛍️ Actual Net Basket Value", f"TK {net_basket:,.0f}")
-    with b2:
-        st.metric("🛒 Gross Basket Value (Pre-Discount)", f"TK {gross_basket:,.0f}")
-    with b3:
-        st.metric(
-            "🎁 Cashback per Order",
-            f"-TK {cb_per_basket:,.0f}",
-            delta="Avg cashback/order",
-            delta_color="inverse",
-        )
-    with b4:
-        st.metric(
-            "📉 % Basket Value Lost",
-            f"{pct_basket_lost:.1f}%",
-            delta=f"-TK {cb_per_basket:,.0f} lost/basket",
+            delta=f"-TK {total_cashback:,.0f}",
             delta_color="inverse",
         )
 
@@ -867,8 +834,7 @@ def render_revenue_cashback_comparison_section(
             return "Low"
         comb = f"{str(r.get('Item Name', ''))} {str(r.get('Category', ''))}".lower()
         if any(
-            kw in comb
-            for kw in ["jeans", "panjabi", "sweatshirt", "trouser", "cargo"]
+            kw in comb for kw in ["jeans", "panjabi", "sweatshirt", "trouser", "cargo"]
         ):
             return "High"
         if "shirt" in comb and "t-shirt" not in comb:

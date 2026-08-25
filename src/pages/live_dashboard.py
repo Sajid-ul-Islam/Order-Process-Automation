@@ -453,16 +453,12 @@ def render_live_tab():
     elif nav_mode == "Today" and "wc_curr_df" in st.session_state:
         df_live = st.session_state.wc_curr_df
 
-    # Prepare granular data early to check for cashback
+    # Prepare granular data early
     df_standard, timeframe = prepare_granular_data(
         df_live, find_columns(df_live) if df_live is not None else {}
     )
-    has_cashback = (
-        "Cashback Discount" in df_standard.columns
-        and (df_standard["Cashback Discount"] > 0).any()
-    )
 
-    # ── Header: Auto-Sync, Date Range, Cashback Toggle, Refresh button ───────
+    # ── Header: Auto-Sync, Date Range, Refresh button ─────────────────────────
     c1, c2, c3, c4, c5, c6 = st.columns([1.1, 2.1, 2.1, 0.7, 1.0, 0.5])
 
     # Column 2: Date Range Picker
@@ -508,18 +504,10 @@ def render_live_tab():
                     del st.session_state["wc_sync_end_date"]
                 st.rerun()
 
-    # Column 3: Operational Mode & Cashback Toggle
+    # Column 3: (was Cashback toggle — removed; full breakdown lives on the
+    # permanent "Analysis" tab now)
     with c4:
-        if has_cashback:
-            st.markdown(
-                '<div style="height: 5px;"></div>', unsafe_allow_html=True
-            )  # Vertical alignment helper
-            st.toggle(
-                "⚖️ Cashback",
-                value=st.session_state.get("live_compare_cashback", True),
-                key="live_compare_cashback",
-                help="Toggle the Revenue vs Cashback/Fee breakdown section at the bottom of the page.",
-            )
+        st.empty()
 
     # Column 4 & 5: Main Dashboard Filters (Op Mode, View, Chart Type)
     with c2:
@@ -700,34 +688,40 @@ def render_live_tab():
     # ── KPI Cards (30s auto-refresh) ─────────────────────────────────────────
     _refresh_core_metrics()
 
-    # ── Dashboard Output (charts, tables, AI briefing, export) ───────────────
-    safe_render(
-        lambda: render_dashboard_output(
-            drill,
-            summ,
-            top,
-            str(timeframe) if timeframe is not None else None,
-            basket,
-            str(source_name) if source_name is not None else None,
-            str(modified_at) if modified_at is not None else None,
-            granular_df=df_standard,
-            show_core_metrics=False,
-        ),
-        fallback_msg="Dashboard rendering encountered an error.",
-    )
+    # ── Top-level split: shift-speed "Today" vs deep-dive "Analysis" ──────────
+    tab_today, tab_analysis = st.tabs(["📋 Today", "🔍 Analysis"])
 
-    # ── Revenue vs. Cashback Impact Analysis ─────────────────────────────────
-    if has_cashback and st.session_state.get("live_compare_cashback", False):
-        st.divider()
+    with tab_today:
+        # ── Dashboard Output (charts, tables, AI briefing, export) ───────────
+        safe_render(
+            lambda: render_dashboard_output(
+                drill,
+                summ,
+                top,
+                str(timeframe) if timeframe is not None else None,
+                basket,
+                str(source_name) if source_name is not None else None,
+                str(modified_at) if modified_at is not None else None,
+                granular_df=df_standard,
+                show_core_metrics=False,
+            ),
+            fallback_msg="Dashboard rendering encountered an error.",
+        )
+
+        # ── Dispatch Export (Shipped Only mode only) ─────────────────────────
+        if nav_mode == "Today" and order_view_mode == "Shipped":
+            _render_dispatch_export()
+
+    with tab_analysis:
+        # ── Revenue vs. Cashback Impact Analysis (always available here) ─────
         from src.components.dashboard.dashboard_metrics import (
             render_revenue_cashback_comparison_section,
         )
 
         render_revenue_cashback_comparison_section(df_standard, raw_df=df_live)
 
-    # ── Dispatch Export (Shipped Only mode only) ──────────────────────────────
-    if nav_mode == "Today" and order_view_mode == "Shipped":
-        _render_dispatch_export()
+    # ── Staleness monitor stays visible below both tabs ──────────────────────
+    render_staleness_monitor()
 
 
 def _render_dispatch_export():
@@ -885,6 +879,3 @@ def _render_dispatch_export():
             use_container_width=True,
             key="dispatch_export_download",
         )
-
-    # ── Diagnostic: stale-data monitor ───────────────────────────────────────
-    render_staleness_monitor()
