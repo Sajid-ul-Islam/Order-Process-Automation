@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from io import BytesIO
 
 import pandas as pd
-import requests
 import streamlit as st
 
 from src.components.dashboard.dashboard_output import render_dashboard_output
@@ -169,40 +168,6 @@ def render_manual_tab():
                 st.session_state.manual_source_name = uploaded_file.name
                 df = df_up
                 source_name = uploaded_file.name
-
-        url_input = st.text_input(
-            "🌐 Or paste a public CSV/XLSX URL", key="manual_url_input"
-        )
-        if url_input and st.button(
-            "Fetch from URL",
-            use_container_width=True,
-            type="secondary",
-            key="manual_url_fetch",
-        ):
-            try:
-                from src.utils.url_fetch import fetch_dataframe_from_url
-
-                with st.status("Fetching from URL...", expanded=True) as status:
-                    st.write("Establishing connection to target host...")
-                    df_url = fetch_dataframe_from_url(url_input)
-                    st.write("Ingesting and normalizing structure...")
-                    st.session_state.manual_df = df_url
-                    st.session_state.manual_source_name = "URL_Import"
-                    df = df_url
-                    source_name = "URL_Import"
-                    status.update(
-                        label="Fetch Complete", state="complete", expanded=False
-                    )
-                    st.toast(f"📥 Loaded {len(df_url)} rows from URL!")
-
-            except requests.exceptions.MissingSchema:
-                st.error("Invalid URL format. Please include http:// or https://")
-            except requests.exceptions.RequestException as e:
-                st.error(f"Network error while fetching the URL: {e}")
-            except ValueError as e:
-                st.error(f"Data format error: {e}")
-            except Exception as e:
-                st.error(f"URL fetch failed: {e}")
 
         if st.session_state.get("manual_df") is not None:
             df = st.session_state.manual_df

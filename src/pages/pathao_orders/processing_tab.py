@@ -115,33 +115,7 @@ def _render_processing_tab():
             st.info("Only WooCommerce rows with status `processing` will be used.")
     else:
         uploaded_file = st.file_uploader("", type=["xlsx", "csv"], key="pathao_up")
-        c_upload, c_url = st.columns(2)
-        with c_upload:
-            st.caption("Upload an Excel or CSV export.")
-        with c_url:
-            url_input = st.text_input(
-                "Paste public CSV/XLSX URL",
-                key="pathao_url_input",
-                label_visibility="collapsed",
-                placeholder="Paste public CSV/XLSX URL...",
-            )
-            if url_input and st.button(
-                "Fetch URL",
-                use_container_width=True,
-                type="secondary",
-                key="pathao_url_fetch",
-            ):
-                try:
-                    from src.utils.url_fetch import fetch_dataframe_from_url
-
-                    with st.spinner("Fetching from URL..."):
-                        df_res = fetch_dataframe_from_url(url_input)
-                        st.session_state.pathao_preview_df = df_res
-                        st.session_state.pathao_preview_source = source_mode
-                        st.session_state.pathao_auto_process = True
-                        st.rerun()
-                except Exception as exc:
-                    st.error(f"URL fetch failed: {exc}")
+        st.caption("Upload an Excel or CSV export.")
 
     if fetch_live_clicked:
         try:

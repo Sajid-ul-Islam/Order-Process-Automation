@@ -586,13 +586,12 @@ def _render_ai_briefing_section(
 
 
 def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, today_aov):
-    """Render the bottom tabbed section: Goals, History, Handover, WhatsApp."""
+    """Render the bottom tabbed section: Goals, History, Handover."""
     bottom_tabs = st.tabs(
         [
             "🎯 Shift Goals",
             "📅 30-Day History",
             "📝 Shift Handover",
-            "💬 WhatsApp Quick-Send",
         ]
     )
 
@@ -762,105 +761,6 @@ def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, toda
                 st.session_state["shift_handover_text"], label="📋 Copy Handover"
             )
             st.code(st.session_state["shift_handover_text"], language="text")
-
-    with bottom_tabs[3]:
-        st.markdown("#### 💬 WhatsApp Quick-Send")
-        st.caption(
-            "Generate wa.me links for processing orders directly from today's live data — no file upload needed."
-        )
-        _render_whatsapp_quicksend()
-
-
-def _render_whatsapp_quicksend():
-    """Render the WhatsApp Quick-Send section for messaging processing orders."""
-    src_df = st.session_state.get("wc_curr_df")
-    if src_df is None or src_df.empty:
-        st.info("📡 No live data loaded. Sync the Live Dashboard first.")
-        return
-
-    status_col_wp = (
-        "Order Status"
-        if "Order Status" in src_df.columns
-        else "Status" if "Status" in src_df.columns else None
-    )
-    wp_df = src_df.copy()
-    if status_col_wp:
-        wp_df = wp_df[wp_df[status_col_wp].astype(str).str.lower() == "processing"]
-
-    if wp_df.empty:
-        st.warning("⚠️ No processing orders in the current live data to message.")
-        return
-
-    st.toast(
-        f"⚡ Found {wp_df[status_col_wp].value_counts().get('processing', len(wp_df))} processing orders ready to message."
-    )
-
-    phone_col = next(
-        (
-            c
-            for c in wp_df.columns
-            if any(kw in str(c).lower() for kw in ["phone", "mobile", "contact"])
-        ),
-        None,
-    )
-    name_col_wp = next(
-        (
-            c
-            for c in wp_df.columns
-            if any(kw in str(c).lower() for kw in ["billing name", "full name", "name"])
-        ),
-        None,
-    )
-
-    if not phone_col:
-        st.error("❌ Could not detect a phone number column in the data.")
-        return
-
-    custom_msg_wp = st.text_area(
-        "Message Template",
-        value="Assalamu Alaikum! Your DEEN order is being processed and will be dispatched shortly. Thank you for your order! 🙏",
-        height=80,
-        key="wp_quicksend_msg",
-    )
-
-    if st.button(
-        "📲 Generate Links",
-        type="primary",
-        use_container_width=True,
-        key="wp_quicksend_btn",
-    ):
-        import urllib.parse
-
-        links = []
-        for _, row in wp_df.iterrows():
-            phone = (
-                str(row.get(phone_col, "")).strip().replace(" ", "").replace("-", "")
-            )
-            if not phone or phone.lower() in {"nan", "none"}:
-                continue
-            if phone.startswith("0"):
-                phone = "880" + phone[1:]
-            elif not phone.startswith("880"):
-                phone = "880" + phone
-            name_wp = (
-                str(row.get(name_col_wp, "Valued Customer"))
-                if name_col_wp
-                else "Valued Customer"
-            )
-            msg = custom_msg_wp.replace("{name}", name_wp.strip())
-            wa_link = f"https://wa.me/{phone}?text={urllib.parse.quote(msg)}"
-            links.append({"Name": name_wp, "Phone": phone, "WhatsApp Link": wa_link})
-
-        if links:
-            links_df_wp = pd.DataFrame(links)
-            st.session_state["wp_quicksend_links"] = links_df_wp
-            st.toast(f"✅ Generated {len(links_df_wp)} WhatsApp links.")
-
-    ql_df = st.session_state.get("wp_quicksend_links")
-    if ql_df is not None and not ql_df.empty:
-        st.dataframe(ql_df.head(20), use_container_width=True, hide_index=True)
-        for _, row in ql_df.head(15).iterrows():
-            st.link_button(f"📱 {row['Name']} ({row['Phone']})", row["WhatsApp Link"])
 
 
 def _render_export_buttons(excel_report_bytes, export_date_str, active_df):

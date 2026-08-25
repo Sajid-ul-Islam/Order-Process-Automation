@@ -65,27 +65,7 @@ def render_wp_tab():
             key="wp_live",
         )
     with c_url:
-        url_input = st.text_input(
-            "Paste public CSV/XLSX URL",
-            key="wp_url_input",
-            label_visibility="collapsed",
-            placeholder="Paste public CSV/XLSX URL...",
-        )
-        if url_input and st.button(
-            "Fetch URL", use_container_width=True, type="secondary", key="wp_url_fetch"
-        ):
-            try:
-                from src.utils.url_fetch import fetch_dataframe_from_url
-
-                with st.status("📡 Fetching from URL...", expanded=True) as url_status:
-                    url_status.update(label="📥 Downloading data from URL...")
-                    df_res = fetch_dataframe_from_url(url_input)
-                    st.session_state.wp_preview_df = df_res
-                    st.session_state.wp_auto_generate = True
-                    url_status.update(label="✅ URL data fetched", state="complete")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"URL fetch failed: {e}")
+        st.caption("Or upload an Excel/CSV export.")
 
     preview_df = None
     valid_file = False

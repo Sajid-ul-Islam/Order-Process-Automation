@@ -368,26 +368,14 @@ def _route_page(selected_nav: str) -> None:
 
         safe_render(render_wp_tab, fallback_msg="WhatsApp Messaging unavailable.")
     elif selected_nav == "\U0001f4ca Inventory Distribution":
-        from src.pages.excel_merger import render_excel_merger_tab
         from src.pages.inventory_distribution import render_distribution_tab
 
-        dist_tab, merge_tab = st.tabs(
-            [
-                ":material/inventory_2: Distribution Matrix",
-                ":material/list_alt: Product Listing",
-            ]
+        safe_render(
+            lambda: render_distribution_tab(
+                search_q=st.session_state.get("inv_matrix_search", "")
+            ),
+            fallback_msg="Inventory Distribution unavailable.",
         )
-        with dist_tab:
-            safe_render(
-                lambda: render_distribution_tab(
-                    search_q=st.session_state.get("inv_matrix_search", "")
-                ),
-                fallback_msg="Inventory Distribution unavailable.",
-            )
-        with merge_tab:
-            safe_render(
-                render_excel_merger_tab, fallback_msg="Product Listing unavailable."
-            )
     elif selected_nav == "\U0001f4e6 Current Stock Analytics":
         from src.pages.stock_analytics import render_stock_analytics_tab
 

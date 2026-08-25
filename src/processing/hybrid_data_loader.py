@@ -29,12 +29,6 @@ class HybridDataLoader:
 
         return df
 
-    def get_db_connection(self):
-        """Returns a read-only DuckDB connection to the local snapshot."""
-        if os.path.exists(self.db_path):
-            return duckdb.connect(self.db_path, read_only=True)
-        return None
-
     def query_sql(self, sql_query: str) -> pd.DataFrame | None:
         """Execute a DuckDB SQL query directly against the Parquet snapshot.
         Note: Use 'sales_data' as the table name in your SQL queries.

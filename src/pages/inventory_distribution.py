@@ -71,31 +71,7 @@ def render_distribution_tab(search_q):
             key="dist_live",
         )
     with c_url:
-        url_input = st.text_input(
-            "Paste public CSV/XLSX/G-Sheet URL",
-            key="dist_url_input",
-            label_visibility="collapsed",
-            placeholder="Paste public CSV/XLSX/G-Sheet URL...",
-        )
-        if url_input and st.button(
-            "Fetch URL",
-            use_container_width=True,
-            type="secondary",
-            key="dist_url_fetch",
-        ):
-            try:
-                from src.utils.url_fetch import fetch_dataframe_from_url
-
-                with st.status("📡 Fetching from URL...", expanded=True) as url_status:
-                    url_status.update(label="📥 Downloading data from URL...")
-                    df_res = fetch_dataframe_from_url(url_input)
-                    st.session_state.inv_master_df_live = df_res
-                    st.session_state.inv_auto_analyze = True
-                    _clear_analysis_results()
-                    url_status.update(label="✅ URL data fetched", state="complete")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"URL fetch failed: {e}")
+        st.caption("Upload a master stock file above, or pull live data.")
 
     import os
 

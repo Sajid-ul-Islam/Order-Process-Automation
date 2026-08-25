@@ -205,7 +205,29 @@ def render_staleness_monitor():
     import plotly.express as px
 
     df = _load_stale_events()
-    with st.expander("🩺 WooCommerce Data Staleness Monitor", expanded=False):
+    # Promoted from a collapsed expander: staleness is the app's primary defense
+    # against silently bad WooCommerce data, so it renders as a first-class
+    # section with a compact summary header.
+    recent = (
+        df[df["ts"] >= pd.Timestamp.now().normalize() - pd.Timedelta(days=1)]
+        if not df.empty
+        else df
+    )
+    stale_24h = (
+        int(recent[recent["type"].isin(["WC_STALE_DATA", "WC_STALE_RETRY"])].shape[0])
+        if not recent.empty
+        else 0
+    )
+
+    st.markdown("#### 🩺 Data Staleness Monitor")
+    if stale_24h > 0:
+        st.warning(
+            f"⚠️ **{stale_24h} stale sync(es) in the last 24h** — order data may have been served "
+            "from cache. Check the site's cache/CDN."
+        )
+    else:
+        st.caption("✅ No stale syncs in the last 24 hours.")
+    with st.expander("Staleness details & history", expanded=stale_24h > 0):
         st.caption(
             "Tracks when the store's REST API serves cached/stale order data — syncs whose newest order "
             "modification was older than 45 minutes at fetch time. Clear the site's cache/CDN to stop "
