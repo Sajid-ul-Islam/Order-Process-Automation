@@ -2,8 +2,10 @@
 
 Rules locked in here for `filter_shipped_by_slot`:
 
-  - An order counts as shipped if its status is in the shipped set OR it has a
-    non-empty Pathao consignment ID.
+  - An order counts as shipped if its status is in the shipped set (and NOT in
+    hold, waiting, processing, or cancelled/refunded).
+  - Orders whose status is hold, waiting, pending, or processing NEVER count as shipped,
+    even if they have a consignment ID.
   - "Shipped today" uses the effective date (modification date, falling back to
     creation date) matched against today's BD calendar date — slot-independent,
     so orders placed days ago but dispatched today still count.
@@ -22,24 +24,28 @@ from src.processing.data_processing import filter_shipped_by_slot
 # ── Today mode: calendar-date match, slot-independent ────────────────────────
 
 
-def test_shipped_today_is_slot_independent_and_consignment_aware(op_state):
+def test_shipped_today_is_slot_independent_and_excludes_reverted_statuses(op_state):
     now = now_bd()
     orders = [
-        # Placed 3 days ago but dispatched today (status still processing, has
-        # consignment) → must count as shipped today.
+        # Status changed back to processing (has consignment) → must NOT count as shipped today.
         (601, "processing", now - timedelta(days=3), now - timedelta(hours=2), "DD601"),
         # Status shipped, modified today → counts.
-        (602, "shipped", now - timedelta(hours=4), now - timedelta(hours=1), ""),
+        (602, "shipped", now - timedelta(hours=4), now - timedelta(hours=1), "DD602"),
         # Shipped yesterday → excluded in Today mode.
         (603, "shipped", now - timedelta(days=1), now - timedelta(days=1), ""),
-        # Processing without a consignment → not shipped.
-        (604, "processing", now - timedelta(hours=2), now - timedelta(hours=2), ""),
+        # Status changed back to on-hold (has consignment) → must NOT count as shipped.
+        (604, "on-hold", now - timedelta(hours=2), now - timedelta(hours=1), "DD604"),
+        # Status changed back to waiting/pending (has consignment) → must NOT count as shipped.
+        (605, "waiting", now - timedelta(hours=2), now - timedelta(hours=1), "DD605"),
+        (606, "pending", now - timedelta(hours=2), now - timedelta(hours=1), "DD606"),
+        # Status completed today without consignment → counts as shipped.
+        (607, "completed", now - timedelta(hours=3), now - timedelta(hours=1), ""),
     ]
     df = build_order_df(orders)
 
     shipped = filter_shipped_by_slot(df, "Today", is_comparison=False)
 
-    assert set(shipped["Order ID"]) == {601, 602}
+    assert set(shipped["Order ID"]) == {602, 607}
 
 
 def test_shipped_falls_back_to_creation_date_when_modified_missing(op_state):
@@ -113,3 +119,29 @@ def test_custom_range_scopes_shipped_by_effective_date(op_state):
     scoped = filter_shipped_by_slot(df, "Today", is_comparison=False)
 
     assert set(scoped["Order ID"]) == {901}
+
+
+def test_dispatch_metrics_reverted_to_hold_waiting_process(op_state):
+    from src.processing.data_processing import get_dispatch_metrics
+
+    now = now_bd()
+    orders = [
+        # Truly shipped orders
+        (101, "completed", now - timedelta(hours=2), now - timedelta(hours=1), "DD101"),
+        (102, "shipped", now - timedelta(hours=3), now - timedelta(hours=1), ""),
+        # Reverted orders (have consignment but status changed back to hold / waiting / processing)
+        (103, "processing", now - timedelta(hours=4), now - timedelta(hours=1), "DD103"),
+        (104, "on-hold", now - timedelta(hours=4), now - timedelta(hours=1), "DD104"),
+        (105, "waiting", now - timedelta(hours=4), now - timedelta(hours=1), "DD105"),
+        (106, "pending", now - timedelta(hours=4), now - timedelta(hours=1), "DD106"),
+    ]
+    df = build_order_df(orders)
+
+    metrics = get_dispatch_metrics(df, total_orders=len(df))
+
+    # Only 101 and 102 are dispatched
+    assert metrics["dispatched"] == 2
+    # 103, 104, 105, 106 are in pending queue
+    assert metrics["pending"] == 4
+    # Only 101 has Pathao consignment among the dispatched orders
+    assert metrics["pathao_count"] == 1

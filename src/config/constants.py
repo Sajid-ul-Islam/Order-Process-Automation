@@ -52,6 +52,32 @@ SHIPPED_STATUSES = [
     "wc-delivered",
 ]
 
+# Open / Active statuses that should never be treated as shipped
+ACTIVE_STATUSES = [
+    "processing",
+    "on-hold",
+    "pending",
+    "waiting",
+    "hold",
+    "process",
+    "wc-processing",
+    "wc-on-hold",
+    "wc-pending",
+    "wc-waiting",
+    "wc-hold",
+    "wc-process",
+]
+
+# Non-shipped statuses (active / held / terminal unfulfilled)
+NON_SHIPPED_STATUSES = set(ACTIVE_STATUSES) | {
+    "cancelled",
+    "refunded",
+    "failed",
+    "wc-cancelled",
+    "wc-refunded",
+    "wc-failed",
+}
+
 # Promotional offer keywords — items containing these are NOT actual stock
 OFFER_KEYWORDS = ["combo", "bundle", "buy any"]
 

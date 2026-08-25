@@ -476,18 +476,8 @@ def _apply_shipped_history(df_full):
                 pass
 
     history_updated = False
-    has_consignment = pd.Series(False, index=df_full.index)
-    for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
-        if c_col in df_full.columns:
-            p_val = df_full[c_col].astype(str).str.strip().str.lower()
-            has_consignment = has_consignment | (
-                ~p_val.isin(["", "nan", "none", "n/a", "0", "null"])
-            )
-
-    is_shipped_mask = (
-        df_full["Order Status"].astype(str).str.lower().isin(SHIPPED_STATUSES)
-        | has_consignment
-    )
+    status_lower = df_full["Order Status"].astype(str).str.lower().str.strip()
+    is_shipped_mask = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
 
     for idx, row in df_full[is_shipped_mask].iterrows():
         oid = str(row.get("Order ID", row.get("Order Number", "")))
@@ -511,6 +501,13 @@ def _apply_shipped_history(df_full):
             ).iloc[0]
             if pd.notnull(stored_dt):
                 df_full.at[idx, "mod_dt_parsed"] = stored_dt
+
+    # If an order's status is NOT in SHIPPED_STATUSES, remove it from shipped_history
+    for idx, row in df_full[~is_shipped_mask].iterrows():
+        oid = str(row.get("Order ID", row.get("Order Number", "")))
+        if oid and oid in shipped_history:
+            del shipped_history[oid]
+            history_updated = True
 
     if history_updated:
         # Cache in session state for subsequent calls within the same run
@@ -536,23 +533,11 @@ def _partition_operational_data(df_full):
         BD_TZ
     )
 
-    has_consignment = pd.Series(False, index=df_full.index)
-    for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
-        if c_col in df_full.columns:
-            p_val = df_full[c_col].astype(str).str.strip().str.lower()
-            has_consignment = has_consignment | (
-                ~p_val.isin(["", "nan", "none", "n/a", "0", "null"])
-            )
-
-    is_shipped = (
-        df_full["Order Status"].astype(str).str.lower().isin(SHIPPED_STATUSES)
-        | has_consignment
-    )
-    is_processing = df_full["Order Status"].astype(str).str.lower() == "processing"
-    is_hold = df_full["Order Status"].astype(str).str.lower() == "on-hold"
-    is_waiting = (
-        df_full["Order Status"].astype(str).str.lower().isin(["pending", "waiting"])
-    )
+    status_lower = df_full["Order Status"].astype(str).str.lower().str.strip()
+    is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
+    is_processing = status_lower.isin(["processing", "wc-processing", "process"])
+    is_hold = status_lower.isin(["on-hold", "wc-on-hold", "hold", "wc-hold"])
+    is_waiting = status_lower.isin(["pending", "waiting", "wc-pending", "wc-waiting"])
 
     # Any order created or modified in today's shift (status changes, newly placed, dispatches)
     modified_recent = df_full["mod_dt_parsed"] >= prev_cutoff

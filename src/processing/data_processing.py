@@ -37,8 +37,6 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     Returns:
         Filtered DataFrame containing only shipped orders within the relevant window.
     """
-    import streamlit as st
-
     from src.config.constants import SHIPPED_STATUSES
 
     if df is None or df.empty:
@@ -52,18 +50,9 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     if status_col is None:
         return df
 
-    # ── Step 1: Identify shipped orders (by status OR consignment ID) ──────────
-    has_consignment = pd.Series(False, index=df.index)
-    for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
-        if c_col in df.columns:
-            p_val = df[c_col].astype(str).str.strip().str.lower()
-            has_consignment = has_consignment | (
-                ~p_val.isin(["", "nan", "none", "n/a", "0", "null"])
-            )
-
-    shipped_mask = (
-        df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES) | has_consignment
-    )
+    # ── Step 1: Identify shipped orders (strictly by shipped status) ──────────
+    status_lower = df[status_col].astype(str).str.lower().str.strip()
+    shipped_mask = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
     shipped_df = df[shipped_mask]
 
     if shipped_df.empty:
@@ -157,10 +146,13 @@ def filter_all_orders_to_slot(df, nav_mode):
 
     Returns a filtered DataFrame — never falls back to the full unscoped dataset.
     """
-    from src.config.constants import SHIPPED_STATUSES
+    from src.config.constants import (
+        ACTIVE_STATUSES,
+        SHIPPED_STATUSES,
+    )
 
-    ACTIVE_STATUSES = {"processing", "on-hold", "pending", "waiting"}
-    ALL_VALID = ACTIVE_STATUSES | set(SHIPPED_STATUSES)
+    ACTIVE_STATUSES_SET = {s.lower() for s in ACTIVE_STATUSES}
+    ALL_VALID = ACTIVE_STATUSES_SET | {s.lower() for s in SHIPPED_STATUSES}
 
     if df is None or df.empty:
         return df
@@ -174,7 +166,7 @@ def filter_all_orders_to_slot(df, nav_mode):
         return df
 
     # 1. Status whitelist — drop anything not in the allowed set
-    status_lower = df[status_col].astype(str).str.lower()
+    status_lower = df[status_col].astype(str).str.lower().str.strip()
     df = df[status_lower.isin(ALL_VALID)].copy()
     if df.empty:
         return df
@@ -205,8 +197,8 @@ def filter_all_orders_to_slot(df, nav_mode):
                 else "Order Date" if "Order Date" in df.columns else None
             )
 
-            status_lower = df[status_col].astype(str).str.lower()
-            is_active = status_lower.isin(ACTIVE_STATUSES)
+            status_lower = df[status_col].astype(str).str.lower().str.strip()
+            is_active = status_lower.isin(ACTIVE_STATUSES_SET)
             is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
 
             dt_mod = (
@@ -258,19 +250,9 @@ def filter_all_orders_to_slot(df, nav_mode):
             else "Order Date" if "Order Date" in df.columns else None
         )
 
-        has_consignment = pd.Series(False, index=df.index)
-        for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
-            if c_col in df.columns:
-                p_val = df[c_col].astype(str).str.strip().str.lower()
-                has_consignment = has_consignment | (
-                    ~p_val.isin(["", "nan", "none", "n/a", "0", "null"])
-                )
-
-        status_lower = df[status_col].astype(str).str.lower()
-        is_shipped = (
-            status_lower.isin([s.lower() for s in SHIPPED_STATUSES]) | has_consignment
-        )
-        is_active = status_lower.isin(ACTIVE_STATUSES) & (~has_consignment)
+        status_lower = df[status_col].astype(str).str.lower().str.strip()
+        is_active = status_lower.isin(ACTIVE_STATUSES_SET)
+        is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
 
         # Active orders are part of the current open queue — keep them regardless of
         # creation date so orders placed before the shift start (but still open, e.g.
@@ -313,19 +295,9 @@ def filter_all_orders_to_slot(df, nav_mode):
             else "Order Date Modified" if "Order Date Modified" in df.columns else None
         )
 
-        has_consignment = pd.Series(False, index=df.index)
-        for c_col in ["Pathao Consignment ID", "Consignment ID", "Tracking Code"]:
-            if c_col in df.columns:
-                p_val = df[c_col].astype(str).str.strip().str.lower()
-                has_consignment = has_consignment | (
-                    ~p_val.isin(["", "nan", "none", "n/a", "0", "null"])
-                )
-
-        status_lower = df[status_col].astype(str).str.lower()
-        is_active = status_lower.isin(ACTIVE_STATUSES) & (~has_consignment)
-        is_shipped = (
-            status_lower.isin([s.lower() for s in SHIPPED_STATUSES]) | has_consignment
-        )
+        status_lower = df[status_col].astype(str).str.lower().str.strip()
+        is_active = status_lower.isin(ACTIVE_STATUSES_SET)
+        is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
 
         dt_create = (
             safe_coerce_datetime_naive(df[date_col])
@@ -844,35 +816,15 @@ def get_dispatch_metrics(active_df, total_orders=0):
                     ).str.lower().str.contains("outlet", na=False)
                 metrics["outlet_dispatch"] = active_df[outlet_mask][order_col].nunique()
 
+                from src.config.constants import ACTIVE_STATUSES, SHIPPED_STATUSES
+
+                status_lower = active_df[status_col].astype(str).str.lower().str.strip()
                 # Pending orders
-                pending_mask = (
-                    active_df[status_col]
-                    .astype(str)
-                    .str.lower()
-                    .isin(["processing", "on-hold", "pending", "waiting"])
-                )
+                pending_mask = status_lower.isin([s.lower() for s in ACTIVE_STATUSES])
                 metrics["pending"] = active_df[pending_mask][order_col].nunique()
 
-                # Dispatched orders using SHIPPED_STATUSES or consignment presence
-                has_consignment = pd.Series(False, index=active_df.index)
-                if "Pathao Consignment ID" in active_df.columns:
-                    p_col_check = (
-                        active_df["Pathao Consignment ID"]
-                        .astype(str)
-                        .str.strip()
-                        .str.lower()
-                    )
-                    has_consignment = (
-                        (p_col_check != "")
-                        & (p_col_check != "nan")
-                        & (p_col_check != "none")
-                        & (p_col_check != "n/a")
-                    )
-
-                shipped_mask = (
-                    active_df[status_col].astype(str).str.lower().isin(SHIPPED_STATUSES)
-                    | has_consignment
-                )
+                # Dispatched orders: ONLY orders with status in SHIPPED_STATUSES
+                shipped_mask = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
                 shipped_df = active_df[shipped_mask]
                 metrics["dispatched"] = (
                     shipped_df[order_col].nunique() if not shipped_df.empty else 0
