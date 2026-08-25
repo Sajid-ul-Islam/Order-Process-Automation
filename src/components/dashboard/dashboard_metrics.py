@@ -9,6 +9,12 @@ import pandas as pd
 import streamlit as st
 
 from src.components.dashboard.svg import _generate_sparkline_svg
+from src.processing.column_detection import (
+    EMAIL_COL_CANDIDATES,
+    ORDER_ID_COL_CANDIDATES,
+    PHONE_COL_CANDIDATES,
+    pick_column,
+)
 from src.processing.data_processing import (
     aggregate_data,
     prepare_granular_data,
@@ -19,7 +25,6 @@ from src.utils.customer_registry import (
     get_customer_first_order_date,
     load_customer_registry,
     normalize_phone_key,
-    update_customer_registry,
 )
 from src.utils.logging import log_system_event
 from src.utils.metric_history import save_shift_snapshot
@@ -318,32 +323,13 @@ def render_operational_metrics(
 
             # ── New vs Returning Customer Calculation (Lifetime Registry Integrated) ──
             try:
-                # Update persistent customer registry with full_df order history
-                update_customer_registry(full_df, wc_raw_mapping)
-                lifetime_registry = load_customer_registry()
-
-                phone_col = next(
-                    (
-                        c
-                        for c in [
-                            "Phone (Billing)",
-                            "Phone",
-                            "Billing Phone",
-                            "Customer Phone",
-                            "phone",
-                        ]
-                        if c in m_df.columns
-                    ),
-                    None,
-                )
-                email_col = next(
-                    (
-                        c
-                        for c in ["Billing Email", "Email", "Customer Email", "email"]
-                        if c in m_df.columns
-                    ),
-                    None,
-                )
+                # NOTE: the authoritative counts come from
+                # compute_new_vs_returning_counts() below, which already refreshes
+                # BOTH the full 3-bucket registry and the legacy flat registry
+                # from full_df. Do NOT call update_customer_registry() here as
+                # well — it duplicated the same disk I/O on every render.
+                phone_col = pick_column(m_df, PHONE_COL_CANDIDATES)
+                email_col = pick_column(m_df, EMAIL_COL_CANDIDATES)
                 cust_col = phone_col or email_col
 
                 if cust_col and not full_df.empty:
@@ -364,8 +350,6 @@ def render_operational_metrics(
                     f_df = f_df.dropna(subset=["_dt"])
                     f_df = f_df[f_df["_norm_cust"] != ""]
 
-                    first_order_map = f_df.groupby("_norm_cust")["_dt"].min().to_dict()
-
                     if not m_df.empty and cust_col in m_df.columns:
                         # first_order_map is still needed by the 7-day sparkline below.
                         active_dt_col = (
@@ -378,13 +362,8 @@ def render_operational_metrics(
                         t_act["_norm_cust"] = t_act[cust_col].apply(normalize_phone_key)
                         order_id_col = wc_raw_mapping.get("order_id", "Order ID")
                         if order_id_col not in t_act.columns:
-                            order_id_col = next(
-                                (
-                                    c
-                                    for c in ["Order ID", "Order Number"]
-                                    if c in t_act.columns
-                                ),
-                                t_act.columns[0],
+                            order_id_col = pick_column(
+                                t_act, ORDER_ID_COL_CANDIDATES, t_act.columns[0]
                             )
                         first_order_map = (
                             t_act.dropna(subset=["_dt"])
@@ -419,6 +398,11 @@ def render_operational_metrics(
                                 ),
                                 f_df.columns[0],
                             )
+
+                        # Read-only lifetime lookup for the 7-day sparkline
+                        # (registry refresh itself is owned by
+                        # compute_new_vs_returning_counts() above).
+                        lifetime_registry = load_customer_registry()
 
                         day_map_total = defaultdict(int)
                         day_map_new = defaultdict(int)

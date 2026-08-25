@@ -117,15 +117,3 @@ def load_snapshot_history(days: int = 30) -> pd.DataFrame:
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date")
     return df
-
-
-def get_today_snapshot() -> Optional[dict]:
-    """Return today's snapshot dict if it exists, else None."""
-    path = _snapshot_path(_today_key())
-    if not os.path.exists(path):
-        return None
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None

@@ -68,24 +68,6 @@ def _build_pathao_client() -> tuple[PathaoClient | None, str | None]:
         return None, f"Failed to initialize Pathao client: {exc}"
 
 
-def verify_pathao_connection() -> tuple[bool, str]:
-    """Verify if Pathao credentials are working by requesting an access token."""
-    client, error = _build_pathao_client()
-    if error:
-        return False, error
-
-    try:
-        client.ensure_token()
-        if client.access_token:
-            return (
-                True,
-                "Successfully authenticated with Pathao API. Credentials are working.",
-            )
-        return False, "Authentication failed. Pathao did not return an access token."
-    except Exception as exc:
-        return False, f"Connection error: {exc}"
-
-
 def get_pathao_order_status(
     consignment_id: str, force_refresh: bool = False, cache_ttl_seconds: int = 3600
 ) -> dict:

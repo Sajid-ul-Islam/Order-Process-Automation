@@ -12,24 +12,21 @@ import os
 import pandas as pd
 
 from src.config.constants import RESOURCES_DIR
-from src.processing.column_detection import pick_column
+from src.processing.column_detection import (
+    CITY_COL_CANDIDATES,
+    DATE_COL_CANDIDATES,
+    EMAIL_COL_CANDIDATES,
+    NAME_COL_CANDIDATES,
+    ORDER_ID_COL_CANDIDATES,
+    PHONE_COL_CANDIDATES,
+    pick_column,
+)
 from src.processing.data_processing import safe_coerce_datetime_naive
 from src.utils.customer_registry_full import classify_customer  # noqa: F401,E402
 from src.utils.logging import log_system_event
 from src.utils.text import normalize_phone_number
 
 CUSTOMER_REGISTRY_PATH = os.path.join(RESOURCES_DIR, "customer_registry.json")
-
-# Column-name candidates used across registry scans (same work, one definition).
-_PHONE_COL_CANDIDATES = [
-    "Phone (Billing)",
-    "Phone",
-    "Billing Phone",
-    "Customer Phone",
-    "phone",
-]
-_EMAIL_COL_CANDIDATES = ["Billing Email", "Email", "Customer Email", "email"]
-_DATE_COL_CANDIDATES = ["Order Date", "Date", "Created Date"]
 
 
 def normalize_phone_key(cust_id: str | None) -> str:
@@ -87,40 +84,6 @@ def get_customer_first_order_date(
     return earliest_dt
 
 
-def register_customer_history(
-    cust_id: str, first_order_date: str | pd.Timestamp
-) -> bool:
-    """Manually register or override a customer's earliest order date in history."""
-    clean_key = normalize_phone_key(cust_id)
-    if not clean_key:
-        return False
-
-    registry = load_customer_registry()
-    dt_val = pd.to_datetime(first_order_date, errors="coerce")
-    if pd.isna(dt_val):
-        return False
-
-    if dt_val.tzinfo is not None:
-        dt_val = dt_val.tz_localize(None)
-
-    dt_str = dt_val.isoformat()
-    registry[clean_key] = dt_str
-
-    if clean_key.startswith("0"):
-        registry[clean_key[1:]] = dt_str
-
-    try:
-        os.makedirs(RESOURCES_DIR, exist_ok=True)
-        with open(CUSTOMER_REGISTRY_PATH, "w", encoding="utf-8") as f:
-            json.dump(registry, f, indent=2, ensure_ascii=False)
-        return True
-    except Exception as e:
-        log_system_event(
-            "CUSTOMER_REGISTRY_SAVE_ERROR", f"Failed to save registry: {e}"
-        )
-        return False
-
-
 def update_customer_registry(
     df: pd.DataFrame, wc_raw_mapping: dict | None = None
 ) -> int:
@@ -139,13 +102,13 @@ def update_customer_registry(
         mapping = wc_raw_mapping or {}
         date_col = "Date" if "Date" in df.columns else mapping.get("date", "Order Date")
         if date_col not in df.columns:
-            date_col = pick_column(df, _DATE_COL_CANDIDATES)
+            date_col = pick_column(df, DATE_COL_CANDIDATES)
 
         if not date_col:
             return 0
 
-        phone_col = pick_column(df, _PHONE_COL_CANDIDATES)
-        email_col = pick_column(df, _EMAIL_COL_CANDIDATES)
+        phone_col = pick_column(df, PHONE_COL_CANDIDATES)
+        email_col = pick_column(df, EMAIL_COL_CANDIDATES)
         cust_col = phone_col or email_col
 
         if not cust_col:
@@ -225,37 +188,21 @@ def compute_new_vs_returning_counts(
     # ---- Primary path: full 3-bucket registry (email priority) ----
     full_reg = load_full_registry_safe()
     if full_reg is not None:
-        email_col = pick_column(m_df, _EMAIL_COL_CANDIDATES)
-        phone_col = pick_column(m_df, _PHONE_COL_CANDIDATES)
-        name_col = next(
-            (
-                c
-                for c in ["Full Name (Billing)", "Full Name", "Customer Name", "name"]
-                if c in m_df.columns
-            ),
-            None,
-        )
-        city_col = next(
-            (
-                c
-                for c in ["Shipping City", "Billing City", "City", "city"]
-                if c in m_df.columns
-            ),
-            None,
-        )
+        email_col = pick_column(m_df, EMAIL_COL_CANDIDATES)
+        phone_col = pick_column(m_df, PHONE_COL_CANDIDATES)
+        name_col = pick_column(m_df, NAME_COL_CANDIDATES)
+        city_col = pick_column(m_df, CITY_COL_CANDIDATES)
         date_col = (
             "Date"
             if "Date" in m_df.columns
             else wc_raw_mapping.get("date", "Order Date")
         )
         if date_col not in m_df.columns:
-            date_col = pick_column(m_df, _DATE_COL_CANDIDATES, m_df.columns[0])
+            date_col = pick_column(m_df, DATE_COL_CANDIDATES, m_df.columns[0])
 
         order_id_col = wc_raw_mapping.get("order_id", "Order ID")
         if order_id_col not in m_df.columns:
-            order_id_col = pick_column(
-                m_df, ["Order ID", "Order Number"], m_df.columns[0]
-            )
+            order_id_col = pick_column(m_df, ORDER_ID_COL_CANDIDATES, m_df.columns[0])
 
         # Legacy structures, used as a fallback for customers the full
         # registry does not recognize (e.g. repeat-within-session phone only).
@@ -323,8 +270,8 @@ def _build_legacy_structures(
     update_customer_registry(full_df, wc_raw_mapping)
     lifetime_registry = load_customer_registry()
 
-    phone_col = pick_column(m_df, _PHONE_COL_CANDIDATES)
-    email_col = pick_column(m_df, _EMAIL_COL_CANDIDATES)
+    phone_col = pick_column(m_df, PHONE_COL_CANDIDATES)
+    email_col = pick_column(m_df, EMAIL_COL_CANDIDATES)
     cust_col = phone_col or email_col
 
     full_dt_col = (
@@ -333,7 +280,7 @@ def _build_legacy_structures(
         else wc_raw_mapping.get("date", "Order Date")
     )
     if full_dt_col not in full_df.columns:
-        full_dt_col = pick_column(full_df, _DATE_COL_CANDIDATES, full_df.columns[0])
+        full_dt_col = pick_column(full_df, DATE_COL_CANDIDATES, full_df.columns[0])
 
     f_df = full_df.copy()
     f_df["_dt"] = safe_coerce_datetime_naive(f_df[full_dt_col])
@@ -394,7 +341,7 @@ def _legacy_compute(
             else wc_raw_mapping.get("date", "Order Date")
         )
         if date_col not in m_df.columns:
-            date_col = pick_column(m_df, _DATE_COL_CANDIDATES, m_df.columns[0])
+            date_col = pick_column(m_df, DATE_COL_CANDIDATES, m_df.columns[0])
         legacy = _build_legacy_structures(m_df, full_df, wc_raw_mapping, date_col)
         if not legacy["cust_col"]:
             return 0, 0

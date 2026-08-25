@@ -412,15 +412,6 @@ def apply_order_view_comparison(df, nav_mode, order_view):
     return df
 
 
-def process_data(df, selected_cols):
-    """Main entry point for initial data processing. Returns granular sanitized data + aggregates."""
-    df_standard, timeframe = prepare_granular_data(df, selected_cols)
-    if df_standard.empty:
-        return None, None, None, "", {}
-    drill, summ, top, basket = aggregate_data(df_standard, selected_cols)
-    return drill, summ, top, timeframe, basket
-
-
 def safe_coerce_datetime_naive(series: pd.Series) -> pd.Series:
     """Safely converts a pandas Series to timezone-naive datetime64[ns].
     If timestamps are timezone-aware or contain explicit UTC ISO indicators (Z or offset),

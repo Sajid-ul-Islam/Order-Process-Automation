@@ -3,6 +3,35 @@ import streamlit as st
 
 from src.utils.logging import log_system_event
 
+# ── Canonical column-name candidates (single source of truth) ────────────────
+# These lists are the exact-match candidates used by pick_column() across the
+# app. Every module looking for a phone/email/date/name/city/order-id column
+# must import from here instead of re-hardcoding its own list, so a new
+# WooCommerce export header only needs to be added in one place.
+
+PHONE_COL_CANDIDATES = [
+    "Phone (Billing)",
+    "Phone",
+    "Billing Phone",
+    "Customer Phone",
+    "phone",
+]
+
+EMAIL_COL_CANDIDATES = ["Billing Email", "Email", "Customer Email", "email"]
+
+DATE_COL_CANDIDATES = ["Date", "Order Date", "Created Date"]
+
+NAME_COL_CANDIDATES = [
+    "Full Name (Billing)",
+    "Full Name",
+    "Customer Name",
+    "name",
+]
+
+CITY_COL_CANDIDATES = ["Shipping City", "Billing City", "City", "city"]
+
+ORDER_ID_COL_CANDIDATES = ["Order ID", "Order Number"]
+
 
 def pick_column(
     df: pd.DataFrame, candidates: list[str], default: str | None = None
