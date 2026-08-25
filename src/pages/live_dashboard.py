@@ -1,4 +1,5 @@
 # Live Operational Dashboard
+import pandas as pd
 import streamlit as st
 
 from src.components.dashboard.dashboard_metrics import render_operational_metrics

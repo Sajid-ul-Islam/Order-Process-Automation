@@ -1073,4 +1073,3 @@ def generate_executive_briefing(
     )
 
     return "\n".join(report_lines)
-
