@@ -118,6 +118,21 @@ def _refresh_core_metrics():
             m_df, find_columns(m_df) if not m_df.empty else {}
         )
 
+    if c_df is None or c_df.empty:
+        _cmp_raw = (
+            st.session_state.get("wc_prev_df")
+            if nav_mode == "Today"
+            else st.session_state.get("wc_curr_df")
+            if nav_mode in ["Backlog", "Prev"]
+            else None
+        )
+        if _cmp_raw is not None and not _cmp_raw.empty:
+            _cmp_f = apply_order_view_comparison(_cmp_raw, nav_mode, order_view_mode)
+            if _cmp_f is not None and not _cmp_f.empty:
+                c_df, _ = prepare_granular_data(
+                    _cmp_f, find_columns(_cmp_f) if not _cmp_f.empty else {}
+                )
+
     dummy_mapping = {
         "name": "Product Name",
         "cost": "Item Cost",
@@ -665,7 +680,9 @@ def render_live_tab():
     _cmp_raw = (
         st.session_state.get("wc_prev_df")
         if nav_mode == "Today"
-        else st.session_state.get("wc_curr_df") if nav_mode == "Backlog" else None
+        else st.session_state.get("wc_curr_df")
+        if nav_mode in ["Backlog", "Prev"]
+        else None
     )
     _cmp_standard = None
     if _cmp_raw is not None and not _cmp_raw.empty:

@@ -94,6 +94,9 @@ def render_operational_metrics(
     m_bv = m_net_bv
 
     dq_str, dr_str, do_str, db_str = None, None, None, None
+    pct_q, pct_r, pct_o, pct_b = None, None, None, None
+    prev_q_str, prev_r_str, prev_o_str, prev_b_str = None, None, None, None
+
     if c_df is not None and not c_df.empty:
         co_q = c_df["Quantity"].sum() if "Quantity" in c_df.columns else 0
         co_item_r = (
@@ -130,27 +133,48 @@ def render_operational_metrics(
             d_o = co_o - m_ord
             db = co_b - m_net_bv
 
+        pct_q = ((dq / co_q) * 100) if co_q > 0 else (100.0 if dq > 0 else 0.0 if dq == 0 else -100.0)
+        pct_r = ((dr / co_net_r) * 100) if co_net_r > 0 else (100.0 if dr > 0 else 0.0 if dr == 0 else -100.0)
+        pct_o = ((d_o / co_o) * 100) if co_o > 0 else (100.0 if d_o > 0 else 0.0 if d_o == 0 else -100.0)
+        pct_b = ((db / co_b) * 100) if co_b > 0 else (100.0 if db > 0 else 0.0 if db == 0 else -100.0)
+
         dq_str = f"{prefix}{dq:+,.0f}{suffix}"
         dr_str = f"{prefix}{'+' if dr >= 0 else '-'}TK {abs(dr):,.0f}{suffix}"
         do_str = f"{prefix}{d_o:+,.0f}{suffix}"
         db_str = f"{prefix}{'+' if db >= 0 else '-'}TK {abs(db):,.0f}{suffix}"
 
-    def format_delta(delta_str):
+        prev_q_str = f"{co_q:,.0f}"
+        prev_r_str = f"TK {co_net_r:,.0f}"
+        prev_o_str = f"{co_o:,.0f}"
+        prev_b_str = f"TK {int(co_b):,}"
+
+    def format_delta(delta_str, prev_val_str=None, pct_val=None):
         if not delta_str:
             return ""
         is_up = "+" in delta_str
         cls = "delta-up" if is_up else "delta-down"
-        return f'<div class="metric-delta {cls}">{delta_str}</div>'
+        arrow = "▲" if is_up else "▼"
+        pct_snippet = (
+            f" ({pct_val:+.1f}%)"
+            if pct_val is not None and not pd.isna(pct_val)
+            else ""
+        )
+        prev_snippet = (
+            f' <span class="delta-prev">(Prev: {prev_val_str})</span>'
+            if prev_val_str
+            else ""
+        )
+        return f'<div class="metric-delta {cls}">{arrow} {delta_str}{pct_snippet}{prev_snippet}</div>'
 
     v_qty = f"{m_qty:,.0f}"
     v_rev = f"TK {m_net_rev:,.0f}"
     v_ord = f"{m_ord:,.0f}"
     v_bv = f"TK {int(m_net_bv):,}"
 
-    html_dq = format_delta(dq_str)
-    html_dr = format_delta(dr_str)
-    html_do = format_delta(do_str)
-    html_db = format_delta(db_str)
+    html_dq = format_delta(dq_str, prev_val_str=prev_q_str, pct_val=pct_q)
+    html_dr = format_delta(dr_str, prev_val_str=prev_r_str, pct_val=pct_r)
+    html_do = format_delta(do_str, prev_val_str=prev_o_str, pct_val=pct_o)
+    html_db = format_delta(db_str, prev_val_str=prev_b_str, pct_val=pct_b)
 
     extra_metric_label = "Basket Size"
     extra_metric_value = v_bv
@@ -539,9 +563,37 @@ def render_operational_metrics(
         else ""
     )
 
+    # Previous slot comparison for Customer Mix
+    html_dcust = ""
+    if c_df is not None and not c_df.empty:
+        try:
+            full_ref = (
+                full_df
+                if "full_df" in locals() and full_df is not None and not full_df.empty
+                else m_df
+            )
+            co_new_cnt, co_ret_cnt = compute_new_vs_returning_counts(
+                c_df, full_ref, wc_raw_mapping
+            )
+            co_tot = co_new_cnt + co_ret_cnt
+            if co_tot > 0:
+                d_new = m_new_cnt - co_new_cnt
+                pct_new_change = (
+                    ((m_new_cnt - co_new_cnt) / co_new_cnt * 100)
+                    if co_new_cnt > 0
+                    else (100.0 if m_new_cnt > 0 else 0.0)
+                )
+                html_dcust = format_delta(
+                    f"{d_new:+d} New vs Prev",
+                    prev_val_str=f"{co_new_cnt}N / {co_ret_cnt}R",
+                    pct_val=pct_new_change,
+                )
+        except Exception:
+            pass
+
     customer_mix_card = (
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">Customer Mix</div>'
-        f'<div class="metric-value" style="font-size:1.3rem;">{v_cust}</div>{cust_badge}{s_cust}{d_cust}</div>'
+        f'<div class="metric-value" style="font-size:1.3rem;">{v_cust}</div>{cust_badge}{html_dcust}{s_cust}{d_cust}</div>'
         '<div class="metric-icon">👥</div></div>'
     )
 
