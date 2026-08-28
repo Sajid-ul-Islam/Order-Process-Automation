@@ -176,6 +176,25 @@ def render_operational_metrics(
     html_do = format_delta(do_str, prev_val_str=prev_o_str, pct_val=pct_o)
     html_db = format_delta(db_str, prev_val_str=prev_b_str, pct_val=pct_b)
 
+    # ── "Last Day" Comparison Badges ─────────────────────────────────────
+    # Prominent badges showing the previous period's absolute values,
+    # placed between the main value and the delta on each KPI card.
+    def _last_day_badge(prev_str, color="#64748b"):
+        if not prev_str:
+            return ""
+        return (
+            f'<div style="font-size:0.68rem;font-weight:600;color:{color};'
+            f'background:rgba(100,116,139,0.08);padding:2px 7px;'
+            f'border-radius:4px;margin-top:5px;display:inline-block;'
+            f'letter-spacing:0.02em;">'
+            f'📅 Last Day: {prev_str}</div>'
+        )
+
+    badge_qty = _last_day_badge(prev_q_str)
+    badge_rev = _last_day_badge(prev_r_str)
+    badge_ord = _last_day_badge(prev_o_str)
+    badge_bv = _last_day_badge(prev_b_str)
+
     extra_metric_label = "Basket Size"
     extra_metric_value = v_bv
     extra_metric_delta = html_db
@@ -530,7 +549,7 @@ def render_operational_metrics(
 
     gross_items_card = (
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{l1}</div>'
-        f'<div class="metric-value">{v_qty}</div>{html_dq}{s_qty}{d_qty}</div>'
+        f'<div class="metric-value">{v_qty}</div>{badge_qty}{html_dq}{s_qty}{d_qty}</div>'
         '<div class="metric-icon">📦</div></div>'
     )
 
@@ -601,11 +620,11 @@ def render_operational_metrics(
         '<div class="metric-container metric-container-5">'
         f"{gross_items_card}"
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{l2}</div>'
-        f'<div class="metric-value">{v_rev}</div>{cb_badge}{html_dr}{s_rev}{d_rev}</div><div class="metric-icon">৳</div></div>'
+        f'<div class="metric-value">{v_rev}</div>{badge_rev}{cb_badge}{html_dr}{s_rev}{d_rev}</div><div class="metric-icon">৳</div></div>'
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{l3}</div>'
-        f'<div class="metric-value">{v_ord}</div>{cb_orders_badge}{html_do}{s_ord}{d_ord}</div><div class="metric-icon">{icon_l3}</div></div>'
+        f'<div class="metric-value">{v_ord}</div>{badge_ord}{cb_orders_badge}{html_do}{s_ord}{d_ord}</div><div class="metric-icon">{icon_l3}</div></div>'
         f'<div class="metric-card"><div class="metric-content"><div class="metric-label">{extra_metric_label}</div>'
-        f'<div class="metric-value">{extra_metric_value}</div>{cb_basket_badge}{extra_metric_delta}'
+        f'<div class="metric-value">{extra_metric_value}</div>{badge_bv}{cb_basket_badge}{extra_metric_delta}'
         f"{(s_bv + d_bv) if nav_mode != 'Backlog' else ''}</div>"
         f'<div class="metric-icon">{extra_metric_icon}</div></div>'
         f"{customer_mix_card}"
