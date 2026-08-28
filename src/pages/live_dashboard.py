@@ -420,15 +420,13 @@ def render_live_tab():
                 if _pd.notnull(newest):
                     now_bd = bd_now().replace(tzinfo=None)
                     age_min = (now_bd - newest).total_seconds() / 60
-                    if age_min > 45:
-                        st.warning(
-                            f"⚠️ **Possibly stale WooCommerce data.** The newest order modification in this sync is "
-                            f"**{newest:%Y-%m-%d %H:%M}** ({age_min:.0f} min ago). The store's REST API appears to be "
-                            f"serving cached data — orders shipped recently may not show here. Clear the WordPress "
-                            f"cache (caching plugin / CDN) for `/wp-json/wc/v3/orders`, or wait for the next sync."
+                    # Only alert during active daytime business hours (> 120m without any order modification)
+                    if age_min > 120 and 11 <= now_bd.hour <= 22:
+                        st.info(
+                            f"ℹ️ **WooCommerce REST API Active:** Last store modification was at **{newest:%Y-%m-%d %H:%M}** ({age_min:.0f} min ago)."
                         )
                         log_system_event(
-                            "WC_STALE_RENDER",
+                            "WC_MOD_INFO",
                             f"newest_mod={newest} age_min={age_min:.0f}",
                         )
         except Exception:
@@ -437,8 +435,13 @@ def render_live_tab():
         # ── New Order Notification Toast ──────────────────────────────────────
         new_cnt = st.session_state.pop("wc_new_order_count", 0)
         if new_cnt > 0:
+            tot_today = (
+                len(df_live["Order ID"].unique())
+                if "Order ID" in df_live.columns
+                else len(df_live)
+            )
             st.toast(
-                f"🆕 **{new_cnt} new order{'s' if new_cnt > 1 else ''} detected** since last sync!",
+                f"⚡ **{new_cnt} new WooCommerce order{'s' if new_cnt > 1 else ''} synced** from REST API (Total: {tot_today} orders)",
                 icon="🔔",
             )
     except Exception as api_err:

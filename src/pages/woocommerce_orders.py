@@ -706,23 +706,345 @@ def _render_live_orders_view():
     )
 
 
-def render_woocommerce_orders_tab():
-    """Renders the WooCommerce Operations module."""
-    st.markdown(
-        "<h2 style='color: #6366f1;'>🛒 WooCommerce Operations</h2>",
-        unsafe_allow_html=True,
+def _render_customer_profiles_view():
+    """Renders a comprehensive Admin Customer Profiles & Order 360 Explorer."""
+    from src.utils.customer_registry import load_customer_registry
+    from src.utils.customer_registry_full import load_full_registry
+    from src.utils.snapshots import load_sales_snapshot
+    from src.utils.text import normalize_phone_number
+
+    df = st.session_state.get("wc_full_df")
+    if df is None or df.empty:
+        df = st.session_state.get("wc_curr_df")
+    if df is None or df.empty:
+        df = st.session_state.get("wc_tracking_df")
+    if df is None or df.empty:
+        df = load_sales_snapshot()
+
+    if df is None or df.empty:
+        st.warning(
+            "⚠️ No customer order data available in memory. Please fetch orders from the Live Tracker first."
+        )
+        return
+
+    # Extract columns
+    name_col = next(
+        (
+            c
+            for c in [
+                "Full Name (Billing)",
+                "Customer Name",
+                "Name",
+                "Billing Name",
+            ]
+            if c in df.columns
+        ),
+        None,
     )
-    st.markdown(
-        "<p style='opacity: 0.8;'>Live synchronization view and tracking for WooCommerce operations.</p>",
-        unsafe_allow_html=True,
+    phone_col = next(
+        (
+            c
+            for c in ["Phone (Billing)", "Phone", "Billing Phone", "Customer Phone"]
+            if c in df.columns
+        ),
+        None,
     )
+    email_col = next(
+        (
+            c
+            for c in ["Billing Email", "Email", "Customer Email"]
+            if c in df.columns
+        ),
+        None,
+    )
+    order_id_col = next(
+        (c for c in ["Order ID", "Order Number", "ID"] if c in df.columns),
+        "Order ID",
+    )
+    status_col = next(
+        (c for c in ["Order Status", "Status"] if c in df.columns),
+        "Order Status",
+    )
+    amount_col = next(
+        (
+            c
+            for c in ["Order Total Amount", "Total Amount", "Total"]
+            if c in df.columns
+        ),
+        "Order Total Amount",
+    )
+    item_col = next(
+        (c for c in ["Item Name", "Product Name", "Items"] if c in df.columns),
+        "Item Name",
+    )
+    qty_col = next(
+        (c for c in ["Quantity", "Qty"] if c in df.columns), "Quantity"
+    )
+    city_col = next(
+        (
+            c
+            for c in ["Shipping City", "City", "State Name (Billing)"]
+            if c in df.columns
+        ),
+        None,
+    )
+    addr_col = next(
+        (c for c in ["Shipping Address 1", "Address"] if c in df.columns), None
+    )
+
+    reg = load_customer_registry()
+
+    # Aggregate by Phone or Email or Name
+    df_work = df.copy()
+    if phone_col:
+        df_work["_norm_phone"] = df_work[phone_col].apply(
+            normalize_phone_number
+        )
+    else:
+        df_work["_norm_phone"] = ""
+
+    if phone_col:
+        df_work["_cust_key"] = (
+            df_work["_norm_phone"]
+            .replace("", pd.NA)
+            .fillna(df_work[name_col] if name_col else "Unknown")
+        )
+    elif email_col:
+        df_work["_cust_key"] = df_work[email_col].fillna("Unknown")
+    elif name_col:
+        df_work["_cust_key"] = df_work[name_col].fillna("Unknown")
+    else:
+        df_work["_cust_key"] = df_work.index.astype(str)
+
+    cust_groups = df_work.groupby("_cust_key")
+    customer_records = []
+
+    for _, grp in cust_groups:
+        c_name = (
+            str(grp[name_col].dropna().iloc[0])
+            if name_col and not grp[name_col].dropna().empty
+            else "Customer"
+        )
+        c_phone = (
+            str(grp[phone_col].dropna().iloc[0])
+            if phone_col and not grp[phone_col].dropna().empty
+            else ""
+        )
+        c_email = (
+            str(grp[email_col].dropna().iloc[0])
+            if email_col and not grp[email_col].dropna().empty
+            else ""
+        )
+        c_norm_phone = normalize_phone_number(c_phone)
+
+        unique_orders = (
+            grp.drop_duplicates(subset=[order_id_col])
+            if order_id_col in grp.columns
+            else grp
+        )
+        ord_ids = [
+            str(x) for x in unique_orders[order_id_col].dropna().unique().tolist()
+        ]
+        ord_cnt = len(ord_ids)
+
+        total_spend = 0.0
+        if amount_col in unique_orders.columns:
+            total_spend = float(
+                pd.to_numeric(
+                    unique_orders[amount_col], errors="coerce"
+                ).fillna(0).sum()
+            )
+
+        items_list = []
+        if item_col in grp.columns:
+            for _, r in grp.iterrows():
+                i_name = str(r.get(item_col, ""))
+                i_qty = int(
+                    pd.to_numeric(r.get(qty_col, 1), errors="coerce") or 1
+                )
+                if i_name and i_name != "nan":
+                    items_list.append(f"{i_qty}x {i_name}")
+        items_str = " | ".join(items_list[:4]) + (
+            "..." if len(items_list) > 4 else ""
+        )
+
+        statuses = (
+            unique_orders[status_col].dropna().astype(str).tolist()
+            if status_col in unique_orders.columns
+            else []
+        )
+        latest_status = statuses[-1] if statuses else "Unknown"
+
+        c_city = (
+            str(grp[city_col].dropna().iloc[0])
+            if city_col and not grp[city_col].dropna().empty
+            else "N/A"
+        )
+        c_addr = (
+            str(grp[addr_col].dropna().iloc[0])
+            if addr_col and not grp[addr_col].dropna().empty
+            else "N/A"
+        )
+
+        is_returning = False
+        if c_norm_phone and c_norm_phone in reg:
+            is_returning = True
+        elif ord_cnt > 1:
+            is_returning = True
+
+        customer_records.append(
+            {
+                "Customer Name": c_name,
+                "Phone": c_phone,
+                "Email": c_email,
+                "Customer Type": (
+                    "🔄 Returning VIP" if is_returning else "🆕 First-Time"
+                ),
+                "Total Orders": ord_cnt,
+                "Total Spend (৳)": int(total_spend),
+                "Order Numbers": ", ".join(ord_ids),
+                "Items Summary": items_str,
+                "Latest Status": latest_status,
+                "City / District": c_city,
+                "Shipping Address": c_addr,
+            }
+        )
+
+    cust_df = pd.DataFrame(customer_records)
+    if cust_df.empty:
+        st.info("No customer profiles found.")
+        return
+
+    # Top KPI summary cards
+    tot_cust_cnt = len(cust_df)
+    ret_cust_cnt = len(cust_df[cust_df["Customer Type"] == "🔄 Returning VIP"])
+    new_cust_cnt = tot_cust_cnt - ret_cust_cnt
+    tot_sales_val = cust_df["Total Spend (৳)"].sum()
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("👥 Total Unique Customers", f"{tot_cust_cnt:,}")
+    k2.metric(
+        "🆕 First-Time Buyers",
+        f"{new_cust_cnt:,}",
+        delta=f"{(new_cust_cnt / tot_cust_cnt * 100):.0f}%"
+        if tot_cust_cnt > 0
+        else "",
+    )
+    k3.metric(
+        "🔄 Returning Customers",
+        f"{ret_cust_cnt:,}",
+        delta=f"{(ret_cust_cnt / tot_cust_cnt * 100):.0f}%"
+        if tot_cust_cnt > 0
+        else "",
+    )
+    k4.metric("💰 Total Customer Spend", f"৳{tot_sales_val:,}")
+
     st.divider()
 
-    _render_live_orders_view()
+    # Search & Filter Toolbar
+    f_col1, f_col2, f_col3 = st.columns([2, 1, 1])
+    with f_col1:
+        q = st.text_input(
+            "🔍 Search Customer Profiles:",
+            placeholder="Search by name, phone, email, order #, items, city...",
+            key="cust_profile_search_q",
+        )
+    with f_col2:
+        type_filter = st.selectbox(
+            "Customer Type:",
+            ["All", "🆕 First-Time", "🔄 Returning VIP"],
+            key="cust_profile_type_filter",
+        )
+    with f_col3:
+        status_opts = ["All"] + sorted(
+            list(set(cust_df["Latest Status"].dropna().tolist()))
+        )
+        st_filter = st.selectbox(
+            "Order Status:", status_opts, key="cust_profile_status_filter"
+        )
 
-    st.markdown("<div style='margin-top: 50px;'></div>", unsafe_allow_html=True)
-    st.divider()
-    st.markdown("### :material/local_shipping: WooCommerce × Pathao Bulk Status Sync")
+    # Apply filters
+    filtered_cust = cust_df.copy()
+    if type_filter != "All":
+        filtered_cust = filtered_cust[
+            filtered_cust["Customer Type"] == type_filter
+        ]
+    if st_filter != "All":
+        filtered_cust = filtered_cust[
+            filtered_cust["Latest Status"] == st_filter
+        ]
+    if q:
+        q_low = q.lower().strip()
+        mask = (
+            filtered_cust["Customer Name"]
+            .str.lower()
+            .str.contains(q_low, na=False)
+            | filtered_cust["Phone"].str.lower().str.contains(q_low, na=False)
+            | filtered_cust["Email"].str.lower().str.contains(q_low, na=False)
+            | filtered_cust["Order Numbers"]
+            .str.lower()
+            .str.contains(q_low, na=False)
+            | filtered_cust["Items Summary"]
+            .str.lower()
+            .str.contains(q_low, na=False)
+            | filtered_cust["City / District"]
+            .str.lower()
+            .str.contains(q_low, na=False)
+        )
+        filtered_cust = filtered_cust[mask]
+
+    st.caption(
+        f"Showing **{len(filtered_cust)}** of **{len(cust_df)}** customer profile(s)"
+    )
+
+    cols_display = [
+        "Customer Name",
+        "Phone",
+        "Email",
+        "Customer Type",
+        "Total Orders",
+        "Total Spend (৳)",
+        "Order Numbers",
+        "Items Summary",
+        "Latest Status",
+        "City / District",
+    ]
+
+    st.dataframe(
+        filtered_cust[cols_display],
+        use_container_width=True,
+        hide_index=True,
+        height=450,
+        column_config={
+            "Total Spend (৳)": st.column_config.NumberColumn(
+                "💰 Total Spend", format="৳ %d"
+            ),
+            "Total Orders": st.column_config.NumberColumn("📦 Orders"),
+            "Phone": st.column_config.TextColumn("📞 Phone"),
+            "Customer Type": st.column_config.TextColumn("🏷️ Type"),
+        },
+    )
+
+    # Export Button
+    c_exp1, c_exp2 = st.columns([2, 1])
+    with c_exp2:
+        export_bytes = export_to_styled_excel(
+            {"Customer Directory": filtered_cust[cols_display]}
+        )
+        st.download_button(
+            "📥 Export Customer Directory (Excel)",
+            data=export_bytes,
+            file_name="DEEN_Customer_Directory.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+
+
+def _render_bulk_updater_tab():
+    """Renders the Bulk Status Sync & Pathao Match view."""
+    st.markdown(
+        "### :material/local_shipping: WooCommerce × Pathao Bulk Status Sync"
+    )
     st.markdown(
         "Match WooCommerce orders with a Pathao CSV/Excel export and update statuses directly."
     )
@@ -745,10 +1067,11 @@ def render_woocommerce_orders_tab():
 
     with c2:
         pathao_file = st.file_uploader(
-            "Upload Pathao Export (CSV/Excel)", type=["csv", "xlsx"], key="wc_pathao_up"
+            "Upload Pathao Export (CSV/Excel)",
+            type=["csv", "xlsx"],
+            key="wc_pathao_up",
         )
 
-        # Create WC Base
         track_df = (
             wc_df[["Order ID", "Order Status"]]
             .copy()
@@ -767,7 +1090,6 @@ def render_woocommerce_orders_tab():
                 else:
                     pathao_df = pd.read_excel(pathao_file)
 
-                # Identify columns
                 cols = [str(c) for c in pathao_df.columns]
                 merchant_col = next(
                     (
@@ -814,7 +1136,6 @@ def render_woocommerce_orders_tab():
                 )
                 pathao_df["Base_WC_ID"] = pathao_df["Base_WC_ID"].astype(str)
 
-                # Merge
                 merged_df = pd.merge(
                     track_df,
                     pathao_df,
@@ -859,7 +1180,9 @@ def render_woocommerce_orders_tab():
                 )
 
             if pathao_file is not None:
-                unmatched_df = display_df[display_df["Pathao ID"] == "Not Found"].copy()
+                unmatched_df = display_df[
+                    display_df["Pathao ID"] == "Not Found"
+                ].copy()
                 if not unmatched_df.empty:
                     with c_action:
                         excel_bytes = export_to_styled_excel(
@@ -885,7 +1208,9 @@ def render_woocommerce_orders_tab():
                 "refunded",
                 "failed",
             ]
-            display_df["WC Status"] = display_df["WC Status"].astype(str).str.lower()
+            display_df["WC Status"] = (
+                display_df["WC Status"].astype(str).str.lower()
+            )
 
             st.data_editor(
                 display_df,
@@ -906,16 +1231,21 @@ def render_woocommerce_orders_tab():
                         "Pathao Status", disabled=True
                     ),
                 },
-                disabled=["Order Number", "Pathao ID", "Consignment", "Pathao Status"],
+                disabled=[
+                    "Order Number",
+                    "Pathao ID",
+                    "Consignment",
+                    "Pathao Status",
+                ],
                 use_container_width=True,
                 key="wc_pathao_tracker_editor",
                 height=600,
                 hide_index=False,
             )
 
-            changes = st.session_state.get("wc_pathao_tracker_editor", {}).get(
-                "edited_rows", {}
-            )
+            changes = st.session_state.get(
+                "wc_pathao_tracker_editor", {}
+            ).get("edited_rows", {})
             if changes:
                 st.warning(f"You have {len(changes)} pending status updates.")
                 if st.button(
@@ -928,8 +1258,32 @@ def render_woocommerce_orders_tab():
                         for row_idx, col_changes in changes.items():
                             if "WC Status" in col_changes:
                                 new_status = col_changes["WC Status"]
-                                order_id = display_df.iloc[row_idx]["Order Number"]
+                                order_id = display_df.iloc[row_idx][
+                                    "Order Number"
+                                ]
                                 if update_order_status(order_id, new_status)[0]:
                                     success_count += 1
 
-                        st.toast(f"✅ Successfully applied {success_count} updates!")
+                        st.toast(
+                            f"✅ Successfully applied {success_count} updates!"
+                        )
+
+
+def render_woocommerce_orders_tab():
+    """Renders the WooCommerce Operations & Customer Hub module with organized tabs."""
+    tab_orders, tab_customers, tab_updater = st.tabs(
+        [
+            "🛒 Live Orders & Tracking",
+            "👥 Customer Profiles & Order 360",
+            "⚡ Bulk Status Sync & Match",
+        ]
+    )
+
+    with tab_orders:
+        _render_live_orders_view()
+
+    with tab_customers:
+        _render_customer_profiles_view()
+
+    with tab_updater:
+        _render_bulk_updater_tab()

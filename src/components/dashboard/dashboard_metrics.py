@@ -557,17 +557,20 @@ def render_operational_metrics(
     if extra_metric_label == "Basket Size" and m_cashback_disc > 0:
         extra_metric_value = f"TK {int(m_net_bv):,}"
 
-    # One consolidated cashback badge on the Revenue card only (was three
-    # separate amber badges spread across cards).
-    cb_badge = (
-        f'<div style="font-size:0.72rem;color:#f59e0b;font-weight:600;'
-        f"background:rgba(245,158,11,0.10);padding:3px 8px;border-radius:4px;"
-        f'margin-top:4px;display:inline-block;">'
-        f"Gross ৳{int(m_gross_rev):,} · Cashback −৳{int(m_cashback_disc):,} "
-        f"({m_cb_orders_pct:.0f}% of orders)</div>"
-        if m_cashback_disc > 0
-        else ""
-    )
+    # Dynamic Campaign Intelligence (Auto-Detect Flat Sale vs Cashback vs Coupon from WooCommerce REST API)
+    from src.processing.data_processing import detect_active_campaign
+
+    camp_info = detect_active_campaign(m_df)
+    if camp_info["is_active"]:
+        cb_badge = (
+            f'<div style="font-size:0.72rem;color:#f59e0b;font-weight:600;'
+            f"background:rgba(245,158,11,0.10);padding:3px 8px;border-radius:4px;"
+            f'margin-top:4px;display:inline-block;">'
+            f'Gross ৳{int(m_gross_rev):,} · {camp_info["campaign_name"]} −৳{int(camp_info["total_discount"]):,} '
+            f'({camp_info["affected_orders_pct"]:.0f}% of orders)</div>'
+        )
+    else:
+        cb_badge = ""
     cb_basket_badge = ""
     cb_orders_badge = ""
 
@@ -857,10 +860,24 @@ def render_revenue_cashback_comparison_section(
                 excl_df[raw_status_col].astype(str).str.lower().unique().tolist()
             )
 
-    st.markdown("### ⚖️ Revenue & Basket Size Cashback Impact Analysis")
-    st.info(
-        f"💡 **Revenue Equation:** Gross Revenue (**TK {gross_rev:,.0f}**) - Cashback/Discount Fees (**TK {total_cashback:,.0f}**) = **Actual Net Revenue (TK {net_rev:,.0f})**"
+    from src.processing.data_processing import detect_active_campaign
+
+    camp_info = detect_active_campaign(m_df)
+    camp_title = (
+        camp_info["campaign_name"]
+        if camp_info["is_active"]
+        else "Campaign & Discount"
     )
+
+    st.markdown(f"### ⚖️ Revenue & Basket Size {camp_title} Impact Analysis")
+    if camp_info["is_active"]:
+        st.info(
+            f"💡 **Revenue Equation:** Gross Revenue (**TK {gross_rev:,.0f}**) - {camp_title} (**TK {total_cashback:,.0f}**) = **Actual Net Realized Revenue (TK {net_rev:,.0f})**"
+        )
+    else:
+        st.info(
+            f"💡 **Revenue Equation:** Net Realized Revenue (**TK {net_rev:,.0f}**) — Zero active campaign discounts detected."
+        )
 
     # Show excluded orders banner when raw data is provided
     if excl_orders_cnt > 0:
@@ -872,21 +889,22 @@ def render_revenue_cashback_comparison_section(
         )
 
     # Compact summary: the revenue equation box above already carries
-    # gross/cashback/net and the hero KPIs carry basket values — the two old
-    # 4-column st.metric grids duplicated those numbers eight times.
+    # gross/cashback/net and the hero KPIs carry basket values
     c1, c2 = st.columns(2)
     with c1:
         st.metric(
             "🛍️ Net Basket Value",
             f"TK {net_basket:,.0f}",
-            delta=f"-TK {cb_per_basket:,.0f} cashback/order",
+            delta=f"-TK {cb_per_basket:,.0f} discount/order"
+            if total_cashback > 0
+            else None,
             delta_color="inverse",
         )
     with c2:
         st.metric(
-            "📉 Revenue Lost to Cashback",
+            f"📉 Revenue Given in {camp_title}",
             f"{pct_rev_lost:.1f}%",
-            delta=f"-TK {total_cashback:,.0f}",
+            delta=f"-TK {total_cashback:,.0f}" if total_cashback > 0 else None,
             delta_color="inverse",
         )
 
