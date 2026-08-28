@@ -950,7 +950,7 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
 @media (max-width: 768px) {
     .metric-container {
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
+        gap: 10px;
     }
 
     .metric-container-4 {
@@ -966,7 +966,7 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
     }
 
     .metric-value {
-        font-size: 1.35rem;
+        font-size: 1.3rem;
     }
 
     .metric-label {
@@ -974,17 +974,17 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
     }
 
     .metric-icon {
-        width: 38px;
-        height: 38px;
-        font-size: 20px;
+        width: 36px;
+        height: 36px;
+        font-size: 18px;
         margin-left: 8px;
     }
 }
 
 @media (max-width: 600px) {
     .metric-container {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 10px;
     }
 
     .metric-container-4 {
@@ -992,40 +992,59 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
     }
 
     .metric-container-5 {
-        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .metric-container-5 > .metric-card:last-child {
+        grid-column: span 2;
     }
 
     .metric-card {
-        padding: 10px 8px;
+        padding: 12px 10px;
         border-radius: 12px;
-        flex-direction: column;
-        align-items: flex-start;
-        justify-content: flex-start;
     }
 
     .metric-value {
-        font-size: 1.1rem;
+        font-size: 1.25rem;
     }
 
     .metric-label {
-        font-size: 0.6rem;
+        font-size: 0.65rem;
         white-space: normal;
     }
 
     .metric-icon {
-        width: 28px;
-        height: 28px;
-        font-size: 14px;
-        margin-left: 0;
-        margin-top: 4px;
-        align-self: flex-end;
+        width: 32px;
+        height: 32px;
+        font-size: 16px;
+        margin-left: 6px;
     }
 
     .metric-delta {
-        font-size: 0.58rem;
-        padding: 2px 4px;
-        margin-top: 4px;
-        flex-wrap: wrap;
+        font-size: 0.62rem;
+        padding: 2px 5px;
+        margin-top: 5px;
+    }
+}
+
+@media (max-width: 400px) {
+    .metric-container,
+    .metric-container-4,
+    .metric-container-5 {
+        grid-template-columns: 1fr !important;
+        gap: 8px;
+    }
+
+    .metric-container-5 > .metric-card:last-child {
+        grid-column: span 1;
+    }
+
+    .metric-card {
+        padding: 10px;
+    }
+
+    .metric-value {
+        font-size: 1.2rem;
     }
 }
 
