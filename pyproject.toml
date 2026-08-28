@@ -1,0 +1,31 @@
+[project]
+name = "deen-ops-terminal"
+version = "10.0.0"
+description = "Operational command center & analytics terminal for e-commerce operations in Bangladesh"
+requires-python = ">=3.10"
+dependencies = [
+    # Base / Core
+    "streamlit>=1.38.0",
+    "matplotlib>=3.9.0",
+    "pandas>=2.2.2",
+    "polars[rtcompat]>=0.20.30",
+    "numpy>=1.26.4",
+    "plotly>=5.22.0",
+    "openpyxl>=3.1.2",
+    "xlsxwriter>=3.2.0",
+    "toml>=0.10.2",
+    "duckdb>=1.0.0",
+    "tenacity>=8.3.0",
+    "rapidfuzz>=3.0.0",
+    # Integrations / AI
+    "requests>=2.32.3",
+    "aiohttp>=3.9.5",
+    # Machine Learning / Forecasting
+    "scikit-learn>=1.5.0",
+    "xgboost>=2.0.3",
+    "statsmodels>=0.14.2",
+]
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
