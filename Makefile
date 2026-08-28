@@ -1,4 +1,4 @@
-.PHONY: run format audit test
+.PHONY: run test format audit docker-up docker-down docker-build
 
 run:
 	streamlit run app.py
@@ -12,3 +12,12 @@ format:
 
 audit:
 	pip-audit -r requirements.txt
+
+docker-build:
+	docker compose build
+
+docker-up:
+	docker compose up --build -d
+
+docker-down:
+	docker compose down
