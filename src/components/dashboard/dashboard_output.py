@@ -257,6 +257,10 @@ def _render_spotlight_and_sku_report(top, color_map, wc_raw_mapping):
 
 def _render_sku_report(top):
     """Render the Master SKU-Wise Product Sales Report table."""
+    if top is None or top.empty:
+        st.info("No product sales data available for current selection.")
+        return
+
     st.subheader("📦 Product Sales Report (Master SKU Wise)")
     st.caption(
         "Aggregated item count and revenue grouped by Master SKU / Clean Product Name."
@@ -826,27 +830,30 @@ def render_dashboard_output(
     is_operational = st.session_state.get("wc_sync_mode") == "Operational Cycle"
 
     if is_operational:
-        nav_mode = st.session_state.get("wc_nav_mode", "Today")
-        if nav_mode == "Today":
-            m_df = st.session_state.get("wc_curr_df")
-        elif nav_mode == "Backlog":
-            m_df = st.session_state.get("wc_backlog_df")
-        else:
-            m_df = st.session_state.get("wc_prev_df")
+        if show_core_metrics:
+            nav_mode = st.session_state.get("wc_nav_mode", "Today")
+            if nav_mode == "Today":
+                m_df = st.session_state.get("wc_curr_df")
+            elif nav_mode == "Backlog":
+                m_df = st.session_state.get("wc_backlog_df")
+            else:
+                m_df = st.session_state.get("wc_prev_df")
 
-        c_df = (
-            st.session_state.get("wc_prev_df" if nav_mode == "Today" else "wc_curr_df")
-            if nav_mode != "Backlog"
-            else None
-        )
-        drill, summ, top, basket, active_df = _render_operational_cycle_metrics(
-            m_df,
-            c_df,
-            nav_mode,
-            dummy_mapping,
-            wc_raw_mapping,
-            render_core_metrics=show_core_metrics,
-        )
+            c_df = (
+                st.session_state.get("wc_prev_df" if nav_mode == "Today" else "wc_curr_df")
+                if nav_mode != "Backlog"
+                else None
+            )
+            drill, summ, top, basket, active_df = _render_operational_cycle_metrics(
+                m_df,
+                c_df,
+                nav_mode,
+                dummy_mapping,
+                wc_raw_mapping,
+                render_core_metrics=True,
+            )
+        else:
+            active_df = granular_df if granular_df is not None else pd.DataFrame()
     else:
         drill, summ, top, basket, active_df = _render_ingestion_mode_metrics(
             granular_df, dummy_mapping, last_updated

@@ -75,6 +75,9 @@ def render_category_charts(
         metrics_summary: Optional dictionary containing top revenue/volume metrics.
         total_revenue: Optional Net Realized Revenue override for exact center donut alignment.
     """
+    if summ is None or summ.empty:
+        return
+
     summ_display = summ.copy()
     summ_display["Display_Label"] = summ_display[display_col].apply(
         lambda x: truncate_label(get_short_category_label(x), max_len=15)
