@@ -198,14 +198,17 @@ def _load_stale_events():
 
     from src.config.constants import FEEDBACK_DIR
 
+    empty_df = pd.DataFrame(columns=["ts", "type", "details"])
     log_path = os.path.join(FEEDBACK_DIR, "system_logs.json")
     if not os.path.exists(log_path):
-        return pd.DataFrame(columns=["ts", "type", "details"])
+        return empty_df
     try:
         with open(log_path, "r", encoding="utf-8") as f:
             logs = json.load(f)
+        if not isinstance(logs, list):
+            return empty_df
     except Exception:
-        return pd.DataFrame(columns=["ts", "type", "details"])
+        return empty_df
 
     rows = [
         {
@@ -214,13 +217,18 @@ def _load_stale_events():
             "details": str(entry.get("details", "")),
         }
         for entry in logs
-        if entry.get("type") in STALE_EVENT_TYPES
+        if isinstance(entry, dict) and entry.get("type") in STALE_EVENT_TYPES
     ]
+    if not rows:
+        return empty_df
+
     df = pd.DataFrame(rows)
     from src.processing.data_processing import safe_coerce_datetime_naive
 
-    df["ts"] = safe_coerce_datetime_naive(df["ts"])
-    return df.dropna(subset=["ts"])
+    if "ts" in df.columns:
+        df["ts"] = safe_coerce_datetime_naive(df["ts"])
+        return df.dropna(subset=["ts"])
+    return empty_df
 
 
 def render_staleness_monitor():

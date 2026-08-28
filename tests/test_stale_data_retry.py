@@ -75,3 +75,32 @@ def test_newest_mod_wins_when_mixed_ages():
         }
     )
     assert _data_looks_stale(df) is False
+
+
+def test_load_stale_events_empty_and_non_stale_logs(tmp_path, monkeypatch):
+    """Ensure _load_stale_events returns valid DataFrame and does not raise KeyError: 'ts'."""
+    import json
+    from src.pages.live_dashboard import _load_stale_events
+
+    monkeypatch.setattr("src.config.constants.FEEDBACK_DIR", str(tmp_path))
+
+    # 1. Non-existent file
+    df = _load_stale_events()
+    assert isinstance(df, pd.DataFrame)
+    assert list(df.columns) == ["ts", "type", "details"]
+    assert df.empty
+
+    # 2. File with unrelated events (e.g. WC_FETCH_INITIAL_ERROR)
+    log_file = tmp_path / "system_logs.json"
+    log_file.write_text(json.dumps([{"timestamp": "2026-08-28 08:33:20", "type": "WC_FETCH_INITIAL_ERROR", "details": "timeout"}]))
+    df = _load_stale_events()
+    assert isinstance(df, pd.DataFrame)
+    assert list(df.columns) == ["ts", "type", "details"]
+    assert df.empty
+
+    # 3. File with matching stale events
+    log_file.write_text(json.dumps([{"timestamp": "2026-08-28 08:33:20", "type": "WC_STALE_DATA", "details": "cached"}]))
+    df = _load_stale_events()
+    assert len(df) == 1
+    assert "ts" in df.columns
+    assert df.iloc[0]["type"] == "WC_STALE_DATA"
