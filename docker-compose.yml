@@ -19,6 +19,10 @@ services:
       - ./src:/app/src
       - ./app.py:/app/app.py
       - ./scripts:/app/scripts
+      # Streamlit secrets for local dev
+      - path: ./.streamlit/secrets.toml
+        target: /app/.streamlit/secrets.toml
+        required: false
       # Persist runtime data across container restarts
       - ./data:/app/data
       - ./resources:/app/resources
