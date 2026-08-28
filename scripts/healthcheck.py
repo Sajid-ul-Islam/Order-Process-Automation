@@ -5,7 +5,7 @@ from urllib.request import urlopen
 
 def main() -> int:
     url = os.getenv("DEEN_OPS_HEALTHCHECK_URL", "http://localhost:8501/_stcore/health")
-    timeout = float(os.getenv("DEEN_OPS_HEALTHCHECK_TIMEOUT", "5"))
+    timeout = float(os.getenv("DEEN_OPS_HEALTHCHECK_TIMEOUT", "3"))
 
     try:
         with urlopen(url, timeout=timeout) as response:

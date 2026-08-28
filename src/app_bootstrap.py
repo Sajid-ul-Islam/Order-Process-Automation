@@ -87,6 +87,7 @@ def _format_nav_item(item: str) -> str:
         "\U0001f4e5 Sales Data Ingestion": ":material/cloud_download: Sales Ingestion",
         "\U0001f4c9 Return Analytics": ":material/keyboard_return: Return Analytics",
         "\U0001f680 Data Pilot": ":material/smart_toy: Data Pilot",
+        "\U0001f6d2 Order Tracking": ":material/shopping_cart: Order Tracking",
         "\U0001f6d2 Order tracking": ":material/shopping_cart: Order Tracking",
     }
     return nav_icons.get(item, item)
@@ -273,7 +274,7 @@ def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> N
             st.session_state.confirm_app_reset = True
 
         if st.session_state.get("confirm_app_reset"):
-            st.warning("\u26a0\ufe0f Wipe EVERYTHING?")
+            st.warning("⚠️ Reset All Workspace Data?")
             c1, c2 = st.columns(2)
             if c1.button("Yes", type="primary", use_container_width=True):
                 if os.path.exists(STATE_FILE):
@@ -401,7 +402,7 @@ def _route_page(selected_nav: str) -> None:
         from src.pages.data_pilot import render_ai_pilot_page
 
         safe_render(render_ai_pilot_page, fallback_msg="Data Pilot unavailable.")
-    elif selected_nav == "\U0001f6d2 Order tracking":
+    elif selected_nav in ["\U0001f6d2 Order Tracking", "\U0001f6d2 Order tracking"]:
         from src.pages.woocommerce_orders import render_woocommerce_orders_tab
 
         safe_render(

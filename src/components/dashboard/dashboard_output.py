@@ -296,6 +296,9 @@ def _render_sku_report(top):
             .str.contains(search_q, case=False, na=False)
             | display_df["SKU"].astype(str).str.contains(search_q, case=False, na=False)
         ]
+        st.caption(
+            f"Showing **{len(display_df)}** of **{len(report_df)}** products matching `\"{search_q}\"`"
+        )
 
     st.dataframe(
         display_df.style.format({"Total Qty": "{:,.0f}", "Total Amount": "৳{:,.0f}"}),

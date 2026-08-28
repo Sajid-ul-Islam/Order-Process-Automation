@@ -60,7 +60,7 @@ def _render_processing_tab():
             "Sync the local database with Pathao city, zone, and area data for more accurate matching."
         )
 
-        if st.button("Sync Available Locations from Pathao", use_container_width=True):
+        if st.button("🔄 Update Pathao Courier Zones", use_container_width=True):
             _sync_pathao_map()
 
     section_card(

@@ -33,6 +33,23 @@ def normalize_phone_number(value) -> str:
     return digits
 
 
+def clean_numeric_value(value, default: float = 0.0) -> float:
+    """Safely sanitizes and converts a currency or numeric string to float.
+
+    Strips currency symbols (৳, $, BDT), commas, and spaces before converting.
+    """
+    if value is None:
+        return default
+    try:
+        val_str = str(value).strip()
+        cleaned = re.sub(r"[^\d.-]", "", val_str)
+        if not cleaned or cleaned in ("-", "."):
+            return default
+        return float(cleaned)
+    except (ValueError, TypeError):
+        return default
+
+
 # --- Address Logic ---
 @lru_cache(maxsize=4096)
 def normalize_city_name(city_name):

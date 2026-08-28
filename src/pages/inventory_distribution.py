@@ -59,19 +59,24 @@ def _render_upload_summary(master_df, title_col):
 
 def render_distribution_tab(search_q):
     render_reset_confirm("Inventory Distribution", "inventory", _reset_inventory_state)
-    master_file = st.file_uploader("", type=["xlsx", "csv"], key="inv_up")
+    master_file = st.file_uploader(
+        "Upload Master Stock Spreadsheet",
+        type=["xlsx", "csv"],
+        key="inv_up",
+        label_visibility="collapsed",
+    )
 
     st.markdown('<div style="margin-top: -12px;"></div>', unsafe_allow_html=True)
     c_live, c_url = st.columns(2)
     with c_live:
         fetch_live_clicked = st.button(
-            "🔗 Pull from Live Dash",
+            "⚡ Instant Shift Sync",
             type="secondary",
             use_container_width=True,
             key="dist_live",
         )
     with c_url:
-        st.caption("Upload a master stock file above, or pull live data.")
+        st.caption("Upload a master stock file above, or pull live shift data.")
 
     import os
 

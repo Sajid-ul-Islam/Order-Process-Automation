@@ -941,10 +941,50 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
 }
 
 .delta-prev {
-    font-size: 0.82em;
-    opacity: 0.85;
+    font-size: 0.84em;
+    color: #94a3b8 !important;
+    opacity: 1 !important;
     margin-left: 3px;
-    font-weight: 500;
+    font-weight: 600;
+}
+
+[data-theme="light"] .delta-prev,
+.stApp:not([data-theme="dark"]) .delta-prev {
+    color: #475569 !important;
+}
+
+/* Accessibility Focus Rings */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+div[data-baseweb="select"]:focus-within {
+    outline: 2px solid var(--primary, #10b981) !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.25) !important;
+}
+
+/* Reduced Motion Compliance */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .hub-footer {
+        position: static !important;
+        margin-top: 32px !important;
+        padding: 16px 12px !important;
+    }
+    .main .block-container {
+        padding-bottom: 24px !important;
+    }
 }
 
 @media (max-width: 768px) {

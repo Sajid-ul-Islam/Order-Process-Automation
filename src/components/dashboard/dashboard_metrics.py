@@ -524,7 +524,7 @@ def render_operational_metrics(
         icon_l3 = "⚙️"
     else:
         l1 = "Gross Items"
-        l2 = "Actual Net Revenue"
+        l2 = "Net Realized Revenue"
         l3 = "Orders"
         icon_l3 = "🛒"
 

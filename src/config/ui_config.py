@@ -3,7 +3,7 @@ APP_VERSION = "v10.0"
 
 PRIMARY_NAV = [
     "📈 Live Dashboard",
-    "🛒 Order tracking",
+    "🛒 Order Tracking",
     "📥 Sales Data Ingestion",
     "📉 Return Analytics",
     "📦 Current Stock Analytics",

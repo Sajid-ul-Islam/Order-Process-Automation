@@ -276,7 +276,25 @@ document.addEventListener('keydown', function(e) {
 </script>""",
             unsafe_allow_html=True,
         )
-        prompt = _handle_audio_input()
+        # Mobile & Handheld 1-Tap Quick Action Operational Chips
+        if hasattr(st, "pills"):
+            quick_prompts = [
+                "📊 Top 5 SKUs Today",
+                "📈 Shift Revenue Summary",
+                "⚠️ Check Pending Orders",
+                "🔮 Next Shift Forecast",
+            ]
+            selected_quick = st.pills(
+                "Quick Actions",
+                quick_prompts,
+                selection_mode="single",
+                label_visibility="collapsed",
+                key="pilot_quick_prompts_pills",
+            )
+            if selected_quick and selected_quick != st.session_state.get("_last_quick_prompt"):
+                st.session_state["_last_quick_prompt"] = selected_quick
+                prompt = selected_quick
+
         if not prompt:
             prompt = st.chat_input(
                 "Ask Data Pilot about sales, stock, or request a report..."

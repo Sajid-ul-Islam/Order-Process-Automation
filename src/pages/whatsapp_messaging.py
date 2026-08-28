@@ -53,19 +53,24 @@ def render_wp_tab():
             placeholder="Assalamu Alaikum, {salutation}!\n\nDear {name}, your order {order_id} is being processed.\n\nItems:\n{products_list}\n\nTotal: {total}\nAddress: {address}",
         )
 
-    wp_file = st.file_uploader("", key="wp_up_2", type=["xlsx", "csv"])
+    wp_file = st.file_uploader(
+        "Upload Customer Orders Spreadsheet",
+        key="wp_up_2",
+        type=["xlsx", "csv"],
+        label_visibility="collapsed",
+    )
 
     st.markdown('<div style="margin-top: -12px;"></div>', unsafe_allow_html=True)
     c_live, c_url = st.columns(2)
     with c_live:
         fetch_live_clicked = st.button(
-            "🔗 Pull from Live Dash",
+            "⚡ Instant Shift Sync",
             type="secondary",
             use_container_width=True,
             key="wp_live",
         )
     with c_url:
-        st.caption("Or upload an Excel/CSV export.")
+        st.caption("Or upload an Excel/CSV export above.")
 
     preview_df = None
     valid_file = False

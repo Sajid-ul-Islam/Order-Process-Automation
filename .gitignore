@@ -1,18 +1,24 @@
 __pycache__/
 *.py[cod]
 *$py.class
+# Sensitive Credentials & Secrets (NEVER commit)
 .env
+*.env
+pathao_token.json
+*secrets*.toml
+*secrets*.tomal
+.streamlit/*
+!.streamlit/config.toml
 .venv/
 env/
 venv/
 ENV/
-pathao_token.json
 data/error_logs.json
 data/session_state.json
 data/feedback/system_logs.json
 data/processed/
 data/raw/
-.streamlit/
+.kiro/
 .claude/
 .pytest_cache/
 .coverage

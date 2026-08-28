@@ -14,6 +14,7 @@ COPY . .
 
 EXPOSE 8501
 
-HEALTHCHECK CMD ["python", "scripts/healthcheck.py"]
+HEALTHCHECK --interval=10s --timeout=3s --start-period=25s --retries=2 \
+    CMD ["python", "scripts/healthcheck.py"]
 
 ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
