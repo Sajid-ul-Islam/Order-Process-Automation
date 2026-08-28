@@ -482,10 +482,10 @@ def render_live_tab():
         df_live, find_columns(df_live) if df_live is not None else {}
     )
 
-    # ── Header: Auto-Sync, Date Range, Refresh button ─────────────────────────
-    c1, c2, c3, c4, c5, c6 = st.columns([1.1, 2.1, 2.1, 0.7, 1.0, 0.5])
+    # ── Header: Date Range, Op Mode, Order View, Sync, Refresh ───────────────
+    c1, c2, c3, c4, c5 = st.columns([2.0, 1.8, 2.0, 0.8, 0.5])
 
-    # Column 2: Date Range Picker
+    # Column 1: Date Range Picker
     with c1:
         today_bd = bd_today()
         curr_range = st.session_state.get("live_custom_range", (today_bd, today_bd))
@@ -528,12 +528,7 @@ def render_live_tab():
                     del st.session_state["wc_sync_end_date"]
                 st.rerun()
 
-    # Column 3: (was Cashback toggle — removed; full breakdown lives on the
-    # permanent "Analysis" tab now)
-    with c4:
-        st.empty()
-
-    # Column 4 & 5: Main Dashboard Filters (Op Mode, View, Chart Type)
+    # Column 2: Op Mode Pills
     with c2:
         st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
         mode_options = ["Last Day", "Active", "Queue"]
@@ -605,8 +600,8 @@ def render_live_tab():
             # Placeholder to maintain layout when not in "Today" mode
             st.markdown('<div style="height: 38px;"></div>', unsafe_allow_html=True)
 
-    # Column 5: Auto-Sync Label
-    with c5:
+    # Column 4: Auto-Sync Label
+    with c4:
         st.markdown(
             '<div style="height: 5px;"></div>', unsafe_allow_html=True
         )  # Vertical alignment helper
@@ -620,8 +615,8 @@ def render_live_tab():
         else:
             _sync_180s()
 
-    # Column 6: Manual Refresh Button
-    with c6:
+    # Column 5: Manual Refresh Button
+    with c5:
         st.markdown(
             '<div style="height: 5px;"></div>', unsafe_allow_html=True
         )  # Vertical alignment helper
