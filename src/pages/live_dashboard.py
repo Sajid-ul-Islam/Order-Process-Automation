@@ -126,6 +126,15 @@ def _refresh_core_metrics():
             if nav_mode in ["Backlog", "Prev"]
             else None
         )
+        if (_cmp_raw is None or _cmp_raw.empty) and nav_mode == "Today":
+            full_raw = st.session_state.get("wc_full_df")
+            if full_raw is not None and not full_raw.empty:
+                try:
+                    from src.services.woocommerce.client import _partition_operational_data
+                    _, df_prev_ext, _, _, _ = _partition_operational_data(full_raw)
+                    _cmp_raw = df_prev_ext
+                except Exception:
+                    pass
         if _cmp_raw is not None and not _cmp_raw.empty:
             _cmp_f = apply_order_view_comparison(_cmp_raw, nav_mode, order_view_mode)
             if _cmp_f is not None and not _cmp_f.empty:
@@ -684,11 +693,22 @@ def render_live_tab():
         if nav_mode in ["Backlog", "Prev"]
         else None
     )
+    if (_cmp_raw is None or _cmp_raw.empty) and nav_mode == "Today":
+        full_raw = st.session_state.get("wc_full_df")
+        if full_raw is not None and not full_raw.empty:
+            try:
+                from src.services.woocommerce.client import _partition_operational_data
+                _, df_prev_ext, _, _, _ = _partition_operational_data(full_raw)
+                _cmp_raw = df_prev_ext
+            except Exception:
+                pass
     _cmp_standard = None
     if _cmp_raw is not None and not _cmp_raw.empty:
         _cmp_f = apply_order_view_comparison(_cmp_raw, nav_mode, order_view_mode)
         if _cmp_f is not None and not _cmp_f.empty:
-            _cmp_standard, _ = prepare_granular_data(_cmp_f, live_mapping)
+            _cmp_standard, _ = prepare_granular_data(
+                _cmp_f, find_columns(_cmp_f) if not _cmp_f.empty else live_mapping
+            )
     st.session_state["live_cmp_standard"] = _cmp_standard
 
     if df_standard.empty:
