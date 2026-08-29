@@ -27,6 +27,7 @@ _MAPPING_RULES = {
     "cargo": "Cargo Trouser",
     "trouser": "Trouser",
     "jogger": "Trouser",
+    "formal panjabi": "Panjabi",
     "panjabi": "Panjabi",
     "punjabi": "Panjabi",
     "sweatshirt": "Sweatshirt",
@@ -40,6 +41,7 @@ _MAPPING_RULES = {
     "backpack": "Leather Bag",
     "mask": "Mask",
     "bottle": "Water Bottle",
+    "executive formal": "Formal Shirt",
     "formal": "Formal Shirt",
     "executive": "Formal Shirt",
 }

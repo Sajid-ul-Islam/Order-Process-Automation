@@ -63,8 +63,8 @@ def get_category_for_sales(name) -> str:
         "fullsleeve",
         "full-sleeve",
     ]
-    is_shirt = _has_any(["shirt"], name_str) and not _has_any(
-        ["pant", "trouser"], name_str
+    is_shirt = (_has_any(["shirt"], name_str) or _has_any(["executive", "formal"], name_str)) and not _has_any(
+        ["pant", "trouser", "panjabi", "punjabi"], name_str
     )
 
     if is_shirt:

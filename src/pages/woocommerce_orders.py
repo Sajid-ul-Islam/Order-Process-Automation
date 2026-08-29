@@ -709,7 +709,6 @@ def _render_live_orders_view():
 def _render_customer_profiles_view():
     """Renders a comprehensive Admin Customer Profiles & Order 360 Explorer."""
     from src.utils.customer_registry import load_customer_registry
-    from src.utils.customer_registry_full import load_full_registry
     from src.utils.snapshots import load_sales_snapshot
     from src.utils.text import normalize_phone_number
 

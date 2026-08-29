@@ -206,6 +206,7 @@ class WhatsAppOrderProcessor:
             df[product_col]
             .astype(str)
             .str.replace("Executive Formal Shirt", "Formal Shirt", regex=False)
+            .str.replace("Executive Formal", "Formal Shirt", regex=False)
         )
 
         # Format address columns

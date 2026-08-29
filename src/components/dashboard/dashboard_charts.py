@@ -26,10 +26,10 @@ def get_short_category_label(name: str) -> str:
         return "Corduroy"
     if "cuban" in lower_n:
         return "Cuban"
-    if "formal shirt" in lower_n:
-        return "Formal"
-    if "panjabi" in lower_n:
+    if "panjabi" in lower_n or "punjabi" in lower_n:
         return "Panjabi"
+    if "formal" in lower_n or "executive" in lower_n:
+        return "Formal"
     if "sweatshirt" in lower_n or "sweat shirt" in lower_n:
         return "Sweatshirt"
     if "jeans" in lower_n:
