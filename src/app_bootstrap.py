@@ -77,18 +77,19 @@ def _render_auth_gate() -> None:
 def _format_nav_item(item: str) -> str:
     """Map a nav key to a Material-icon-labelled display string."""
     nav_icons = {
-        "\U0001f4c8 Live Dashboard": ":material/dashboard: Live Dashboard",
-        "\U0001f4e6 Pathao Processor": ":material/local_shipping: Pathao Processor",
-        "\U0001f4e6 Bulk Order Processor": ":material/local_shipping: Pathao Processor",
-        "\U0001f4ac WhatsApp Messaging": ":material/chat: WhatsApp Messaging",
-        "\U0001f4ca Inventory Distribution": ":material/inventory_2: Inventory Distribution",
-        "\U0001f4e6 Current Stock Analytics": ":material/analytics: Stock Analytics",
-        "\U0001f9e9 Delivery Data Parser": ":material/data_object: Delivery Parser",
-        "\U0001f4e5 Sales Data Ingestion": ":material/cloud_download: Sales Ingestion",
-        "\U0001f4c9 Return Analytics": ":material/keyboard_return: Return Analytics",
-        "\U0001f680 Data Pilot": ":material/smart_toy: Data Pilot",
-        "\U0001f6d2 Order Tracking": ":material/shopping_cart: Order Tracking",
-        "\U0001f6d2 Order tracking": ":material/shopping_cart: Order Tracking",
+        "📈 Live Dashboard": ":material/dashboard: Live Dashboard",
+        "🛒 Order Tracking": ":material/shopping_cart: Order Tracking",
+        "🛒 Order tracking": ":material/shopping_cart: Order Tracking",
+        "📋 Product Listing": ":material/receipt_long: Product Listing",
+        "📦 Pathao Processor": ":material/local_shipping: Pathao Processor",
+        "📦 Bulk Order Processor": ":material/local_shipping: Pathao Processor",
+        "💬 WhatsApp Messaging": ":material/chat: WhatsApp Messaging",
+        "📊 Inventory Distribution": ":material/inventory_2: Inventory Distribution",
+        "📦 Current Stock Analytics": ":material/analytics: Stock Analytics",
+        "🧩 Delivery Data Parser": ":material/data_object: Delivery Parser",
+        "📥 Sales Data Ingestion": ":material/cloud_download: Sales Ingestion",
+        "📉 Return Analytics": ":material/keyboard_return: Return Analytics",
+        "🚀 Data Pilot": ":material/smart_toy: Data Pilot",
     }
     return nav_icons.get(item, item)
 
@@ -409,6 +410,13 @@ def _route_page(selected_nav: str) -> None:
             render_woocommerce_orders_tab,
             fallback_msg="WooCommerce Orders unavailable.",
         )
+    elif selected_nav in ["📋 Product Listing", "\U0001f4cb Product Listing"]:
+        from src.pages.product_listing import render_product_listing_tab
+
+        safe_render(
+            render_product_listing_tab,
+            fallback_msg="Product Listing unavailable.",
+        )
 
 
 # ── Public entry point ──────────────────────────────────────────────────────
@@ -437,7 +445,7 @@ def run_app() -> None:
     PRIMARY_NAV[:] = [
         item
         for item in PRIMARY_NAV
-        if "Excel Merger" not in item and "Product Listing" not in item
+        if "Excel Merger" not in item
     ]
 
     # ── State & styles ──────────────────────────────────────────────────────

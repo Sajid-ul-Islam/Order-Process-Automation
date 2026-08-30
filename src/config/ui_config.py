@@ -4,6 +4,7 @@ APP_VERSION = "v10.0"
 PRIMARY_NAV = [
     "📈 Live Dashboard",
     "🛒 Order Tracking",
+    "📋 Product Listing",
     "📥 Sales Data Ingestion",
     "📉 Return Analytics",
     "📦 Current Stock Analytics",
@@ -12,7 +13,6 @@ PRIMARY_NAV = [
     "💬 WhatsApp Messaging",
     "🧩 Delivery Data Parser",
     "🚀 Data Pilot",
-    # "📑 Excel Merger" is now a sub-tab inside Inventory Distribution — not a top-level nav item.
 ]
 
 CLOUD_APP_URL = "https://deen-business-intel.streamlit.app/"

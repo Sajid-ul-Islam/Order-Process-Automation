@@ -56,6 +56,7 @@ MODULES = [
     "src.components.dashboard.dashboard_filters",
     "src.components.dashboard.dashboard_output",
     "src.pages.data_pilot",
+    "src.pages.product_listing",
     "src.inventory.core",
     "src.processing.categorization",
     "src.processing.stock_categorization",
