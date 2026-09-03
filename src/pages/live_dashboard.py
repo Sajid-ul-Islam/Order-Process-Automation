@@ -390,9 +390,7 @@ def _render_order_pipeline_summary(df):
 def _render_empty_sales_kpis():
     """Keep the day-over-day sales headline visible when today is still zero."""
     previous_df = _get_day_comparison_source()
-    previous_df = filter_shipped_by_slot(
-        previous_df, "Today", is_comparison=True
-    )
+    previous_df = filter_shipped_by_slot(previous_df, "Today", is_comparison=True)
     if previous_df is None or previous_df.empty:
         previous_orders = 0
     elif "Order ID" in previous_df.columns:

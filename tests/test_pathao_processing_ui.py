@@ -51,9 +51,7 @@ class FakeUI:
         return not disabled and (key or label) in self.clicked
 
     def selectbox(self, _label, options, *, key, index=0, **_kwargs):
-        selected = self.selections.get(
-            key, self.session_state.get(key, options[index])
-        )
+        selected = self.selections.get(key, self.session_state.get(key, options[index]))
         self.session_state[key] = selected
         return selected
 
@@ -200,10 +198,14 @@ def test_manual_mapping_survives_reruns_and_changes_require_confirmation(page, o
     assert page.session_state.pathao_res_df is None
     assert len(page.processed) == 2
     render(page, "confirm_columns")
-    assert page.session_state.pathao_res_df.iloc[0]["RecipientPhone(*)"] == "01812345678"
+    assert (
+        page.session_state.pathao_res_df.iloc[0]["RecipientPhone(*)"] == "01812345678"
+    )
 
 
-@pytest.mark.parametrize("missing", processing_tab.REQUIRED_UPLOAD_COLUMNS + ["Order ID"])
+@pytest.mark.parametrize(
+    "missing", processing_tab.REQUIRED_UPLOAD_COLUMNS + ["Order ID"]
+)
 def test_missing_required_column_cannot_be_confirmed(page, orders, missing):
     page.upload = upload(orders.drop(columns=missing))
     render(page, "confirm_columns", "pathao_process_btn")
@@ -283,11 +285,18 @@ def test_woocommerce_pull_processes_only_processing_orders(page, orders):
 
 
 @pytest.mark.parametrize("status_column", ["Order Status", "Status"])
-def test_woocommerce_status_filter_trims_case_and_excludes_other_statuses(status_column):
+def test_woocommerce_status_filter_trims_case_and_excludes_other_statuses(
+    status_column,
+):
     source = pd.DataFrame(
         {
             status_column: [
-                "  Processing ", "PROCESSING", "pending", "on-hold", "cancelled", None
+                "  Processing ",
+                "PROCESSING",
+                "pending",
+                "on-hold",
+                "cancelled",
+                None,
             ],
             "Order ID": [1, 2, 3, 4, 5, 6],
         }

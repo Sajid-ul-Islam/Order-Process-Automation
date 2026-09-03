@@ -5,9 +5,9 @@ from __future__ import annotations
 import ast
 import importlib.util
 import subprocess
-import tomllib
 from pathlib import Path
 
+import toml
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -102,8 +102,9 @@ def test_sensitive_runtime_files_are_gitignored():
 
 
 def test_streamlit_production_origin_controls_are_enabled():
-    with (ROOT / ".streamlit/config.toml").open("rb") as config_file:
-        server = tomllib.load(config_file)["server"]
+    server = toml.loads((ROOT / ".streamlit/config.toml").read_text(encoding="utf-8"))[
+        "server"
+    ]
     assert server["enableCORS"] is True
     assert server["enableXsrfProtection"] is True
     assert "ops.deencommerce.com" in server["allowedHosts"]
@@ -125,9 +126,9 @@ def test_completed_orders_widgets_render_once():
     ):
         assert source.count(widget_key) == 0
 
-    component_source = (
-        ROOT / "src/components/dashboard/live_components.py"
-    ).read_text(encoding="utf-8")
+    component_source = (ROOT / "src/components/dashboard/live_components.py").read_text(
+        encoding="utf-8"
+    )
     for widget_key in (
         'key="completed_date_picker"',
         'key="completed_source_filter"',
@@ -137,7 +138,7 @@ def test_completed_orders_widgets_render_once():
 
 
 def test_dashboard_autosync_does_not_force_duplicate_fetch():
-    source = (
-        ROOT / "src/components/dashboard/live_components.py"
-    ).read_text(encoding="utf-8")
+    source = (ROOT / "src/components/dashboard/live_components.py").read_text(
+        encoding="utf-8"
+    )
     assert "_load_live_source(force_refresh=True)" not in source

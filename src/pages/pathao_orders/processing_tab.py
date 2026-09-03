@@ -259,10 +259,13 @@ def _render_column_mapping_ui(df: pd.DataFrame) -> tuple[Optional[pd.DataFrame],
             undetected_cols = [k for k, v in mapping.items() if v is None]
 
     def has_values(column):
-        return column in df_mapped and (
-            df_mapped[column].notna()
-            & df_mapped[column].astype(str).str.strip().ne("")
-        ).any()
+        return (
+            column in df_mapped
+            and (
+                df_mapped[column].notna()
+                & df_mapped[column].astype(str).str.strip().ne("")
+            ).any()
+        )
 
     required_missing = [col for col in REQUIRED_UPLOAD_COLUMNS if not has_values(col)]
     if not any(has_values(col) for col in ("Order ID", "Order Number")):

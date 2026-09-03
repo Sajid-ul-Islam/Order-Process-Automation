@@ -794,8 +794,8 @@ def _render_export_buttons(export_data, export_date_str, active_df):
                 width="stretch",
             ):
                 with st.spinner("Preparing workbook..."):
-                    st.session_state["_prepared_excel_report"] = (
-                        export_to_styled_excel(export_data)
+                    st.session_state["_prepared_excel_report"] = export_to_styled_excel(
+                        export_data
                     )
                     st.session_state["_prepared_export_key"] = export_key
 
