@@ -19,6 +19,8 @@ node_modules/
 .env.local
 *.env.*
 .streamlit/secrets.toml
+pathao_token.json
+.pathao-token-*
 
 # Generated operational data (may contain customer PII)
 BackEnd/cache/

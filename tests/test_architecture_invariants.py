@@ -88,6 +88,9 @@ def test_sensitive_runtime_files_are_gitignored():
         "BackEnd/cache/orders_snapshot.parquet",
         "resources/customer_registry_full.json",
         "resources/pathao_status_cache.json",
+        "pathao_token.json",
+        ".pathao-token-example",
+        "data/pathao_dispatch.sqlite3",
     ]
     for relative_path in sensitive_paths:
         result = subprocess.run(

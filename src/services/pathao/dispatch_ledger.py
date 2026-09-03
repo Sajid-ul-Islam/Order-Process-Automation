@@ -13,6 +13,13 @@ from pathlib import Path
 from src.config.constants import DATA_DIR, bd_now
 
 
+def _canonical_merchant_id(value):
+    """Source row ordering must not turn the same merged parcel into a new one."""
+    return ", ".join(
+        sorted({part.strip() for part in str(value).split(",") if part.strip()})
+    )
+
+
 def ledger_key(account_scope, merchant_order_id, warehouse_outlet):
     """Identify one merchant parcel, independent of editable shipment details.
 
@@ -21,14 +28,12 @@ def ledger_key(account_scope, merchant_order_id, warehouse_outlet):
     Do not include store, COD or recipient details in this identity.
     """
     account_scope = str(account_scope).strip()
-    merchant_order_id = str(merchant_order_id).strip()
+    merchant_order_id = _canonical_merchant_id(merchant_order_id)
     if not account_scope or not merchant_order_id:
         raise ValueError("Account scope and merchant order ID are required.")
     identity = [account_scope, merchant_order_id, str(warehouse_outlet).strip()]
     return hashlib.sha256(
-        json.dumps(identity, ensure_ascii=False, separators=(",", ":")).encode(
-            "utf-8"
-        )
+        json.dumps(identity, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
 
 
@@ -42,7 +47,9 @@ class DispatchLedger:
 
     def __init__(self, path=None):
         ledger_path = (
-            Path(path) if path is not None else Path(DATA_DIR) / "pathao_dispatch.sqlite3"
+            Path(path)
+            if path is not None
+            else Path(DATA_DIR) / "pathao_dispatch.sqlite3"
         )
         ledger_path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = sqlite3.connect(
@@ -78,7 +85,8 @@ class DispatchLedger:
         A false result means another attempt owns this parcel or its outcome
         requires checking in Pathao. Never submit an API request in that case.
         """
-        if not key or not str(merchant_order_id).strip():
+        merchant_order_id = _canonical_merchant_id(merchant_order_id)
+        if not key or not merchant_order_id:
             raise ValueError("Ledger key and merchant order ID are required.")
         now = bd_now().isoformat()
         cursor = self._connection.execute(
@@ -94,7 +102,7 @@ class DispatchLedger:
             WHERE dispatch_attempts.status = 'failed'
               AND dispatch_attempts.merchant_order_id = excluded.merchant_order_id
             """,
-            (key, str(merchant_order_id).strip(), now, now),
+            (key, merchant_order_id, now, now),
         )
         return cursor.rowcount == 1
 

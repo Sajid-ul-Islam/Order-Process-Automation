@@ -1,6 +1,8 @@
+import hashlib
 import json
 import math
 import os
+import tempfile
 import time
 
 from requests.exceptions import HTTPError, RequestException
@@ -17,6 +19,11 @@ class PathaoClient:
         self.client_secret = client_secret
         self.username = username
         self.password = password
+        self.account_scope = hashlib.sha256(
+            json.dumps(
+                [self.base_url, self.client_id, self.username], ensure_ascii=False
+            ).encode()
+        ).hexdigest()
         self.access_token = None
         self.refresh_token = None
         self.expires_at = 0
@@ -39,21 +46,46 @@ class PathaoClient:
         self.expires_at = time.time() + expires_in - 60  # 1 min buffer
 
         token_data = {
+            "account_scope": self.account_scope,
             "access_token": self.access_token,
             "refresh_token": self.refresh_token,
             "expires_at": self.expires_at,
         }
-        with open(self.token_file, "w") as f:
-            json.dump(token_data, f)
+        # mkstemp creates a private file; replace atomically so concurrent readers
+        # cannot consume a partially written token cache.
+        fd, temporary = tempfile.mkstemp(
+            prefix=".pathao-token-",
+            dir=os.path.dirname(os.path.abspath(self.token_file)),
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(token_data, f)
+            os.replace(temporary, self.token_file)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
     def _load_token(self):
         if os.path.exists(self.token_file):
             try:
                 with open(self.token_file, "r") as f:
                     data = json.load(f)
-                    self.access_token = data.get("access_token")
-                    self.refresh_token = data.get("refresh_token")
-                    self.expires_at = data.get("expires_at", 0)
+                # Old unscoped tokens require a fresh login, as do tokens issued
+                # for another merchant or API environment.
+                if data.get("account_scope") != self.account_scope:
+                    return
+                access_token = data.get("access_token")
+                expires_at = float(data.get("expires_at", 0))
+                if not isinstance(access_token, str) or not access_token.strip():
+                    return
+                if not math.isfinite(expires_at):
+                    return
+                self.access_token = access_token
+                refresh_token = data.get("refresh_token")
+                self.refresh_token = (
+                    refresh_token if isinstance(refresh_token, str) else None
+                )
+                self.expires_at = expires_at
             except Exception:
                 pass
 
@@ -86,9 +118,7 @@ class PathaoClient:
                 self._save_token(data)
                 return True
             else:
-                log_system_event(
-                    "PATHAO_AUTH_FAILED", f"HTTP {res.status_code}"
-                )
+                log_system_event("PATHAO_AUTH_FAILED", f"HTTP {res.status_code}")
                 return False
         except Exception as e:
             log_system_event("PATHAO_AUTH_ERROR", type(e).__name__)
@@ -108,9 +138,7 @@ class PathaoClient:
                 self._save_token(res.json())
                 return True
             else:
-                log_system_event(
-                    "PATHAO_REFRESH_FAILED", f"HTTP {res.status_code}"
-                )
+                log_system_event("PATHAO_REFRESH_FAILED", f"HTTP {res.status_code}")
                 return self.issue_access_token()
         except Exception:
             return self.issue_access_token()
@@ -150,9 +178,7 @@ class PathaoClient:
                     )
                 container = document.get("data")
                 rows = (
-                    container.get("data")
-                    if isinstance(container, dict)
-                    else container
+                    container.get("data") if isinstance(container, dict) else container
                 )
                 if not isinstance(rows, list) or any(
                     not isinstance(row, dict) for row in rows
@@ -186,9 +212,7 @@ class PathaoClient:
         except PathaoOrderError as exc:
             return [], str(exc)
         except HTTPError as exc:
-            status = (
-                exc.response.status_code if exc.response is not None else "unknown"
-            )
+            status = exc.response.status_code if exc.response is not None else "unknown"
             return [], (
                 f"Could not load pickup stores (HTTP {status}). "
                 "Check credentials and merchant access, then try again."

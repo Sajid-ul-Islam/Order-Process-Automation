@@ -24,6 +24,8 @@ MODULES = [
     "src.processing.forecasting",
     "src.processing.delivery_parser",
     "src.services.pathao.client",
+    "src.services.pathao.orders",
+    "src.services.pathao.dispatch_ledger",
     "src.services.llm.manager",
     "src.services.woocommerce.client",
     "src.services.woocommerce.stock",

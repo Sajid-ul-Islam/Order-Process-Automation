@@ -125,3 +125,17 @@ def test_identity_is_stable_and_separates_accounts_orders_and_split_parcels():
 def test_identity_requires_account_and_merchant_order(account, order):
     with pytest.raises(ValueError, match="required"):
         ledger_key(account, order, "Dhaka")
+
+
+@pytest.mark.parametrize("status", ["created", "failed", "uncertain"])
+def test_reordered_merged_references_keep_the_same_attempt(tmp_path, status):
+    original = ledger_key("account", "456, 123", "Dhaka")
+    reordered = ledger_key("account", "123,456", "Dhaka")
+    assert original == reordered
+    with DispatchLedger(tmp_path / "dispatch.sqlite3") as ledger:
+        assert ledger.reserve(original, "456, 123")
+        ledger.finish(
+            original, status, consignment_id="SYNTHETIC" if status == "created" else ""
+        )
+        assert ledger.reserve(reordered, "123,456") is (status == "failed")
+        assert ledger.get(original)["merchant_order_id"] == "123, 456"
