@@ -61,12 +61,18 @@ DEEN-OPS/
 
 Before concluding any code change, an agent **MUST** run and pass:
 
-```bash
-# 1. Full Unit Test Suite (Must be 47+ passed, 0 failed)
-PYTHONPATH=. .venv/bin/pytest tests/ -v
+```powershell
+# 1. Full Unit Test Suite (Must be 79+ passed, 0 failed)
+# Windows (PowerShell):
+$env:PYTHONPATH="."; .venv\Scripts\pytest.exe tests/ -v
+# Linux / macOS (Bash):
+# PYTHONPATH=. .venv/bin/pytest tests/ -v
 
-# 2. Module Import Verification across all 59 modules (Must be 59 OK, 0 FAILED)
-.venv/bin/python scripts/check_imports.py
+# 2. Module Import Verification across all 60 modules (Must be 60 OK, 0 FAILED)
+# Windows (PowerShell):
+.venv\Scripts\python.exe scripts/check_imports.py
+# Linux / macOS (Bash):
+# .venv/bin/python scripts/check_imports.py
 ```
 
 ---
