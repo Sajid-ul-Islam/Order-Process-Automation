@@ -108,12 +108,15 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
             mask = (dt_effective.dt.date >= start_d) & (dt_effective.dt.date <= end_d)
             return shipped_df[mask]
 
-    # ── Step 4: TODAY MODE — calendar date match only, slot-independent ──────
-    # Rule: "shipped today" = effective date (modification or creation) is today's BD calendar date.
-    # This is independent of the operational shift slot time, ensuring all orders
-    # shipped on the calendar day are included.
+    # ── Step 4: TODAY MODE — calendar date match, extended to next day 08:00 AM ──────
+    # Rule: "shipped today" = effective date matches the current operational date.
+    # Before 08:00 AM, the operational day is yesterday (allowing evening dispatches to
+    # remain visible until next day 8:00 AM). From 08:00 AM onwards, it is today.
     if nav_mode == "Today" and not is_comparison:
-        today_mask = dt_effective.dt.date == today_bd
+        today_bd = bd_today()
+        now_val = bd_now()
+        op_date = (now_val - timedelta(days=1)).date() if now_val.hour < 8 else today_bd
+        today_mask = (dt_effective.dt.date == today_bd) | (dt_effective.dt.date == op_date)
         return shipped_df[today_mask].copy()
 
     # ── Step 5: PREV / COMPARISON MODE — use slot boundaries ────────────────

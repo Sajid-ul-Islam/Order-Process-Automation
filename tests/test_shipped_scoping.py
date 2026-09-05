@@ -14,7 +14,7 @@ Rules locked in here for `filter_shipped_by_slot`:
 """
 
 import streamlit as st
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from conftest import build_order_df, now_bd
 
@@ -145,3 +145,44 @@ def test_dispatch_metrics_reverted_to_hold_waiting_process(op_state):
     assert metrics["pending"] == 4
     # Only 101 has Pathao consignment among the dispatched orders
     assert metrics["pathao_count"] == 1
+
+
+# ── Evening & Overnight visibility: after 18:00 until next day 08:00 AM ─────
+
+
+def test_shipped_orders_remain_visible_after_cutoff_until_next_day_8am(op_state, monkeypatch):
+    """Regression test: Shipped orders from the daily shift ending at 18:00 must remain
+
+    visible in 'Today' throughout the evening and night until 08:00 AM the next morning.
+    """
+    from datetime import timezone
+    from src.services.woocommerce.client import _compute_cutoff_times, _partition_operational_data
+
+    tz_bd = timezone(timedelta(hours=6))
+
+    # Scenario A: Wall-clock is 19:30 on Saturday (after 18:00 cutoff)
+    sat_evening = datetime(2026, 9, 5, 19, 30, tzinfo=tz_bd)
+    monkeypatch.setattr("src.services.woocommerce.client.datetime", type("MockDT", (datetime,), {"now": lambda tz=None: sat_evening, "combine": datetime.combine}))
+
+    cutoff_today, prev_cutoff, day_before_prev, shipped_limit = _compute_cutoff_times(tz_bd)
+    assert cutoff_today.date() == sat_evening.date()
+    assert prev_cutoff < cutoff_today
+
+    orders = [
+        # Order shipped at 14:00 Saturday (before 18:00)
+        (201, "shipped", sat_evening.replace(tzinfo=None) - timedelta(hours=5), sat_evening.replace(tzinfo=None) - timedelta(hours=5), "DD201"),
+        # Order shipped at 18:15 Saturday (late dispatch)
+        (202, "shipped", sat_evening.replace(tzinfo=None) - timedelta(hours=1), sat_evening.replace(tzinfo=None) - timedelta(hours=1), "DD202"),
+        # Order shipped Thursday (prev shift)
+        (203, "shipped", prev_cutoff - timedelta(hours=2), prev_cutoff - timedelta(hours=2), "DD203"),
+    ]
+    df = build_order_df(orders)
+
+    df_live, df_prev, _, _, _ = _partition_operational_data(df)
+
+    # Both 201 and 202 must be in Today's partition at 19:30
+    assert {201, 202} <= set(df_live["Order ID"])
+    # 203 belongs to the previous shift
+    assert 203 in set(df_prev["Order ID"])
+    assert 203 not in set(df_live["Order ID"])
+

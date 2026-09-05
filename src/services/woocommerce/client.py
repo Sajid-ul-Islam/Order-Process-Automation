@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -426,22 +426,33 @@ def _compute_cutoff_times(tz_bd):
     shift_m = st.session_state.get("shift_cutoff_minute", 0)
     holiday_list = st.session_state.get("operational_holidays", [])
 
-    # Next shift boundary: today at shift_h:shift_m, or tomorrow if already past it
-    cutoff_today = ref_now.replace(
-        hour=shift_h, minute=shift_m, second=0, microsecond=0
-    )
-    if ref_now >= cutoff_today:
-        cutoff_today = cutoff_today + timedelta(days=1)
+    rollover_h = 8
 
-    # Walk backwards past consecutive off days to find the previous working cutoff
+    # Determine target operational working day:
+    # Before 08:00 AM, the active shift belongs to the previous working day.
+    # After 08:00 AM (including evening after 18:00), the active shift belongs to today.
+    if ref_now.hour < rollover_h:
+        target_d = ref_now.date() - timedelta(days=1)
+        while _is_off_day(target_d, holiday_list):
+            target_d -= timedelta(days=1)
+    else:
+        target_d = ref_now.date()
+        if _is_off_day(target_d, holiday_list):
+            while _is_off_day(target_d, holiday_list):
+                target_d -= timedelta(days=1)
+
+    cutoff_today = datetime.combine(target_d, time(shift_h, shift_m))
     prev_cutoff = _prev_working_day_cutoff(cutoff_today, holiday_list, shift_h, shift_m)
-
-    # Walk backwards again for the shift before that
     day_before_prev = _prev_working_day_cutoff(
         prev_cutoff, holiday_list, shift_h, shift_m
     )
 
-    shipped_limit = max(cutoff_today, ref_now + timedelta(hours=12))
+    # Shipped orders remain visible until next day 08:00 AM
+    next_rollover = datetime.combine(target_d + timedelta(days=1), time(rollover_h, 0))
+    while _is_off_day(next_rollover.date(), holiday_list):
+        next_rollover += timedelta(days=1)
+
+    shipped_limit = max(cutoff_today, next_rollover, ref_now + timedelta(hours=1))
     return cutoff_today, prev_cutoff, day_before_prev, shipped_limit
 
 
@@ -563,7 +574,7 @@ def _partition_operational_data(df_full):
     # curr_slot: from start of today's shift (prev_cutoff) to end of today's shift (cutoff_today)
     # e.g. yesterday 6 PM → today 6 PM (the full operational day window)
     slot_boundaries = {
-        "wc_curr_slot": (prev_cutoff, cutoff_today),
+        "wc_curr_slot": (prev_cutoff, shipped_limit),
         "wc_prev_slot": (day_before_prev, prev_cutoff),
         "wc_backlog_slot": (cutoff_today, cutoff_today + timedelta(days=1)),
     }
