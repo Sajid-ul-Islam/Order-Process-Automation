@@ -30,6 +30,8 @@ MODULES = [
     "src.utils.safe_ops",
     "src.utils.display",
     "src.components.ui.clipboard",
+    "src.components.custom",
+    "src.components.custom.chip_filter",
     "src.components.ui.styles",
     "src.components.layout.header",
     "src.components.layout.footer",
