@@ -32,6 +32,7 @@ MODULES = [
     "src.components.ui.clipboard",
     "src.components.custom",
     "src.components.custom.chip_filter",
+    "src.components.custom.spark_metric",
     "src.components.ui.styles",
     "src.components.layout.header",
     "src.components.layout.footer",
