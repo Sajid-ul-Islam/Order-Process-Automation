@@ -607,6 +607,18 @@ def render_live_tab():
             if sel_filter and sel_filter != curr_filter:
                 st.session_state.live_order_filter = sel_filter
                 st.rerun()
+
+            # Online Only toggle - appears when Shipped is selected
+            if sel_filter == "Shipped":
+                online_only = st.toggle(
+                    "Online Only",
+                    value=st.session_state.get("shipped_online_only", False),
+                    key="shipped_online_only_toggle",
+                    help="Show only online orders (exclude outlet)",
+                )
+                if online_only != st.session_state.get("shipped_online_only", False):
+                    st.session_state.shipped_online_only = online_only
+                    st.rerun()
         else:
             # Placeholder to maintain layout when not in "Today" mode
             st.markdown('<div style="height: 38px;"></div>', unsafe_allow_html=True)
@@ -630,7 +642,7 @@ def render_live_tab():
     with c5:
         st.markdown(
             '<div style="height: 5px;"></div>', unsafe_allow_html=True
-        )  # Vertical alignment helper
+        )
         if st.button(
             "🔄",
             use_container_width=True,
@@ -641,6 +653,100 @@ def render_live_tab():
             load_live_source(force_refresh=True)
             st.toast("⚡ Data refreshed!")
             st.rerun()
+
+    # ── Date-Wise Completed Orders (Right After Banner) ─────────────────────
+    st.markdown("---")
+    st.markdown("### 📅 Date-Wise Completed Orders")
+    st.caption("Pick a date and filter by source to see completed order KPIs.")
+
+    # Date picker and source toggle in a row
+    c_date, c_source, c_btn = st.columns([2, 2, 1])
+    with c_date:
+        today_bd = bd_today()
+        default_date = st.session_state.get("completed_date", today_bd)
+        selected_date = st.date_input(
+            "Select Date",
+            value=default_date,
+            max_value=today_bd,
+            key="completed_date_picker",
+            help="Pick a date to view completed orders for that day",
+        )
+        if selected_date != default_date:
+            st.session_state["completed_date"] = selected_date
+
+    with c_source:
+        st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
+        source_filter = st.radio(
+            "Source",
+            ["Both", "Online", "Outlet"],
+            horizontal=True,
+            key="completed_source_filter",
+            help="Filter by order source: Online (website) or Outlet (physical store)",
+        )
+
+    with c_btn:
+        st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
+        show_kpis = st.button("📊 Show KPIs", key="show_completed_kpis", use_container_width=True)
+
+    # Fetch and filter
+    if show_kpis:
+        with st.status(f"Loading completed orders for {selected_date}...", expanded=True) as status:
+            from src.processing.completed_analytics import (
+                filter_completed_orders_by_date,
+                compute_completed_kpis,
+            )
+
+            # Get full dataset
+            full_df = st.session_state.get("wc_full_df")
+            if full_df is None or full_df.empty:
+                status.update(label="⚠️ No data available", state="warning")
+                st.warning("No WooCommerce data loaded. Please sync first.")
+            else:
+                # Filter by date and source
+                completed_df = filter_completed_orders_by_date(
+                    full_df,
+                    pd.Timestamp(selected_date),
+                    source_filter=source_filter,
+                )
+
+                if completed_df.empty:
+                    status.update(label="ℹ️ No completed orders found", state="info")
+                    st.info(f"No completed orders found for {selected_date} ({source_filter})")
+                else:
+                    # Compute KPIs
+                    kpis = compute_completed_kpis(completed_df)
+                    status.update(label="✅ KPIs computed!", state="complete")
+
+                    # Display KPIs
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("Completed Orders", f"{kpis['orders']:,}")
+                    c2.metric("Items Shipped", f"{kpis['items']:,}")
+                    c3.metric("Net Revenue", f"TK {kpis['net_revenue']:,.0f}")
+                    c4.metric("Basket Size", f"TK {kpis['basket_size']:,.0f}")
+
+                    c5, c6 = st.columns(2)
+                    c5.metric("Gross Revenue", f"TK {kpis['gross_revenue']:,.0f}")
+                    c6.metric("Cashback/Discount", f"TK {kpis['cashback']:,.0f}")
+
+                    # Show data
+                    with st.expander("View Order Details", expanded=False):
+                        display_cols = [
+                            c for c in [
+                                "Order ID",
+                                "Full Name (Billing)",
+                                "Phone (Billing)",
+                                "Order Status",
+                                "Order Total Amount",
+                                "Dispatch Suggestion",
+                            ]
+                            if c in completed_df.columns
+                        ]
+                        st.dataframe(
+                            completed_df[display_cols].drop_duplicates(subset=["Order ID"]),
+                            use_container_width=True,
+                        )
+
+    st.markdown("---")
 
     # ── Final Data Filtering & Sanity Checks ──────────────────────────────────
     order_view_mode = (
@@ -667,6 +773,16 @@ def render_live_tab():
         return
 
     df_live = apply_order_view(df_live, nav_mode, order_view_mode)
+
+    # Apply Online Only filter when Shipped + Online Only toggle is on
+    if order_view_mode == "Shipped" and st.session_state.get("shipped_online_only", False):
+        from src.processing.completed_analytics import classify_order_source, detect_source_column
+        source_col = detect_source_column(df_live)
+        df_live["_order_source"] = df_live.apply(
+            lambda row: classify_order_source(row, source_col), axis=1
+        )
+        df_live = df_live[df_live["_order_source"] == "Online"]
+
     if df_live is None or df_live.empty:
         if order_view_mode == "Shipped":
             st.info(f"📦 No shipped orders found in the **{nav_mode}** slot.")
@@ -766,6 +882,91 @@ def render_live_tab():
     # ── Staleness monitor stays visible below both tabs ──────────────────────
     render_staleness_monitor()
 
+    # ── Date-Wise Completed Orders ─────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 📅 Date-Wise Completed Orders")
+    st.caption("Pick a date and filter by source to see completed order KPIs.")
+
+    # Date picker
+    today_bd = bd_today()
+    default_date = st.session_state.get("completed_date", today_bd)
+    selected_date = st.date_input(
+        "Select Date",
+        value=default_date,
+        max_value=today_bd,
+        key="completed_date_picker",
+        help="Pick a date to view completed orders for that day",
+    )
+    if selected_date != default_date:
+        st.session_state["completed_date"] = selected_date
+
+    # Source toggle
+    source_filter = st.radio(
+        "Source",
+        ["Both", "Online", "Outlet"],
+        horizontal=True,
+        key="completed_source_filter",
+        help="Filter by order source: Online (website) or Outlet (physical store)",
+    )
+
+    # Fetch and filter
+    if st.button("📊 Show Completed KPIs", key="show_completed_kpis"):
+        with st.status(f"Loading completed orders for {selected_date}...", expanded=True) as status:
+            from src.processing.completed_analytics import (
+                filter_completed_orders_by_date,
+                compute_completed_kpis,
+            )
+
+            # Get full dataset
+            full_df = st.session_state.get("wc_full_df")
+            if full_df is None or full_df.empty:
+                status.update(label="⚠️ No data available", state="warning")
+                st.warning("No WooCommerce data loaded. Please sync first.")
+            else:
+                # Filter by date and source
+                completed_df = filter_completed_orders_by_date(
+                    full_df,
+                    pd.Timestamp(selected_date),
+                    source_filter=source_filter,
+                )
+
+                if completed_df.empty:
+                    status.update(label="ℹ️ No completed orders found", state="info")
+                    st.info(f"No completed orders found for {selected_date} ({source_filter})")
+                else:
+                    # Compute KPIs
+                    kpis = compute_completed_kpis(completed_df)
+                    status.update(label="✅ KPIs computed!", state="complete")
+
+                    # Display KPIs
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("Completed Orders", f"{kpis['orders']:,}")
+                    c2.metric("Items Shipped", f"{kpis['items']:,}")
+                    c3.metric("Net Revenue", f"TK {kpis['net_revenue']:,.0f}")
+                    c4.metric("Basket Size", f"TK {kpis['basket_size']:,.0f}")
+
+                    c5, c6 = st.columns(2)
+                    c5.metric("Gross Revenue", f"TK {kpis['gross_revenue']:,.0f}")
+                    c6.metric("Cashback/Discount", f"TK {kpis['cashback']:,.0f}")
+
+                    # Show data
+                    with st.expander("View Order Details", expanded=False):
+                        display_cols = [
+                            c for c in [
+                                "Order ID",
+                                "Full Name (Billing)",
+                                "Phone (Billing)",
+                                "Order Status",
+                                "Order Total Amount",
+                                "Dispatch Suggestion",
+                            ]
+                            if c in completed_df.columns
+                        ]
+                        st.dataframe(
+                            completed_df[display_cols].drop_duplicates(subset=["Order ID"]),
+                            use_container_width=True,
+                        )
+
 
 def _render_dispatch_export():
     """Render today's full dispatch export: shipped + confirmed + waiting orders."""
@@ -776,6 +977,15 @@ def _render_dispatch_export():
         return
 
     raw_df = raw_df.copy()
+
+    # Apply Online Only filter if toggle is on
+    if st.session_state.get("shipped_online_only", False):
+        from src.processing.completed_analytics import classify_order_source, detect_source_column
+        source_col = detect_source_column(raw_df)
+        raw_df["_order_source"] = raw_df.apply(
+            lambda row: classify_order_source(row, source_col), axis=1
+        )
+        raw_df = raw_df[raw_df["_order_source"] == "Online"]
 
     from src.processing.data_processing import safe_coerce_datetime_naive
 

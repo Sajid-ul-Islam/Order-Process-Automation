@@ -11,13 +11,82 @@ from src.config.constants import RESOURCES_DIR
 from src.processing.categorization import get_category_for_sales
 from src.utils.text import normalize_city_name, peek_zone_from_address
 
+# Column aliases for fallback when files use different header names
+_COLUMN_ALIASES: Dict[str, List[str]] = {
+    "Quantity": ["Quantity (- Refund)", "Qty", "Quantity (Refund)", "Item Qty", "Quantity(-Refund)"],
+    "Item Cost": ["Line Item Price", "Price", "Item Price", "Cost", "Line Total"],
+    "Order Total Amount": ["Total", "Order Total", "Total Amount", "Grand Total", "Order Amount"],
+    "Phone (Billing)": ["Phone", "Billing Phone", "Customer Phone", "Phone Number", "Mobile"],
+    "First Name (Shipping)": ["Shipping First Name", "First Name", "Recipient Name", "Customer Name"],
+    "Last Name (Shipping)": ["Shipping Last Name", "Last Name"],
+    "Address 1&2 (Shipping)": ["Shipping Address", "Address (Shipping)", "Address", "Delivery Address"],
+    "City (Shipping)": ["Shipping City", "City"],
+    "State Code (Shipping)": ["Shipping State", "State", "State Code"],
+}
+
+
+def normalize_phone(phone_str: str) -> Tuple[str, List[str]]:
+    """
+    Normalize a phone number to 11-digit BD format (01XXXXXXXXX).
+    Returns (normalized_phone, list_of_flags).
+    """
+    flags: List[str] = []
+    raw = str(phone_str).strip()
+
+    # Remove all non-digit characters
+    digits = re.sub(r"\D", "", raw)
+
+    # Handle +880 or 880 country code prefix
+    if digits.startswith("880") and len(digits) > 10:
+        digits = digits[3:]
+
+    # Handle missing leading 0 (10-digit local format)
+    if not digits.startswith("0") and len(digits) == 10:
+        digits = "0" + digits
+
+    # Take last 11 digits if string is longer (e.g. multiple phones concatenated)
+    if len(digits) > 11:
+        digits = digits[-11:]
+
+    # Check for masked phone (contains * in original)
+    if "*" in raw:
+        flags.append("MASKED_PHONE")
+
+    # Validate length
+    if len(digits) != 11:
+        flags.append(f"INVALID_PHONE_LEN_{len(digits)}")
+
+    # Validate BD mobile format (starts with 01)
+    if len(digits) == 11 and not digits.startswith("01"):
+        flags.append("INVALID_PHONE_FORMAT")
+
+    return digits, flags
+
+
+def _apply_column_fallbacks(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Maps alternate column names to the canonical names the processor expects.
+    Only applies when the canonical column is missing.
+    """
+    for canonical, aliases in _COLUMN_ALIASES.items():
+        if canonical not in df.columns:
+            for alias in aliases:
+                if alias in df.columns:
+                    df[canonical] = df[alias].copy()
+                    break
+    return df
+
 
 def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
     cleans and standardizes the input dataframe columns.
+    Applies column fallbacks for files with alternate header names.
     """
     if df.empty:
         return df
+
+    # Apply column fallbacks for alternate header names
+    df = _apply_column_fallbacks(df)
 
     # Convert numeric columns safely
     numeric_cols = ["Quantity", "Item Cost", "Order Total Amount"]
@@ -354,6 +423,24 @@ def normalize_manual_item_input(raw_text: str) -> Tuple[List[Dict[str, Any]], st
     return normalized_items, full_desc
 
 
+def _get_dispatch_warehouse(dispatch_loc: str) -> str:
+    """
+    Map a dispatch location string to a warehouse/outlet label.
+    Uses the same routing logic as _get_dispatch_group but returns
+    a canonical warehouse name for the new WarehouseOutlet column.
+    """
+    loc_lower = str(dispatch_loc).lower()
+    if "cumilla" in loc_lower:
+        return "Cumilla Outlet"
+    if "wari" in loc_lower:
+        return "Wari Outlet"
+    if "sylhet" in loc_lower:
+        return "Sylhet Outlet"
+    if "mirpur" in loc_lower or "ecom" in loc_lower:
+        return "Ecom Mirpur"
+    return "Ecom-Mirpur"
+
+
 def _get_dispatch_group(row: pd.Series, order_col: str) -> str:
     """Determine the dispatch location for a given row."""
     sugg = str(row.get("Dispatch Suggestion", "")).strip()
@@ -660,7 +747,10 @@ def _distribute_amount_to_collect(
 
 
 def process_single_order_group(
-    phone: str, group: pd.DataFrame, data_cols: Dict[str, Any]
+    phone: str,
+    group: pd.DataFrame,
+    data_cols: Dict[str, Any],
+    phone_flags: List[str] | None = None,
 ) -> List[Dict[str, Any]]:
     """
     Processes a group of rows belonging to a single order (phone number).
@@ -678,6 +768,17 @@ def process_single_order_group(
     subgroups = [df_sub for _, df_sub in group.groupby("_dispatch_loc")]
 
     total_to_collect, trx_info = _extract_payment_info(group, order_col, trx_col)
+
+    # Detect missing city on any row in the group
+    group_flags: List[str] = list(phone_flags or [])
+    for _, row in group.iterrows():
+        raw_city = str(row.get(data_cols["city_col"], "")).strip()
+        raw_state = str(row.get(data_cols["state_col"], "")).strip()
+        if (not raw_city or raw_city.lower() == "nan") and (
+            not raw_state or raw_state.lower() == "nan"
+        ):
+            if "MISSING_CITY_STATE" not in group_flags:
+                group_flags.append("MISSING_CITY_STATE")
 
     parcel_records = []
     parcel_base_values = []
@@ -718,6 +819,10 @@ def process_single_order_group(
             recipient_city, extracted_zone, address_val
         )
 
+        # Determine dispatch location for this subgroup
+        dispatch_loc = _get_dispatch_group(df_sub.iloc[0], order_col)
+        warehouse_outlet = _get_dispatch_warehouse(dispatch_loc)
+
         special_instruction = (
             "⚠️ SPLIT PARCEL - This is part of a multi-parcel order."
             if len(subgroups) > 1
@@ -728,6 +833,15 @@ def process_single_order_group(
                 f"{special_instruction} | {trx_info}"
                 if special_instruction
                 else trx_info
+            )
+
+        # Append issue flags to SpecialInstruction
+        if group_flags:
+            flag_str = " | ".join(group_flags)
+            special_instruction = (
+                f"{special_instruction} | {flag_str}"
+                if special_instruction
+                else flag_str
             )
 
         record = {
@@ -747,6 +861,7 @@ def process_single_order_group(
             "ItemWeight": "0.5",
             "ItemDesc": full_desc if full_desc else "General Items",
             "SpecialInstruction": special_instruction,
+            "WarehouseOutlet": warehouse_outlet,
         }
 
         parcel_records.append(record)
@@ -763,7 +878,10 @@ def process_single_order_group(
 @st.cache_data(show_spinner="Processing orders via Pathao Intelligence Engine...")
 def process_orders_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Main Logic: Takes raw DF, returns processed DF
+    Main Logic: Takes raw DF, returns processed DF.
+    Normalizes phone numbers to last 11 digits and groups by normalized phone
+    so that masked +880, 880-prefixed, and 10-digit numbers from the same
+    person merge into one order.
     """
     # 1. Clean
     df = clean_dataframe(df)
@@ -772,13 +890,24 @@ def process_orders_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     if "Phone (Billing)" not in df.columns:
         raise ValueError("Column 'Phone (Billing)' not found in uploaded file.")
 
-    # 2. Group
-    grouped = df.groupby("Phone (Billing)")
+    # 2. Normalize phones and group
+    #    Apply normalize_phone to every row; store normalized + flags on the df
+    phone_info = df["Phone (Billing)"].apply(normalize_phone)
+    df["_norm_phone"] = phone_info.apply(lambda x: x[0])
+    df["_phone_flags"] = phone_info.apply(lambda x: x[1])
+
+    grouped = df.groupby("_norm_phone")
     processed_data = []
 
     # 3. Process Groups
     for phone, group in grouped:
-        records = process_single_order_group(phone, group, data_cols)
+        # Aggregate flags across all rows in the group
+        all_flags: List[str] = []
+        for flag_list in group["_phone_flags"]:
+            for f in flag_list:
+                if f not in all_flags:
+                    all_flags.append(f)
+        records = process_single_order_group(phone, group, data_cols, phone_flags=all_flags)
         processed_data.extend(records)
 
     # 4. Result DF
@@ -799,6 +928,7 @@ def process_orders_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         "ItemWeight",
         "ItemDesc",
         "SpecialInstruction",
+        "WarehouseOutlet",
     ]
 
     # Ensure all target columns exist

@@ -1,0 +1,402 @@
+"""
+Auto-discovery outlet stock extraction from WooCommerce custom plugins.
+
+Detects how your custom plugin stores outlet/warehouse stock data and pulls it
+live via the WooCommerce REST API. Supports multiple storage patterns:
+
+1. Product meta fields (e.g., _outlet_mirpur_qty, _warehouse_wari_stock)
+2. Custom REST API endpoints (e.g., /wp-json/custom-inventory/v1/outlet-stock)
+3. Product attributes (e.g., attribute "Outlet" with terms "Mirpur: 50")
+4. Custom plugin tables exposed via REST (e.g., /wp-json/wc/v3/inventory)
+"""
+
+import json
+import re
+from typing import Optional
+
+import pandas as pd
+import streamlit as st
+from requests.auth import HTTPBasicAuth
+
+from src.config.settings import get_woocommerce_config
+from src.utils.http import request_with_backoff
+from src.utils.logging import log_system_event
+
+# Known patterns for outlet stock storage in custom plugins
+_KNOWN_OUTLET_PATTERNS = [
+    # Pattern 1: _outlet_{location}_qty / _outlet_{location}_stock
+    re.compile(r"^_outlet_(?P<loc>[a-z]+)_(?:qty|stock|quantity)$", re.IGNORECASE),
+    # Pattern 2: _warehouse_{location}_stock / _warehouse_{location}_qty
+    re.compile(r"^_warehouse_(?P<loc>[a-z]+)_(?:stock|qty|quantity)$", re.IGNORECASE),
+    # Pattern 3: _stock_{location} / _qty_{location}
+    re.compile(r"^_(?:stock|qty|quantity)_(?P<loc>[a-z]+)$", re.IGNORECASE),
+    # Pattern 4: outlet_{location}_stock / outlet_{location}_qty
+    re.compile(r"^outlet_(?P<loc>[a-z]+)_(?:stock|qty|quantity)$", re.IGNORECASE),
+    # Pattern 5: wms_{location}_qty / wms_{location}_stock
+    re.compile(r"^wms_(?P<loc>[a-z]+)_(?:qty|stock|quantity)$", re.IGNORECASE),
+    # Pattern 6: si_{location}_stock / si_{location}_qty (SmartInventory)
+    re.compile(r"^si_(?P<loc>[a-z]+)_(?:stock|qty|quantity)$", re.IGNORECASE),
+    # Pattern 7: multi_location_{location}_stock
+    re.compile(r"^multi_location_(?P<loc>[a-z]+)_(?:stock|qty)$", re.IGNORECASE),
+]
+
+# Known custom REST API endpoints for outlet stock
+_KNOWN_CUSTOM_ENDPOINTS = [
+    "/wp-json/custom-inventory/v1/outlet-stock",
+    "/wp-json/wc/v3/inventory",
+    "/wp-json/wms/v1/stock",
+    "/wp-json/si/v1/outlet-stock",
+    "/wp-json/multi-location/v1/stock",
+    "/wp-json/inventory/v1/outlets",
+    "/wp-json/wc/v3/products/bulk-stock",
+]
+
+
+def _get_auth_and_url() -> Tuple[Optional[HTTPBasicAuth], Optional[str]]:
+    """Get WooCommerce auth and base URL."""
+    cfg = get_woocommerce_config(required=False)
+    if not cfg or not cfg.get("store_url") or not cfg.get("consumer_key"):
+        return None, None
+    auth = HTTPBasicAuth(cfg["consumer_key"], cfg["consumer_secret"])
+    return auth, cfg["store_url"].rstrip("/")
+
+
+def discover_outlet_meta_keys(sample_size: int = 50) -> Dict[str, List[str]]:
+    """
+    Scan recent products to discover outlet stock meta keys.
+    Returns dict of {location_pattern: [list_of_matching_meta_keys]}.
+    """
+    auth, base_url = _get_auth_and_url()
+    if not auth:
+        return {}
+
+    endpoint = f"{base_url}/wp-json/wc/v3/products"
+    try:
+        res = request_with_backoff(
+            "GET",
+            endpoint,
+            params={"per_page": sample_size, "status": "any", "_fields": "id,meta_data"},
+            auth=auth,
+            timeout=15,
+        )
+        if res.status_code != 200:
+            return {}
+
+        products = json.loads(res.text.lstrip("﻿"))
+        discovered: Dict[str, List[str]] = {}
+
+        for product in products:
+            for meta in product.get("meta_data", []):
+                key = meta.get("key", "")
+                for pattern in _KNOWN_OUTLET_PATTERNS:
+                    match = pattern.match(key)
+                    if match:
+                        loc = match.group("loc").capitalize()
+                        if loc not in discovered:
+                            discovered[loc] = []
+                        if key not in discovered[loc]:
+                            discovered[loc].append(key)
+
+        return discovered
+
+    except Exception as e:
+        log_system_event("OUTLET_DISCOVERY_ERROR", str(e))
+        return {}
+
+
+def discover_custom_endpoints() -> Optional[str]:
+    """
+    Probe known custom REST API endpoints to find one that exists.
+    Returns the base endpoint URL if found, None otherwise.
+    """
+    auth, base_url = _get_auth_and_url()
+    if not auth:
+        return None
+
+    for path in _KNOWN_CUSTOM_ENDPOINTS:
+        try:
+            res = request_with_backoff(
+                "GET",
+                f"{base_url}{path}",
+                params={"per_page": 1},
+                auth=auth,
+                timeout=10,
+            )
+            if res.status_code == 200:
+                return f"{base_url}{path}"
+        except Exception:
+            continue
+
+    return None
+
+
+def fetch_outlet_stock_from_meta(
+    outlet_meta_keys: Dict[str, List[str]],
+) -> Optional[pd.DataFrame]:
+    """
+    Fetch outlet stock by reading product meta fields.
+    Returns DataFrame with columns: [SKU, Product, Outlet1, Outlet2, ...]
+    """
+    auth, base_url = _get_auth_and_url()
+    if not auth or not outlet_meta_keys:
+        return None
+
+    endpoint = f"{base_url}/wp-json/wc/v3/products"
+    all_products = []
+
+    try:
+        page = 1
+        while True:
+            res = request_with_backoff(
+                "GET",
+                endpoint,
+                params={
+                    "per_page": 100,
+                    "page": page,
+                    "status": "any",
+                    "_fields": "id,name,sku,meta_data",
+                },
+                auth=auth,
+                timeout=25,
+            )
+            if res.status_code != 200:
+                break
+
+            products = json.loads(res.text.lstrip("﻿"))
+            if not products:
+                break
+            all_products.extend(products)
+            if len(products) < 100:
+                break
+            page += 1
+
+        rows = []
+        for product in all_products:
+            sku = product.get("sku", "")
+            name = product.get("name", "")
+            meta = {m["key"]: m.get("value", 0) for m in product.get("meta_data", [])}
+
+            row = {"SKU": sku, "Product": name}
+            has_stock = False
+
+            for loc, keys in outlet_meta_keys.items():
+                total_qty = 0
+                for key in keys:
+                    val = meta.get(key, 0)
+                    try:
+                        qty = float(val) if val else 0
+                        total_qty += qty
+                    except (ValueError, TypeError):
+                        pass
+                row[loc] = int(total_qty)
+                if total_qty > 0:
+                    has_stock = True
+
+            if has_stock:
+                rows.append(row)
+
+        if rows:
+            df = pd.DataFrame(rows)
+            # Reorder columns: SKU, Product, then outlets alphabetically
+            cols = ["SKU", "Product"] + sorted(
+                [c for c in df.columns if c not in ["SKU", "Product"]]
+            )
+            return df[cols]
+        return None
+
+    except Exception as e:
+        log_system_event("OUTLET_META_FETCH_ERROR", str(e))
+        return None
+
+
+def fetch_outlet_stock_from_custom_endpoint(
+    endpoint_url: str,
+) -> Optional[pd.DataFrame]:
+    """
+    Fetch outlet stock from a custom REST API endpoint.
+    Handles common response formats.
+    """
+    auth, _ = _get_auth_and_url()
+    if not auth:
+        return None
+
+    try:
+        res = request_with_backoff(
+            "GET",
+            endpoint_url,
+            params={"per_page": 100},
+            auth=auth,
+            timeout=25,
+        )
+        if res.status_code != 200:
+            return None
+
+        data = json.loads(res.text.lstrip("﻿"))
+
+        # Handle different response formats
+        if isinstance(data, list) and len(data) > 0:
+            # Format 1: List of {sku, product, outlet1: qty, outlet2: qty}
+            if isinstance(data[0], dict):
+                df = pd.DataFrame(data)
+                # Normalize column names
+                df.columns = [c.strip().title() if c.lower() != "sku" else "SKU" for c in df.columns]
+                return df
+
+        elif isinstance(data, dict):
+            # Format 2: {products: [...], stock: {sku: {outlet: qty}}}
+            if "products" in data and "stock" in data:
+                rows = []
+                for product in data["products"]:
+                    sku = product.get("sku", "")
+                    name = product.get("name", "")
+                    stock = data["stock"].get(sku, {})
+                    row = {"SKU": sku, "Product": name}
+                    row.update(stock)
+                    rows.append(row)
+                return pd.DataFrame(rows) if rows else None
+
+            # Format 3: {outlets: [...], stock: [{sku, outlet, qty}]}
+            elif "outlets" in data and "stock" in data:
+                pivot = {}
+                for item in data["stock"]:
+                    sku = item.get("sku", "")
+                    outlet = item.get("outlet", "")
+                    qty = item.get("qty", 0)
+                    if sku not in pivot:
+                        pivot[sku] = {"SKU": sku}
+                    pivot[sku][outlet] = qty
+                rows = list(pivot.values())
+                return pd.DataFrame(rows) if rows else None
+
+        return None
+
+    except Exception as e:
+        log_system_event("OUTLET_CUSTOM_FETCH_ERROR", str(e))
+        return None
+
+
+def fetch_outlet_stock_from_attributes() -> Optional[pd.DataFrame]:
+    """
+    Fetch outlet stock stored as product attributes.
+    Some plugins store outlet stock as attribute values like "Mirpur: 50".
+    """
+    auth, base_url = _get_auth_and_url()
+    if not auth:
+        return None
+
+    endpoint = f"{base_url}/wp-json/wc/v3/products"
+    all_products = []
+
+    try:
+        page = 1
+        while True:
+            res = request_with_backoff(
+                "GET",
+                endpoint,
+                params={
+                    "per_page": 100,
+                    "page": page,
+                    "status": "any",
+                    "_fields": "id,name,sku,attributes",
+                },
+                auth=auth,
+                timeout=25,
+            )
+            if res.status_code != 200:
+                break
+
+            products = json.loads(res.text.lstrip("﻿"))
+            if not products:
+                break
+            all_products.extend(products)
+            if len(products) < 100:
+                break
+            page += 1
+
+        rows = []
+        for product in all_products:
+            sku = product.get("sku", "")
+            name = product.get("name", "")
+            attrs = product.get("attributes", [])
+
+            row = {"SKU": sku, "Product": name}
+            has_stock = False
+
+            for attr in attrs:
+                attr_name = attr.get("name", "").lower()
+                if "outlet" in attr_name or "warehouse" in attr_name or "stock" in attr_name:
+                    for option in attr.get("options", []):
+                        # Parse "Mirpur: 50" or "Wari - 20" or "Cumilla: 15 pcs"
+                        match = re.match(
+                            r"^(?P<loc>[a-z\s]+)[:\\-]?\s*(?P<qty>\d+)",
+                            option.strip(),
+                            re.IGNORECASE,
+                        )
+                        if match:
+                            loc = match.group("loc").strip().capitalize()
+                            qty = int(match.group("qty"))
+                            row[loc] = row.get(loc, 0) + qty
+                            has_stock = True
+
+            if has_stock:
+                rows.append(row)
+
+        if rows:
+            df = pd.DataFrame(rows)
+            cols = ["SKU", "Product"] + sorted(
+                [c for c in df.columns if c not in ["SKU", "Product"]]
+            )
+            return df[cols]
+        return None
+
+    except Exception as e:
+        log_system_event("OUTLET_ATTR_FETCH_ERROR", str(e))
+        return None
+
+
+@st.cache_data(ttl=300, show_spinner="Fetching live outlet stock...")
+def fetch_live_outlet_stock() -> Optional[pd.DataFrame]:
+    """
+    Auto-detect and fetch outlet stock from WooCommerce.
+    Tries multiple methods in order:
+    1. Custom REST API endpoint
+    2. Product meta fields (known patterns)
+    3. Product attributes
+    Returns DataFrame with outlet stock or None if no method works.
+    """
+    # Method 1: Try custom endpoints
+    custom_endpoint = discover_custom_endpoints()
+    if custom_endpoint:
+        df = fetch_outlet_stock_from_custom_endpoint(custom_endpoint)
+        if df is not None and not df.empty:
+            return df
+
+    # Method 2: Try product meta fields
+    meta_keys = discover_outlet_meta_keys()
+    if meta_keys:
+        df = fetch_outlet_stock_from_meta(meta_keys)
+        if df is not None and not df.empty:
+            return df
+
+    # Method 3: Try product attributes
+    df = fetch_outlet_stock_from_attributes()
+    if df is not None and not df.empty:
+        return df
+
+    return None
+
+
+def get_outlet_stock_summary(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Generate a summary of total stock per outlet from the outlet stock DataFrame.
+    """
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    outlet_cols = [c for c in df.columns if c not in ["SKU", "Product"]]
+    summary = {}
+
+    for col in outlet_cols:
+        summary[col] = df[col].sum()
+
+    return pd.DataFrame([summary])

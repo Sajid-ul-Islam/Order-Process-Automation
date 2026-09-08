@@ -1,5 +1,3 @@
-import io
-
 import pandas as pd
 import streamlit as st
 
@@ -26,6 +24,7 @@ def _reset_inventory_state():
             "inv_inventory_map",
             "inv_sku_map",
             "inv_sku_col",
+            "inv_outlet_stock_df",
         ]
     )
 
@@ -59,6 +58,49 @@ def _render_upload_summary(master_df, title_col):
 
 def render_distribution_tab(search_q):
     render_reset_confirm("Inventory Distribution", "inventory", _reset_inventory_state)
+
+    # ── Live Outlet Stock from Custom Plugin ───────────────────────────────
+    st.markdown("### 🏪 Live Outlet Stock (Auto-Discovery)")
+    st.caption("Automatically detect and pull outlet stock from your WooCommerce custom plugin.")
+
+    if st.button("🔌 Connect & Fetch Outlet Stock", key="fetch_outlet_stock"):
+        with st.status("🔍 Detecting outlet stock storage method...", expanded=True) as status:
+            from src.services.woocommerce.outlet_stock import fetch_live_outlet_stock
+
+            status.update(label="📡 Fetching outlet stock from WooCommerce...")
+            outlet_df = fetch_live_outlet_stock()
+
+            if outlet_df is not None and not outlet_df.empty:
+                status.update(label="✅ Outlet stock fetched successfully!", state="complete")
+                st.session_state.inv_outlet_stock_df = outlet_df
+                st.toast(f"✅ Loaded {len(outlet_df)} products with outlet stock")
+            else:
+                status.update(label="⚠️ No outlet stock found", state="warning")
+                st.session_state.inv_outlet_stock_df = None
+                st.warning("Could not detect outlet stock. Make sure your custom plugin is active and has data.")
+
+    # Display outlet stock if available
+    if st.session_state.get("inv_outlet_stock_df") is not None:
+        outlet_df = st.session_state.inv_outlet_stock_df
+        st.dataframe(outlet_df, use_container_width=True)
+
+        import io
+        import datetime
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            outlet_df.to_excel(writer, sheet_name="Outlet Stock", index=False)
+        excel_data = output.getvalue()
+
+        st.download_button(
+            "📥 Download Outlet Stock Excel",
+            excel_data,
+            f"{datetime.datetime.now().strftime('%Y-%m-%d')}_outlet_stock.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_outlet_stock",
+        )
+
+    st.markdown("---")
+
     master_file = st.file_uploader(
         "Upload Master Stock Spreadsheet",
         type=["xlsx", "csv"],
@@ -67,16 +109,6 @@ def render_distribution_tab(search_q):
     )
 
     st.markdown('<div style="margin-top: -12px;"></div>', unsafe_allow_html=True)
-    c_live, c_url = st.columns(2)
-    with c_live:
-        fetch_live_clicked = st.button(
-            "⚡ Instant Shift Sync",
-            type="secondary",
-            use_container_width=True,
-            key="dist_live",
-        )
-    with c_url:
-        st.caption("Upload a master stock file above, or pull live shift data.")
 
     import os
 

@@ -676,6 +676,10 @@ def aggregate_data(df, selected_cols):
         elif "Order ID" in df.columns:
             group_cols.append("Order ID")
 
+        # Count unique orders BEFORE adding phone to group_cols
+        order_id_col = group_cols[0] if group_cols else None
+        unique_orders_count = df[order_id_col].nunique() if order_id_col else len(df)
+
         if "phone" in selected_cols and selected_cols["phone"] in df.columns:
             group_cols.append(selected_cols["phone"])
         elif "Phone (Billing)" in df.columns:
@@ -707,12 +711,13 @@ def aggregate_data(df, selected_cols):
             basket_metrics["avg_basket_value"] = (
                 float(avg_val) if pd.notna(avg_val) else 0
             )
-            basket_metrics["total_orders"] = len(order_groups)
+            # Use unique order count, not grouped row count
+            basket_metrics["total_orders"] = unique_orders_count
 
             multi_item_orders = len(order_groups[order_groups["Item Count"] > 1])
             basket_metrics["attachment_rate"] = (
-                (multi_item_orders / len(order_groups) * 100)
-                if len(order_groups) > 0
+                (multi_item_orders / unique_orders_count * 100)
+                if unique_orders_count > 0
                 else 0
             )
 
@@ -724,7 +729,7 @@ def aggregate_data(df, selected_cols):
 
         if not phone_col:
             basket_metrics["avg_customer_value"] = basket_metrics["avg_basket_value"]
-            basket_metrics["unique_customers"] = basket_metrics["total_orders"]
+            basket_metrics["unique_customers"] = unique_orders_count
 
         basket_metrics["total_gross_revenue"] = (
             float(df["Gross Amount"].sum())
