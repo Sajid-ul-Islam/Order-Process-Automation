@@ -1,6 +1,8 @@
+from datetime import timedelta
+
 import pandas as pd
 import polars as pl
-import streamlit as st
+from src.utils.streamlit_runtime import get_session_state
 
 from src.config.constants import bd_now, bd_today
 from src.processing.categorization import (
@@ -45,7 +47,9 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     status_col = (
         "Order Status"
         if "Order Status" in df.columns
-        else "Status" if "Status" in df.columns else None
+        else "Status"
+        if "Status" in df.columns
+        else None
     )
     if status_col is None:
         return df
@@ -75,7 +79,9 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     date_col = (
         "dt_parsed"
         if "dt_parsed" in shipped_df.columns
-        else "Order Date" if "Order Date" in shipped_df.columns else None
+        else "Order Date"
+        if "Order Date" in shipped_df.columns
+        else None
     )
 
     dt_mod = (
@@ -96,7 +102,7 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
     today_bd = bd_today()
 
     # ── Step 3: Custom date range (user-selected) ────────────────────────────
-    custom_range = st.session_state.get("live_custom_range")
+    custom_range = get_session_state().get("live_custom_range")
     if (
         not is_comparison
         and custom_range
@@ -108,16 +114,17 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
             mask = (dt_effective.dt.date >= start_d) & (dt_effective.dt.date <= end_d)
             return shipped_df[mask]
 
-    # ── Step 4: TODAY MODE — calendar date match, extended to next day 08:00 AM ──────
-    # Rule: "shipped today" = effective date matches the current operational date.
-    # Before 08:00 AM, the operational day is yesterday (allowing evening dispatches to
-    # remain visible until next day 8:00 AM). From 08:00 AM onwards, it is today.
+    # ── Step 4: TODAY MODE — strict Bangladesh calendar-day match ────────────
+    # Day-over-day sales comparisons must not blend yesterday's shipments into
+    # today's KPI after midnight.
     if nav_mode == "Today" and not is_comparison:
         today_bd = bd_today()
-        now_val = bd_now()
-        op_date = (now_val - timedelta(days=1)).date() if now_val.hour < 8 else today_bd
-        today_mask = (dt_effective.dt.date == today_bd) | (dt_effective.dt.date == op_date)
+        today_mask = dt_effective.dt.date == today_bd
         return shipped_df[today_mask].copy()
+
+    if nav_mode == "Today" and is_comparison:
+        previous_day = bd_today() - timedelta(days=1)
+        return shipped_df[dt_effective.dt.date == previous_day].copy()
 
     # ── Step 5: PREV / COMPARISON MODE — use slot boundaries ────────────────
     slot_key = "wc_prev_slot" if nav_mode == "Prev" else None
@@ -125,10 +132,12 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
         slot_key = (
             "wc_prev_slot"
             if nav_mode == "Today"
-            else "wc_curr_slot" if nav_mode == "Prev" else None
+            else "wc_curr_slot"
+            if nav_mode == "Prev"
+            else None
         )
 
-    slot = st.session_state.get(slot_key) if slot_key else None
+    slot = get_session_state().get(slot_key) if slot_key else None
 
     if slot:
         slot_start, slot_end = _safe_dt_naive(slot[0]), _safe_dt_naive(slot[1])
@@ -139,23 +148,19 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
 
 
 def filter_all_orders_to_slot(df, nav_mode):
-    """Scopes 'All Orders' view to only the relevant slot window and whitelisted statuses.
+    """Scope the non-cancelled operational workload to the selected window.
 
     For Today mode, keeps:
-      - Active statuses (processing, on-hold, pending, waiting) placed within the slot window
+      - Every non-cancelled, non-sale status as operational workload
       - Shipped/completed orders whose modification date falls within the slot window
 
     For other modes (Prev / Backlog), delegates to slot boundaries as defined in session state.
 
     Returns a filtered DataFrame — never falls back to the full unscoped dataset.
     """
-    from src.config.constants import (
-        ACTIVE_STATUSES,
-        SHIPPED_STATUSES,
-    )
+    from src.config.constants import CANCELLED_STATUSES, SHIPPED_STATUSES
 
-    ACTIVE_STATUSES_SET = {s.lower() for s in ACTIVE_STATUSES}
-    ALL_VALID = ACTIVE_STATUSES_SET | {s.lower() for s in SHIPPED_STATUSES}
+    shipped_statuses = {status.lower() for status in SHIPPED_STATUSES}
 
     if df is None or df.empty:
         return df
@@ -163,19 +168,23 @@ def filter_all_orders_to_slot(df, nav_mode):
     status_col = (
         "Order Status"
         if "Order Status" in df.columns
-        else "Status" if "Status" in df.columns else None
+        else "Status"
+        if "Status" in df.columns
+        else None
     )
     if status_col is None:
         return df
 
-    # 1. Status whitelist — drop anything not in the allowed set
+    # "All Orders" is the operational workload: retain every WooCommerce status
+    # except explicit cancellation. Revenue analytics apply the stricter shipped
+    # status set separately.
     status_lower = df[status_col].astype(str).str.lower().str.strip()
-    df = df[status_lower.isin(ALL_VALID)].copy()
+    df = df[~status_lower.isin(CANCELLED_STATUSES)].copy()
     if df.empty:
         return df
 
     # Check for custom date range selected by user
-    custom_range = st.session_state.get("live_custom_range")
+    custom_range = get_session_state().get("live_custom_range")
     today_bd = bd_today()
 
     if (
@@ -197,12 +206,13 @@ def filter_all_orders_to_slot(df, nav_mode):
             date_col = (
                 "dt_parsed"
                 if "dt_parsed" in df.columns
-                else "Order Date" if "Order Date" in df.columns else None
+                else "Order Date"
+                if "Order Date" in df.columns
+                else None
             )
 
             status_lower = df[status_col].astype(str).str.lower().str.strip()
-            is_active = status_lower.isin(ACTIVE_STATUSES_SET)
-            is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
+            is_shipped = status_lower.isin(shipped_statuses)
 
             dt_mod = (
                 safe_coerce_datetime_naive(df[mod_col])
@@ -217,7 +227,7 @@ def filter_all_orders_to_slot(df, nav_mode):
 
             # Open (active) orders are part of the current queue — keep them regardless of
             # placement date, so processing orders placed before the selected range stay visible.
-            active_mask = is_active
+            active_mask = ~is_shipped
             shipped_mask = is_shipped & (
                 ((dt_mod.dt.date >= start_d) & (dt_mod.dt.date <= end_d))
                 | (
@@ -236,7 +246,7 @@ def filter_all_orders_to_slot(df, nav_mode):
     else:
         slot_key = None
 
-    slot = st.session_state.get(slot_key) if slot_key else None
+    slot = get_session_state().get(slot_key) if slot_key else None
 
     if slot:
         slot_start = pd.to_datetime(slot[0])
@@ -245,22 +255,25 @@ def filter_all_orders_to_slot(df, nav_mode):
         mod_col = (
             "mod_dt_parsed"
             if "mod_dt_parsed" in df.columns
-            else "Order Date Modified" if "Order Date Modified" in df.columns else None
+            else "Order Date Modified"
+            if "Order Date Modified" in df.columns
+            else None
         )
         date_col = (
             "dt_parsed"
             if "dt_parsed" in df.columns
-            else "Order Date" if "Order Date" in df.columns else None
+            else "Order Date"
+            if "Order Date" in df.columns
+            else None
         )
 
         status_lower = df[status_col].astype(str).str.lower().str.strip()
-        is_active = status_lower.isin(ACTIVE_STATUSES_SET)
-        is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
+        is_shipped = status_lower.isin(shipped_statuses)
 
         # Active orders are part of the current open queue — keep them regardless of
         # creation date so orders placed before the shift start (but still open, e.g.
         # still in `processing`) stay visible in the Today / All Orders view.
-        active_mask = is_active
+        active_mask = ~is_shipped
 
         # Shipped orders: scoped by modification date within slot, falling back to creation date
         dt_mod = (
@@ -290,17 +303,20 @@ def filter_all_orders_to_slot(df, nav_mode):
         date_col = (
             "dt_parsed"
             if "dt_parsed" in df.columns
-            else "Order Date" if "Order Date" in df.columns else None
+            else "Order Date"
+            if "Order Date" in df.columns
+            else None
         )
         mod_col = (
             "mod_dt_parsed"
             if "mod_dt_parsed" in df.columns
-            else "Order Date Modified" if "Order Date Modified" in df.columns else None
+            else "Order Date Modified"
+            if "Order Date Modified" in df.columns
+            else None
         )
 
         status_lower = df[status_col].astype(str).str.lower().str.strip()
-        is_active = status_lower.isin(ACTIVE_STATUSES_SET)
-        is_shipped = status_lower.isin([s.lower() for s in SHIPPED_STATUSES])
+        is_shipped = status_lower.isin(shipped_statuses)
 
         dt_create = (
             safe_coerce_datetime_naive(df[date_col])
@@ -316,7 +332,7 @@ def filter_all_orders_to_slot(df, nav_mode):
 
         # Open (active) orders are part of the current queue — keep them regardless of
         # placement date, so processing orders placed before today stay visible.
-        active_mask = is_active
+        active_mask = ~is_shipped
         shipped_mask = is_shipped & (
             (dt_effective.dt.date == today_bd) | (dt_create.dt.date == today_bd)
         )
@@ -325,6 +341,28 @@ def filter_all_orders_to_slot(df, nav_mode):
 
     # Prev/Backlog with no slot info — return status-filtered only
     return df
+
+
+def filter_actual_sales(df):
+    """Return only revenue-recognized shipped/completed WooCommerce orders."""
+    if df is None or df.empty:
+        return df
+
+    from src.config.constants import SHIPPED_STATUSES
+
+    status_col = (
+        "Order Status"
+        if "Order Status" in df.columns
+        else "Status"
+        if "Status" in df.columns
+        else None
+    )
+    if status_col is None:
+        return df.iloc[0:0]
+
+    actual_statuses = {status.lower() for status in SHIPPED_STATUSES}
+    status_lower = df[status_col].astype(str).str.lower().str.strip()
+    return df[status_lower.isin(actual_statuses)].copy()
 
 
 def apply_order_view(df, nav_mode, order_view):
@@ -345,7 +383,9 @@ def apply_order_view(df, nav_mode, order_view):
     status_col = (
         "Order Status"
         if "Order Status" in df.columns
-        else "Status" if "Status" in df.columns else None
+        else "Status"
+        if "Status" in df.columns
+        else None
     )
     if status_col is None:
         return df
@@ -373,7 +413,9 @@ def apply_order_view_comparison(df, nav_mode, order_view):
     status_col = (
         "Order Status"
         if "Order Status" in df.columns
-        else "Status" if "Status" in df.columns else None
+        else "Status"
+        if "Status" in df.columns
+        else None
     )
     if status_col is None:
         return df
@@ -769,12 +811,16 @@ def get_dispatch_metrics(active_df, total_orders=0):
         status_col = (
             "Order Status"
             if "Order Status" in active_df.columns
-            else "Status" if "Status" in active_df.columns else None
+            else "Status"
+            if "Status" in active_df.columns
+            else None
         )
         order_col = (
             "Order ID"
             if "Order ID" in active_df.columns
-            else "Order Number" if "Order Number" in active_df.columns else None
+            else "Order Number"
+            if "Order Number" in active_df.columns
+            else None
         )
 
         # Use modification date for sorting, as this reflects when an order was shipped.
@@ -794,7 +840,9 @@ def get_dispatch_metrics(active_df, total_orders=0):
             else (
                 "Date"
                 if "Date" in active_df.columns
-                else "Order Date" if "Order Date" in active_df.columns else None
+                else "Order Date"
+                if "Order Date" in active_df.columns
+                else None
             )
         )
         pmt_col = (
@@ -1111,7 +1159,9 @@ def detect_active_campaign(df: pd.DataFrame | None) -> dict:
     ord_col = (
         "Order ID"
         if "Order ID" in df.columns
-        else "Order Number" if "Order Number" in df.columns else None
+        else "Order Number"
+        if "Order Number" in df.columns
+        else None
     )
     tot_orders = (
         len(df[ord_col].dropna().unique())

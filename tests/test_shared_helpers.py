@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 
 from src.config.constants import BD_TZ, bd_now, bd_today
+from src.config.settings import is_unauthenticated_access_allowed
 from src.processing.column_detection import pick_column
 from src.processing.whatsapp_processor import WhatsAppOrderProcessor
 from src.utils.customer_registry import normalize_phone_key
@@ -86,6 +87,32 @@ def test_bd_today_matches_bd_now_date():
     assert bd_today() == bd_now().date()
 
 
+def test_unauthenticated_access_fails_closed_by_default(monkeypatch):
+    monkeypatch.delenv("DEEN_OPS_ALLOW_UNAUTHENTICATED", raising=False)
+    monkeypatch.setattr("src.config.settings.get_top_level_secret", lambda *_: "")
+    assert is_unauthenticated_access_allowed() is False
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])
+def test_unauthenticated_access_requires_explicit_opt_in(monkeypatch, value):
+    monkeypatch.setattr("src.config.settings.get_top_level_secret", lambda *_: "")
+    monkeypatch.setenv("DEEN_OPS_ALLOW_UNAUTHENTICATED", value)
+    assert is_unauthenticated_access_allowed() is True
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "off", "unexpected"])
+def test_unauthenticated_access_rejects_other_values(monkeypatch, value):
+    monkeypatch.setattr("src.config.settings.get_top_level_secret", lambda *_: "")
+    monkeypatch.setenv("DEEN_OPS_ALLOW_UNAUTHENTICATED", value)
+    assert is_unauthenticated_access_allowed() is False
+
+
+def test_local_secret_can_enable_unauthenticated_access(monkeypatch):
+    monkeypatch.delenv("DEEN_OPS_ALLOW_UNAUTHENTICATED", raising=False)
+    monkeypatch.setattr("src.config.settings.get_top_level_secret", lambda *_: "true")
+    assert is_unauthenticated_access_allowed() is True
+
+
 # ── Column picking ────────────────────────────────────────────────────────────
 
 
@@ -115,11 +142,26 @@ def test_read_uploaded_passthrough_dataframe():
 
 def test_compute_new_vs_returning_counts_refetch():
     from src.utils.customer_registry import compute_new_vs_returning_counts
-    df = pd.DataFrame([
-        {"Order ID": 100, "Phone": "01711111111", "Order Date": "2026-08-13 10:00:00"},
-        {"Order ID": 101, "Phone": "01711111111", "Order Date": "2026-08-13 14:00:00"},
-        {"Order ID": 102, "Phone": "01722222222", "Order Date": "2026-08-13 11:00:00"},
-    ])
+
+    df = pd.DataFrame(
+        [
+            {
+                "Order ID": 100,
+                "Phone": "01711111111",
+                "Order Date": "2026-08-13 10:00:00",
+            },
+            {
+                "Order ID": 101,
+                "Phone": "01711111111",
+                "Order Date": "2026-08-13 14:00:00",
+            },
+            {
+                "Order ID": 102,
+                "Phone": "01722222222",
+                "Order Date": "2026-08-13 11:00:00",
+            },
+        ]
+    )
     new_cnt, ret_cnt = compute_new_vs_returning_counts(df, df)
     assert new_cnt == 2  # Order 100 (first for 01711111111) + Order 102 (01722222222)
     assert ret_cnt == 1  # Order 101 (repeat for 01711111111)

@@ -17,7 +17,11 @@ Rules locked in here for `_data_looks_stale`:
 import pandas as pd
 from datetime import timedelta
 
-from src.services.woocommerce.client import _data_looks_stale, WC_STALE_MAX_AGE_MIN
+from src.services.woocommerce.client import (
+    WC_STALE_MAX_AGE_MIN,
+    _data_looks_stale,
+    _response_regressed,
+)
 
 
 def _now_bd():
@@ -77,6 +81,21 @@ def test_newest_mod_wins_when_mixed_ages():
     assert _data_looks_stale(df) is False
 
 
+def test_retry_only_when_api_response_moves_backwards(monkeypatch):
+    from types import SimpleNamespace
+
+    from src.services.woocommerce import client
+
+    monkeypatch.setattr(client, "st", SimpleNamespace(session_state={}))
+    newest = pd.DataFrame({"mod_dt_parsed": [pd.Timestamp("2026-09-10 10:00:00")]})
+    same = pd.DataFrame({"mod_dt_parsed": [pd.Timestamp("2026-09-10 10:00:00")]})
+    older = pd.DataFrame({"mod_dt_parsed": [pd.Timestamp("2026-09-10 09:00:00")]})
+
+    assert _response_regressed(newest) is False
+    assert _response_regressed(same) is False
+    assert _response_regressed(older) is True
+
+
 def test_load_stale_events_empty_and_non_stale_logs(tmp_path, monkeypatch):
     """Ensure _load_stale_events returns valid DataFrame and does not raise KeyError: 'ts'."""
     import json
@@ -92,14 +111,34 @@ def test_load_stale_events_empty_and_non_stale_logs(tmp_path, monkeypatch):
 
     # 2. File with unrelated events (e.g. WC_FETCH_INITIAL_ERROR)
     log_file = tmp_path / "system_logs.json"
-    log_file.write_text(json.dumps([{"timestamp": "2026-08-28 08:33:20", "type": "WC_FETCH_INITIAL_ERROR", "details": "timeout"}]))
+    log_file.write_text(
+        json.dumps(
+            [
+                {
+                    "timestamp": "2026-08-28 08:33:20",
+                    "type": "WC_FETCH_INITIAL_ERROR",
+                    "details": "timeout",
+                }
+            ]
+        )
+    )
     df = _load_stale_events()
     assert isinstance(df, pd.DataFrame)
     assert list(df.columns) == ["ts", "type", "details"]
     assert df.empty
 
     # 3. File with matching stale events
-    log_file.write_text(json.dumps([{"timestamp": "2026-08-28 08:33:20", "type": "WC_STALE_DATA", "details": "cached"}]))
+    log_file.write_text(
+        json.dumps(
+            [
+                {
+                    "timestamp": "2026-08-28 08:33:20",
+                    "type": "WC_STALE_DATA",
+                    "details": "cached",
+                }
+            ]
+        )
+    )
     df = _load_stale_events()
     assert len(df) == 1
     assert "ts" in df.columns

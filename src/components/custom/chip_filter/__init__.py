@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import streamlit as st
 import streamlit.components.v1 as components
 
 _RELEASE = True

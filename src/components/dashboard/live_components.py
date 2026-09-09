@@ -3,22 +3,92 @@
 Phase 2 Refactoring: Breaking down render_live_tab() into focused components.
 Each function now has a single responsibility and follows progressive disclosure.
 """
+
+import hashlib
+
 import streamlit as st
-from datetime import date
-from src.config.constants import bd_today, bd_now
-from src.utils.logging import log_system_event
+
+from src.config.constants import bd_today
+from src.services.woocommerce.client import load_live_source as _load_live_source
+
+
+def _compute_live_data_fingerprint(df):
+    """Return a stable fingerprint for dashboard data relevant to auto-sync."""
+    if df is None or df.empty:
+        return ""
+
+    status_col = (
+        "Order Status"
+        if "Order Status" in df.columns
+        else "Status"
+        if "Status" in df.columns
+        else None
+    )
+    modified_col = (
+        "mod_dt_parsed"
+        if "mod_dt_parsed" in df.columns
+        else "Order Date Modified"
+        if "Order Date Modified" in df.columns
+        else None
+    )
+    order_id_col = "Order ID" if "Order ID" in df.columns else None
+    columns = [
+        column
+        for column in (order_id_col, status_col, modified_col)
+        if column and column in df.columns
+    ]
+    if not columns:
+        return str(len(df))
+
+    summary = f"{len(df)}_{df[columns].astype(str).to_string()}"
+    return hashlib.md5(summary.encode("utf-8")).hexdigest()
+
+
+def _check_and_trigger_ui_rerun():
+    """Rerun the dashboard only when its cached live data actually changed."""
+    current_df = st.session_state.get("wc_curr_df")
+    if current_df is None or current_df.empty:
+        return
+
+    new_fingerprint = _compute_live_data_fingerprint(current_df)
+    old_fingerprint = st.session_state.get("_live_dash_data_fingerprint", "")
+    st.session_state["_live_dash_data_fingerprint"] = new_fingerprint
+    if old_fingerprint and new_fingerprint != old_fingerprint:
+        st.rerun()
+
+
+@st.fragment(run_every=30)
+def _sync_60s():
+    """Run the higher-frequency sync used by the active shipped view."""
+    try:
+        _load_live_source()
+        _check_and_trigger_ui_rerun()
+    except Exception:
+        pass
+
+
+@st.fragment(run_every=60)
+def _sync_180s():
+    """Run the background sync used by other dashboard views."""
+    try:
+        _load_live_source()
+        _check_and_trigger_ui_rerun()
+    except Exception:
+        pass
 
 
 def _render_date_range_selector():
     """Render custom date range picker with clear button.
-    
+
     Hick's Law: Only shows advanced date filtering when explicitly needed.
     """
     today_bd = bd_today()
+    if "live_custom_range" not in st.session_state:
+        st.session_state["live_custom_range"] = (today_bd, today_bd)
     curr_range = st.session_state.get("live_custom_range", (today_bd, today_bd))
-    
+
     col1, col2 = st.columns([3, 1])
-    
+
     with col1:
         sel_dates = st.date_input(
             "📅 Date Range",
@@ -28,7 +98,7 @@ def _render_date_range_selector():
             label_visibility="collapsed",
             help="Select custom start and end date range to filter orders.",
         )
-        
+
         if isinstance(sel_dates, (list, tuple)) and len(sel_dates) == 2:
             new_r = (sel_dates[0], sel_dates[1])
             if st.session_state.get("live_custom_range") != new_r:
@@ -43,7 +113,7 @@ def _render_date_range_selector():
                 st.session_state["wc_sync_start_date"] = sel_dates[0]
                 st.session_state["wc_sync_end_date"] = sel_dates[0]
                 st.rerun()
-    
+
     with col2:
         if curr_range and (curr_range[0] != today_bd or curr_range[1] != today_bd):
             if st.button(
@@ -63,7 +133,7 @@ def _render_date_range_selector():
 
 def _render_operation_mode_selector(nav_mode: str):
     """Render operation mode pills (Last Day, Active, Queue).
-    
+
     Hick's Law: Single primary action with clear visual hierarchy using pills.
     """
     mode_options = ["Last Day", "Active", "Queue"]
@@ -71,7 +141,7 @@ def _render_operation_mode_selector(nav_mode: str):
     mode_to_state = {"Last Day": "Prev", "Active": "Today", "Queue": "Backlog"}
     state_to_mode = {v: k for k, v in mode_to_state.items()}
     current_idx = mode_options.index(state_to_mode.get(nav_mode, "Active"))
-    
+
     if hasattr(st, "pills"):
         selected_mode = st.pills(
             "Op Mode",
@@ -93,30 +163,30 @@ def _render_operation_mode_selector(nav_mode: str):
             key="banner_op_mode_radio",
             label_visibility="collapsed",
         )
-    
+
     new_nav = mode_to_state[selected_mode]
     if new_nav != nav_mode:
         st.session_state.wc_nav_mode = new_nav
         st.rerun()
-    
+
     return selected_mode
 
 
 def _render_order_filter_selector(nav_mode: str):
     """Render order filter options (All Orders, Shipped, Processing).
-    
+
     Hick's Law: Progressive disclosure - only shown in 'Today' mode.
     """
     if nav_mode != "Today":
         st.markdown('<div style="height: 38px;"></div>', unsafe_allow_html=True)
         return
-    
+
     opts_filter = ["All Orders", "Shipped", "Processing"]
     filter_icons = {"All Orders": "📦", "Shipped": "🚚", "Processing": "⚙️"}
-    curr_filter = st.session_state.get("live_order_filter", "All Orders")
+    curr_filter = st.session_state.get("live_order_filter", "Shipped")
     if curr_filter not in opts_filter:
-        curr_filter = "All Orders"
-    
+        curr_filter = "Shipped"
+
     if hasattr(st, "pills"):
         sel_filter = st.pills(
             "Shift View",
@@ -136,11 +206,11 @@ def _render_order_filter_selector(nav_mode: str):
             key="live_order_filter_radio",
             label_visibility="collapsed",
         )
-    
+
     if sel_filter and sel_filter != curr_filter:
         st.session_state.live_order_filter = sel_filter
         st.rerun()
-    
+
     # Progressive disclosure: Online Only toggle only appears when Shipped is selected
     if sel_filter == "Shipped":
         online_only = st.toggle(
@@ -156,23 +226,21 @@ def _render_order_filter_selector(nav_mode: str):
 
 def _render_refresh_controls(nav_mode: str, load_live_source):
     """Render auto-sync indicator and manual refresh button.
-    
+
     Hick's Law: Secondary action demoted visually with icon-only button.
     """
     order_view_mode = (
-        st.session_state.get("live_order_filter", "All Orders")
+        st.session_state.get("live_order_filter", "Shipped")
         if nav_mode == "Today"
         else "All Orders"
     )
-    
+
     # Auto-sync fragment runs based on mode
     if nav_mode == "Today" and order_view_mode == "Shipped":
-        from .live_dashboard import _sync_60s
         _sync_60s()
     else:
-        from .live_dashboard import _sync_180s
         _sync_180s()
-    
+
     # Manual refresh - secondary action
     if st.button(
         "🔄",
@@ -188,8 +256,8 @@ def _render_refresh_controls(nav_mode: str, load_live_source):
 
 def _render_completed_orders_section():
     """Render date-wise completed orders section with progressive disclosure.
-    
-    Hick's Law: 
+
+    Hick's Law:
     - Single primary action (Show KPIs button)
     - Advanced filters hidden until needed
     - Clear visual hierarchy
@@ -197,10 +265,10 @@ def _render_completed_orders_section():
     st.markdown("---")
     st.markdown("### 📅 Date-Wise Completed Orders")
     st.caption("Pick a date and filter by source to see completed order KPIs.")
-    
+
     # Date picker and source toggle in a row
     c_date, c_source, c_btn = st.columns([2, 2, 1])
-    
+
     with c_date:
         today_bd = bd_today()
         default_date = st.session_state.get("completed_date", today_bd)
@@ -213,7 +281,7 @@ def _render_completed_orders_section():
         )
         if selected_date != default_date:
             st.session_state["completed_date"] = selected_date
-    
+
     with c_source:
         st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
         source_filter = st.radio(
@@ -223,57 +291,59 @@ def _render_completed_orders_section():
             key="completed_source_filter",
             help="Filter by order source: Online (website) or Outlet (physical store)",
         )
-    
+
     with c_btn:
         st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
         # PRIMARY ACTION - Only button with emphasis
         show_kpis = st.button(
-            "📊 Show KPIs", 
-            key="show_completed_kpis", 
+            "📊 Show KPIs",
+            key="show_completed_kpis",
             type="primary",  # Visual hierarchy: primary vs default
-            use_container_width=True
+            use_container_width=True,
         )
-    
+
     return show_kpis, st.session_state.get("completed_date", bd_today()), source_filter
 
 
 def _render_completed_kpis_display(selected_date, source_filter, df_live):
     """Display completed orders KPIs with progressive disclosure.
-    
+
     Hick's Law: Details hidden in expanders, only shown on demand.
     """
     from src.processing.completed_analytics import (
         filter_completed_orders_by_date,
         compute_completed_kpis,
     )
-    
-    with st.status(f"Loading completed orders for {selected_date}...", expanded=True) as status:
+
+    with st.status(
+        f"Loading completed orders for {selected_date}...", expanded=True
+    ) as status:
         # Get full dataset
         full_df = st.session_state.get("wc_full_df")
-        
+
         if full_df is None or full_df.empty:
             st.error("No order data available. Please sync data first.")
             status.update(label="❌ No data available", state="error")
             return
-        
+
         # Filter by date and source
         filtered_df = filter_completed_orders_by_date(
             full_df, selected_date, source_filter
         )
-        
+
         if filtered_df.empty:
             st.info(f"No completed orders found for {selected_date} ({source_filter})")
             status.update(label="ℹ️ No orders found", state="complete")
             return
-        
+
         # Compute KPIs
         kpis = compute_completed_kpis(filtered_df)
-        
+
         status.update(label="✅ KPIs computed", state="complete")
-    
+
     # Display KPIs using the modern flat design
     from src.components.modern_kpi import render_modern_kpi_cards
-    
+
     # Primary metric: Total Revenue (largest)
     # Secondary metrics: Order Count, AOV, Completion Rate (smaller)
     metrics_config = [
@@ -305,9 +375,9 @@ def _render_completed_kpis_display(selected_date, source_filter, df_live):
             "is_primary": False,
         },
     ]
-    
+
     render_modern_kpi_cards(metrics_config, key_prefix="completed_")
-    
+
     # Progressive disclosure: Order details hidden in expander
     with st.expander("📋 View Order Details", expanded=False):
         st.dataframe(
@@ -315,7 +385,7 @@ def _render_completed_kpis_display(selected_date, source_filter, df_live):
             use_container_width=True,
             hide_index=True,
         )
-        
+
         # Export option - secondary action
         if st.button("📥 Download CSV", key="download_completed_csv", type="secondary"):
             csv = filtered_df.to_csv(index=False)
@@ -329,32 +399,25 @@ def _render_completed_kpis_display(selected_date, source_filter, df_live):
 
 def render_dashboard_banner(load_live_source):
     """Render the main dashboard banner with controls.
-    
+
     Hick's Law Implementation:
     - Single primary action per section
     - Progressive disclosure for advanced options
     - Clear visual hierarchy with button types
     """
     nav_mode = st.session_state.get("wc_nav_mode", "Today")
-    
-    # Create 5-column layout for controls
-    c1, c2, c3, c4, c5 = st.columns([2.5, 2, 2, 1.5, 0.5])
-    
+
+    st.caption("Choose a scope once; KPIs and analysis update together.")
+    c1, c2, c3, c4 = st.columns([2.4, 1.8, 2.2, 0.5], vertical_alignment="center")
+
     with c1:
         _render_date_range_selector()
-    
+
     with c2:
         _render_operation_mode_selector(nav_mode)
-    
+
     with c3:
         _render_order_filter_selector(nav_mode)
-    
+
     with c4:
-        # Auto-sync label placeholder
-        st.markdown(
-            '<div style="height: 5px; padding-top: 15px; color: #666; font-size: 0.8rem;">Auto-sync active</div>',
-            unsafe_allow_html=True,
-        )
-    
-    with c5:
         _render_refresh_controls(nav_mode, load_live_source)

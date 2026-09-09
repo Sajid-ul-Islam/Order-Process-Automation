@@ -35,21 +35,25 @@ def _render_operational_cycle_metrics(
         )
 
     order_view_mode = (
-        st.session_state.get("live_order_filter", "All Orders")
+        st.session_state.get("live_order_filter", "Shipped")
         if nav_mode == "Today"
         else "All Orders"
     )
     status_col_m = (
         "Order Status"
         if "Order Status" in m_df.columns
-        else "Status" if "Status" in m_df.columns else None
+        else "Status"
+        if "Status" in m_df.columns
+        else None
     )
     status_col_c = None
     if c_df is not None:
         status_col_c = (
             "Order Status"
             if "Order Status" in c_df.columns
-            else "Status" if "Status" in c_df.columns else None
+            else "Status"
+            if "Status" in c_df.columns
+            else None
         )
 
     if order_view_mode == "All Orders" and nav_mode == "Today":
@@ -237,7 +241,9 @@ def _render_spotlight_and_sku_report(top, color_map, wc_raw_mapping):
         comp_df = (
             st.session_state.get("wc_prev_df")
             if nav_mode == "Today"
-            else st.session_state.get("wc_curr_df") if nav_mode == "Prev" else None
+            else st.session_state.get("wc_curr_df")
+            if nav_mode == "Prev"
+            else None
         )
 
         if comp_df is not None and not comp_df.empty:
@@ -297,7 +303,7 @@ def _render_sku_report(top):
             | display_df["SKU"].astype(str).str.contains(search_q, case=False, na=False)
         ]
         st.caption(
-            f"Showing **{len(display_df)}** of **{len(report_df)}** products matching `\"{search_q}\"`"
+            f'Showing **{len(display_df)}** of **{len(report_df)}** products matching `"{search_q}"`'
         )
 
     st.dataframe(
@@ -770,17 +776,37 @@ def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, toda
             st.code(st.session_state["shift_handover_text"], language="text")
 
 
-def _render_export_buttons(excel_report_bytes, export_date_str, active_df):
-    """Render the Excel and CSV download buttons."""
+def _render_export_buttons(export_data, export_date_str, active_df):
+    """Render exports without generating the Excel workbook on every rerun."""
     c1, c2 = st.columns(2)
     with c1:
-        st.download_button(
-            label="💾 Export Full Analytics (Excel)",
-            data=excel_report_bytes,
-            file_name=f"DEEN_Analytics_Report_{export_date_str}.xlsx",
-            type="primary",
-            use_container_width=True,
-        )
+        row_count = len(active_df) if active_df is not None else 0
+        metric_signature = export_data.get("Core Metrics", pd.DataFrame()).to_json()
+        export_key = f"{export_date_str}:{row_count}:{metric_signature}"
+        if st.session_state.get("_prepared_export_key") != export_key:
+            st.session_state.pop("_prepared_excel_report", None)
+
+        if "_prepared_excel_report" not in st.session_state:
+            if st.button(
+                "💾 Prepare Excel Export",
+                key="prepare_dashboard_excel",
+                type="primary",
+                width="stretch",
+            ):
+                with st.spinner("Preparing workbook..."):
+                    st.session_state["_prepared_excel_report"] = (
+                        export_to_styled_excel(export_data)
+                    )
+                    st.session_state["_prepared_export_key"] = export_key
+
+        if excel_report_bytes := st.session_state.get("_prepared_excel_report"):
+            st.download_button(
+                label="⬇️ Download Excel",
+                data=excel_report_bytes,
+                file_name=f"DEEN_Analytics_Report_{export_date_str}.xlsx",
+                type="primary",
+                width="stretch",
+            )
     with c2:
         if active_df is not None and not active_df.empty:
             st.download_button(
@@ -788,7 +814,7 @@ def _render_export_buttons(excel_report_bytes, export_date_str, active_df):
                 data=active_df.to_csv(index=False).encode("utf-8"),
                 file_name=f"DEEN_Filtered_Data_{export_date_str}.csv",
                 type="secondary",
-                use_container_width=True,
+                width="stretch",
             )
 
 
@@ -843,7 +869,9 @@ def render_dashboard_output(
                 m_df = st.session_state.get("wc_prev_df")
 
             c_df = (
-                st.session_state.get("wc_prev_df" if nav_mode == "Today" else "wc_curr_df")
+                st.session_state.get(
+                    "wc_prev_df" if nav_mode == "Today" else "wc_curr_df"
+                )
                 if nav_mode != "Backlog"
                 else None
             )
@@ -917,16 +945,17 @@ def render_dashboard_output(
             else:
                 gross_rev = today_rev + cashback_disc
 
-    # ── Performance Hub: Category Share | Spotlight | SKU Report ─────────────
-    tab_cat, tab_spot, tab_sku = st.tabs(
-        [
-            "Category Share",
-            "Spotlight",
-            "SKU Report",
-        ]
+    # Conditional rendering avoids building hidden Plotly charts and tables.
+    hub_view = st.segmented_control(
+        "Performance view",
+        ["Category Share", "Spotlight", "SKU Report"],
+        default="Category Share",
+        key="dashboard_performance_view",
+        label_visibility="collapsed",
     )
+    color_map = {}
 
-    with tab_cat:
+    if hub_view == "Category Share":
         color_map = _render_charts(summ, total_rev=today_rev)
 
     if is_operational:
@@ -987,14 +1016,16 @@ def render_dashboard_output(
             returning_customers=ret_cust_cnt,
         )
 
-    with tab_spot:
+    if hub_view == "Spotlight":
         prev_top = None
         if st.session_state.get("wc_sync_mode") == "Operational Cycle":
             nav_mode = st.session_state.get("wc_nav_mode", "Today")
             comp_df = (
                 st.session_state.get("wc_prev_df")
                 if nav_mode == "Today"
-                else st.session_state.get("wc_curr_df") if nav_mode == "Prev" else None
+                else st.session_state.get("wc_curr_df")
+                if nav_mode == "Prev"
+                else None
             )
 
             if comp_df is not None and not comp_df.empty:
@@ -1009,7 +1040,7 @@ def render_dashboard_output(
 
         render_spotlight(top, color_map, prev_top=prev_top)
 
-    with tab_sku:
+    if hub_view == "SKU Report":
         _render_sku_report(top)
 
     # ── Revenue & Cashback Impact Analysis (Ingestion mode) ──────────────────
@@ -1045,8 +1076,6 @@ def render_dashboard_output(
         dm,
         final_report_text,
     )
-    excel_report_bytes = export_to_styled_excel(export_data)
-
     export_date_str = datetime.now().strftime("%Y%m%d")
     if not is_operational:
         if (
@@ -1074,4 +1103,4 @@ def render_dashboard_output(
     st.divider()
 
     # ── Export Buttons ──
-    _render_export_buttons(excel_report_bytes, export_date_str, active_df)
+    _render_export_buttons(export_data, export_date_str, active_df)

@@ -25,7 +25,7 @@ from src.processing.data_processing import filter_shipped_by_slot
 
 
 def test_shipped_today_is_slot_independent_and_excludes_reverted_statuses(op_state):
-    now = now_bd()
+    now = now_bd().replace(hour=12, minute=0, second=0, microsecond=0)
     orders = [
         # Status changed back to processing (has consignment) → must NOT count as shipped today.
         (601, "processing", now - timedelta(days=3), now - timedelta(hours=2), "DD601"),
@@ -40,6 +40,10 @@ def test_shipped_today_is_slot_independent_and_excludes_reverted_statuses(op_sta
         (606, "pending", now - timedelta(hours=2), now - timedelta(hours=1), "DD606"),
         # Status completed today without consignment → counts as shipped.
         (607, "completed", now - timedelta(hours=3), now - timedelta(hours=1), ""),
+        # Transitional/fulfillment states are workload, not recognized sales.
+        (608, "confirmed", now - timedelta(hours=3), now - timedelta(hours=1), ""),
+        (609, "dispatched", now - timedelta(hours=3), now - timedelta(hours=1), ""),
+        (610, "delivered", now - timedelta(hours=3), now - timedelta(hours=1), ""),
     ]
     df = build_order_df(orders)
 
@@ -48,8 +52,19 @@ def test_shipped_today_is_slot_independent_and_excludes_reverted_statuses(op_sta
     assert set(shipped["Order ID"]) == {602, 607}
 
 
+def test_actual_sales_status_set_is_strict():
+    from src.config.constants import SHIPPED_STATUSES
+
+    assert set(SHIPPED_STATUSES) == {
+        "shipped",
+        "completed",
+        "wc-shipped",
+        "wc-completed",
+    }
+
+
 def test_shipped_falls_back_to_creation_date_when_modified_missing(op_state):
-    now = now_bd()
+    now = now_bd().replace(hour=12, minute=0, second=0, microsecond=0)
     orders = [
         # Modification date missing → falls back to creation date (today).
         (1001, "shipped", now - timedelta(hours=3), None, ""),
@@ -85,19 +100,22 @@ def test_prev_mode_scopes_shipped_to_prev_slot(op_state):
     assert set(prev["Order ID"]) == {701, 702}
 
 
-def test_comparison_mode_scopes_to_prev_slot(op_state):
-    pc = op_state["prev_cutoff"]
+def test_comparison_mode_scopes_to_previous_calendar_day(op_state, monkeypatch):
+    comparison_day = datetime(2026, 9, 8).date()
+    monkeypatch.setattr(
+        "src.processing.data_processing.bd_today",
+        lambda: comparison_day + timedelta(days=1),
+    )
     orders = [
-        # Within the prev slot → kept in the comparison dataset.
-        (801, "shipped", pc - timedelta(hours=20), pc - timedelta(hours=20), ""),
-        # In the current slot → excluded from the prev comparison.
-        (802, "shipped", pc + timedelta(hours=2), pc + timedelta(hours=2), ""),
+        (801, "shipped", "2026-09-08 10:00:00", "2026-09-08 10:00:00", ""),
+        (802, "completed", "2026-09-08 22:00:00", "2026-09-08 22:00:00", ""),
+        (803, "shipped", "2026-09-09 01:00:00", "2026-09-09 01:00:00", ""),
     ]
     df = build_order_df(orders)
 
     comp = filter_shipped_by_slot(df, "Today", is_comparison=True)
 
-    assert set(comp["Order ID"]) == {801}
+    assert set(comp["Order ID"]) == {801, 802}
 
 
 # ── Custom range: effective-date scoping ─────────────────────────────────────
@@ -130,7 +148,13 @@ def test_dispatch_metrics_reverted_to_hold_waiting_process(op_state):
         (101, "completed", now - timedelta(hours=2), now - timedelta(hours=1), "DD101"),
         (102, "shipped", now - timedelta(hours=3), now - timedelta(hours=1), ""),
         # Reverted orders (have consignment but status changed back to hold / waiting / processing)
-        (103, "processing", now - timedelta(hours=4), now - timedelta(hours=1), "DD103"),
+        (
+            103,
+            "processing",
+            now - timedelta(hours=4),
+            now - timedelta(hours=1),
+            "DD103",
+        ),
         (104, "on-hold", now - timedelta(hours=4), now - timedelta(hours=1), "DD104"),
         (105, "waiting", now - timedelta(hours=4), now - timedelta(hours=1), "DD105"),
         (106, "pending", now - timedelta(hours=4), now - timedelta(hours=1), "DD106"),
@@ -147,34 +171,60 @@ def test_dispatch_metrics_reverted_to_hold_waiting_process(op_state):
     assert metrics["pathao_count"] == 1
 
 
-# ── Evening & Overnight visibility: after 18:00 until next day 08:00 AM ─────
+# ── Evening visibility within the same calendar day ─────────────────────────
 
 
-def test_shipped_orders_remain_visible_after_cutoff_until_next_day_8am(op_state, monkeypatch):
-    """Regression test: Shipped orders from the daily shift ending at 18:00 must remain
-
-    visible in 'Today' throughout the evening and night until 08:00 AM the next morning.
-    """
-    from datetime import timezone
-    from src.services.woocommerce.client import _compute_cutoff_times, _partition_operational_data
+def test_shipped_orders_remain_visible_after_cutoff_same_day(op_state, monkeypatch):
+    """Orders shipped after cutoff remain in the same BD calendar-day partition."""
+    from src.services.woocommerce.client import (
+        _compute_cutoff_times,
+        _partition_operational_data,
+    )
 
     tz_bd = timezone(timedelta(hours=6))
 
     # Scenario A: Wall-clock is 19:30 on Saturday (after 18:00 cutoff)
     sat_evening = datetime(2026, 9, 5, 19, 30, tzinfo=tz_bd)
-    monkeypatch.setattr("src.services.woocommerce.client.datetime", type("MockDT", (datetime,), {"now": lambda tz=None: sat_evening, "combine": datetime.combine}))
+    monkeypatch.setattr(
+        "src.services.woocommerce.client.datetime",
+        type(
+            "MockDT",
+            (datetime,),
+            {"now": lambda tz=None: sat_evening, "combine": datetime.combine},
+        ),
+    )
 
-    cutoff_today, prev_cutoff, day_before_prev, shipped_limit = _compute_cutoff_times(tz_bd)
+    cutoff_today, prev_cutoff, day_before_prev, shipped_limit = _compute_cutoff_times(
+        tz_bd
+    )
     assert cutoff_today.date() == sat_evening.date()
     assert prev_cutoff < cutoff_today
 
     orders = [
         # Order shipped at 14:00 Saturday (before 18:00)
-        (201, "shipped", sat_evening.replace(tzinfo=None) - timedelta(hours=5), sat_evening.replace(tzinfo=None) - timedelta(hours=5), "DD201"),
+        (
+            201,
+            "shipped",
+            sat_evening.replace(tzinfo=None) - timedelta(hours=5),
+            sat_evening.replace(tzinfo=None) - timedelta(hours=5),
+            "DD201",
+        ),
         # Order shipped at 18:15 Saturday (late dispatch)
-        (202, "shipped", sat_evening.replace(tzinfo=None) - timedelta(hours=1), sat_evening.replace(tzinfo=None) - timedelta(hours=1), "DD202"),
+        (
+            202,
+            "shipped",
+            sat_evening.replace(tzinfo=None) - timedelta(hours=1),
+            sat_evening.replace(tzinfo=None) - timedelta(hours=1),
+            "DD202",
+        ),
         # Order shipped Thursday (prev shift)
-        (203, "shipped", prev_cutoff - timedelta(hours=2), prev_cutoff - timedelta(hours=2), "DD203"),
+        (
+            203,
+            "shipped",
+            prev_cutoff - timedelta(hours=2),
+            prev_cutoff - timedelta(hours=2),
+            "DD203",
+        ),
     ]
     df = build_order_df(orders)
 
@@ -185,4 +235,3 @@ def test_shipped_orders_remain_visible_after_cutoff_until_next_day_8am(op_state,
     # 203 belongs to the previous shift
     assert 203 in set(df_prev["Order ID"])
     assert 203 not in set(df_live["Order ID"])
-

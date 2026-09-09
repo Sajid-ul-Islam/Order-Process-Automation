@@ -29,28 +29,16 @@ STOCK_SNAPSHOT_PATH = os.path.join(RESOURCES_DIR, "last_stock.csv")
 SALES_SNAPSHOT_PATH = os.path.join(RESOURCES_DIR, "sales_snapshot.csv")
 METRIC_SNAPSHOT_DIR = os.path.join(RESOURCES_DIR, "metric_snapshots")
 
-# Unified Shipped Statuses
+# Revenue-recognized WooCommerce statuses. Transitional courier/order states
+# remain operational workload and must not be counted as actual sales.
 SHIPPED_STATUSES = [
     "shipped",
     "completed",
-    "confirmed",
-    "cashbacked",
-    "cashback",
-    "dispatched",
-    "in-transit",
-    "courier-shipped",
-    "ready-to-ship",
-    "delivered",
     "wc-shipped",
     "wc-completed",
-    "wc-confirmed",
-    "wc-cashbacked",
-    "wc-dispatched",
-    "wc-in-transit",
-    "wc-courier-shipped",
-    "wc-ready-to-ship",
-    "wc-delivered",
 ]
+
+CANCELLED_STATUSES = {"cancelled", "wc-cancelled"}
 
 # Open / Active statuses that should never be treated as shipped
 ACTIVE_STATUSES = [

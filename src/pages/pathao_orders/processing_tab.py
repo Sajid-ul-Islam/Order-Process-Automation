@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
@@ -11,7 +11,6 @@ import streamlit as st
 from src.components.ui.dataframe_search import render_dataframe_search
 from src.components.ui.status import render_status_toggle
 from src.components.ui.widgets import (
-    render_file_summary,
     render_reset_confirm,
     render_sticky_action_bar,
     section_card,
@@ -54,10 +53,28 @@ STANDARD_COLUMNS = [
 
 # Common aliases found in uploaded files
 COLUMN_ALIASES: Dict[str, List[str]] = {
-    "Phone (Billing)": ["Phone", "Billing Phone", "Customer Phone", "Phone Number", "Mobile", "Contact"],
-    "First Name (Shipping)": ["First Name", "Shipping First Name", "Recipient Name", "Customer Name", "Name"],
+    "Phone (Billing)": [
+        "Phone",
+        "Billing Phone",
+        "Customer Phone",
+        "Phone Number",
+        "Mobile",
+        "Contact",
+    ],
+    "First Name (Shipping)": [
+        "First Name",
+        "Shipping First Name",
+        "Recipient Name",
+        "Customer Name",
+        "Name",
+    ],
     "Last Name (Shipping)": ["Last Name", "Shipping Last Name", "Surname"],
-    "Address 1&2 (Shipping)": ["Address", "Shipping Address", "Delivery Address", "Address (Shipping)"],
+    "Address 1&2 (Shipping)": [
+        "Address",
+        "Shipping Address",
+        "Delivery Address",
+        "Address (Shipping)",
+    ],
     "City (Shipping)": ["City", "Shipping City", "Town", "Area"],
     "State Code (Shipping)": ["State", "State Code", "District", "Zone", "Region"],
     "Order ID": ["Order ID", "Order #", "ID", "Order_ID"],
@@ -70,7 +87,9 @@ COLUMN_ALIASES: Dict[str, List[str]] = {
 }
 
 
-def _detect_and_map_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, Dict[str, str], List[str]]:
+def _detect_and_map_columns(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, Dict[str, str], List[str]]:
     """
     Detect columns in uploaded file and map them to standard names.
     Returns: (mapped_df, mapping_dict, missing_columns)
@@ -78,15 +97,15 @@ def _detect_and_map_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, Dict[str, s
     df_mapped = df.copy()
     mapping = {}
     missing = []
-    
+
     available_cols = set(df.columns)
-    
+
     for standard, aliases in COLUMN_ALIASES.items():
         # Check if standard column already exists
         if standard in available_cols:
             mapping[standard] = standard
             continue
-        
+
         # Try to find an alias
         found = False
         for alias in aliases:
@@ -95,11 +114,11 @@ def _detect_and_map_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, Dict[str, s
                 mapping[standard] = alias
                 found = True
                 break
-        
+
         if not found:
             missing.append(standard)
             mapping[standard] = None
-    
+
     return df_mapped, mapping, missing
 
 
@@ -109,14 +128,14 @@ def _render_column_mapping_ui(df: pd.DataFrame) -> tuple[Optional[pd.DataFrame],
     Returns: (mapped_df, is_confirmed)
     """
     st.markdown("### 🔍 Column Detection")
-    
+
     # Auto-detect columns
     df_mapped, mapping, missing = _detect_and_map_columns(df)
-    
+
     # Show detection results
     detected_cols = {k: v for k, v in mapping.items() if v is not None}
     undetected_cols = [k for k, v in mapping.items() if v is None]
-    
+
     if detected_cols:
         st.success(f"✅ Detected {len(detected_cols)} required columns automatically")
         with st.expander("View detected mappings", expanded=False):
@@ -125,20 +144,22 @@ def _render_column_mapping_ui(df: pd.DataFrame) -> tuple[Optional[pd.DataFrame],
                     st.text(f"✓ {standard}")
                 else:
                     st.text(f"✓ {standard} ← mapped from '{source}'")
-    
+
     if undetected_cols:
-        st.warning(f"⚠️ {len(undetected_cols)} columns not found: {', '.join(undetected_cols[:5])}")
+        st.warning(
+            f"⚠️ {len(undetected_cols)} columns not found: {', '.join(undetected_cols[:5])}"
+        )
         if len(undetected_cols) > 5:
             st.caption(f"...and {len(undetected_cols) - 5} more")
-    
+
     # Show manual mapping interface for missing columns
     if undetected_cols:
         st.markdown("#### Manual Column Mapping")
         st.caption("Map your file's columns to the required fields below:")
-        
+
         all_file_cols = list(df.columns)
         custom_mapping = {}
-        
+
         cols_grid = st.columns(2)
         for idx, required_col in enumerate(undetected_cols):
             with cols_grid[idx % 2]:
@@ -146,11 +167,11 @@ def _render_column_mapping_ui(df: pd.DataFrame) -> tuple[Optional[pd.DataFrame],
                     f"Select column for '{required_col}'",
                     options=["-- None --"] + all_file_cols,
                     key=f"map_{required_col}",
-                    index=0
+                    index=0,
                 )
                 if selected != "-- None --":
                     custom_mapping[required_col] = selected
-        
+
         # Apply custom mappings
         if custom_mapping:
             st.info(f"🔧 Applying {len(custom_mapping)} custom mappings...")
@@ -159,18 +180,25 @@ def _render_column_mapping_ui(df: pd.DataFrame) -> tuple[Optional[pd.DataFrame],
                 mapping[required_col] = source_col
             # Refresh missing list
             undetected_cols = [k for k, v in mapping.items() if v is None]
-    
+
     # User confirmation
     st.markdown("---")
     c1, c2 = st.columns([3, 1])
     with c1:
-        st.caption(f"Ready to process {len(df)} rows with {len([k for k, v in mapping.items() if v])} mapped columns")
+        st.caption(
+            f"Ready to process {len(df)} rows with {len([k for k, v in mapping.items() if v])} mapped columns"
+        )
     with c2:
-        confirm_btn = st.button("✓ Confirm & Process", type="primary", use_container_width=True, key="confirm_columns")
-    
+        confirm_btn = st.button(
+            "✓ Confirm & Process",
+            type="primary",
+            use_container_width=True,
+            key="confirm_columns",
+        )
+
     if confirm_btn:
         return df_mapped, True
-    
+
     return None, False
 
 
@@ -264,7 +292,9 @@ def _render_processing_tab():
             st.session_state.pathao_preview_source = source_mode
             st.session_state.pathao_auto_process = True
 
-            phone_cols_present = [c for c in REQUIRED_COLUMNS if c in preview_df.columns]
+            phone_cols_present = [
+                c for c in REQUIRED_COLUMNS if c in preview_df.columns
+            ]
             valid_file = len(phone_cols_present) > 0
 
             if preview_df.empty and used_status_filter:
@@ -278,25 +308,32 @@ def _render_processing_tab():
         try:
             preview_df = read_uploaded(uploaded_file)
             from src.processing.order_processor import clean_dataframe
+
             preview_df = clean_dataframe(preview_df)
             st.session_state.pathao_preview_df = preview_df
             st.session_state.pathao_preview_source = source_mode
             # Check if any phone column exists (not all required)
-            phone_cols_present = [c for c in REQUIRED_COLUMNS if c in preview_df.columns]
+            phone_cols_present = [
+                c for c in REQUIRED_COLUMNS if c in preview_df.columns
+            ]
             valid_file = len(phone_cols_present) > 0
             if not valid_file:
-                st.error(f"Missing required columns: Phone (Billing) or Phone (Shipping)")
-            
+                st.error(
+                    "Missing required columns: Phone (Billing) or Phone (Shipping)"
+                )
+
             # Show column detection and mapping UI for uploaded files
             mapped_df, confirmed = _render_column_mapping_ui(preview_df)
-            
+
             if confirmed and mapped_df is not None:
                 preview_df = mapped_df
                 valid_file = True
                 st.session_state.pathao_preview_df = preview_df
                 st.success("✅ Column mapping confirmed. Ready to process.")
             else:
-                st.info("👆 Please confirm or adjust the column mappings above before processing.")
+                st.info(
+                    "👆 Please confirm or adjust the column mappings above before processing."
+                )
                 valid_file = False
         except Exception as exc:
             log_error(exc, context="Pathao Upload")

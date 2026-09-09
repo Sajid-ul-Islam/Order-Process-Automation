@@ -7,6 +7,7 @@ Follows Hick's Law principles:
 3. Progressive Disclosure for advanced options
 4. Contextual Relevance
 """
+
 import pandas as pd
 import streamlit as st
 
@@ -14,8 +15,6 @@ from src.components.dashboard.dashboard_metrics import render_operational_metric
 from src.components.dashboard.dashboard_output import render_dashboard_output
 from src.components.dashboard.live_components import (
     render_dashboard_banner,
-    _render_completed_orders_section,
-    _render_completed_kpis_display,
 )
 from src.components.ui.widgets import render_reset_confirm
 from src.config.constants import bd_now, bd_today
@@ -24,78 +23,19 @@ from src.processing.data_processing import (
     aggregate_data,
     apply_order_view,
     apply_order_view_comparison,
+    filter_actual_sales,
+    filter_shipped_by_slot,
     prepare_granular_data,
 )
 from src.services.woocommerce.client import load_live_source
 from src.utils.logging import log_system_event
 from src.utils.safe_ops import safe_render
 
-# ── Auto-Sync Fragments ───────────────────────────────────────────────────────
-# Two stable module-level fragments — Streamlit keys fragment identity by the
-# function object, so they must NOT be created inside a factory per render.
-# _sync_60s  → Active + Shipped Only (high-frequency, catches new dispatches) — every 30s
-# _sync_180s → All other modes (light background refresh) — every 60s
 
-
-def _compute_live_data_fingerprint(df):
-    """Compute deterministic MD5 fingerprint across Order IDs, Order Statuses, and Modified Dates."""
-    if df is None or df.empty:
-        return ""
-    import hashlib
-
-    status_col = (
-        "Order Status"
-        if "Order Status" in df.columns
-        else "Status" if "Status" in df.columns else None
-    )
-    mod_col = (
-        "mod_dt_parsed"
-        if "mod_dt_parsed" in df.columns
-        else "Order Date Modified" if "Order Date Modified" in df.columns else None
-    )
-    oid_col = "Order ID" if "Order ID" in df.columns else None
-
-    cols = [c for c in [oid_col, status_col, mod_col] if c and c in df.columns]
-    if cols:
-        summary_str = f"{len(df)}_" + df[cols].astype(str).to_string()
-        return hashlib.md5(summary_str.encode("utf-8")).hexdigest()
-    return str(len(df))
-
-
-def _check_and_trigger_ui_rerun():
-    df_curr = st.session_state.get("wc_curr_df")
-    if df_curr is not None and not df_curr.empty:
-        new_fp = _compute_live_data_fingerprint(df_curr)
-        old_fp = st.session_state.get("_live_dash_data_fingerprint", "")
-        st.session_state["_live_dash_data_fingerprint"] = new_fp
-        if old_fp and new_fp != old_fp:
-            st.rerun()
-
-
-@st.fragment(run_every=30)
-def _sync_60s():
-    """30-second background sync used in Shipped-Only / Active mode."""
-    try:
-        load_live_source(force_refresh=True)
-        _check_and_trigger_ui_rerun()
-    except Exception:
-        pass
-
-
-@st.fragment(run_every=60)
-def _sync_180s():
-    """60-second background sync used for all other dashboard modes."""
-    try:
-        load_live_source(force_refresh=True)
-        _check_and_trigger_ui_rerun()
-    except Exception:
-        pass
-
-
-# ── Live KPI Fragment (20s auto-refresh) ────────────────────────────────────
-@st.fragment(run_every=20)
+# KPI cards are rendered once per page run. The data-sync fragment triggers a
+# page rerun only when the underlying order fingerprint changes.
 def _refresh_core_metrics():
-    """20-second auto-refresh of KPI cards.
+    """Render KPI cards from the latest synchronized dashboard frames.
 
     Reuses the already-filtered, granular ``live_df_standard`` /
     ``live_cmp_standard`` stashed by ``render_live_tab`` so the cards always
@@ -104,7 +44,7 @@ def _refresh_core_metrics():
     """
     nav_mode = st.session_state.get("wc_nav_mode", "Today")
     order_view_mode = (
-        st.session_state.get("live_order_filter", "All Orders")
+        st.session_state.get("live_order_filter", "Shipped")
         if nav_mode == "Today"
         else "All Orders"
     )
@@ -132,18 +72,24 @@ def _refresh_core_metrics():
         )
 
     if c_df is None or c_df.empty:
-        _cmp_raw = (
-            st.session_state.get("wc_prev_df")
-            if nav_mode == "Today"
-            else st.session_state.get("wc_curr_df")
-            if nav_mode in ["Backlog", "Prev"]
-            else None
-        )
+        if nav_mode == "Today" and order_view_mode == "Shipped":
+            _cmp_raw = _get_day_comparison_source()
+        else:
+            _cmp_raw = (
+                st.session_state.get("wc_prev_df")
+                if nav_mode == "Today"
+                else st.session_state.get("wc_curr_df")
+                if nav_mode in ["Backlog", "Prev"]
+                else None
+            )
         if (_cmp_raw is None or _cmp_raw.empty) and nav_mode == "Today":
             full_raw = st.session_state.get("wc_full_df")
             if full_raw is not None and not full_raw.empty:
                 try:
-                    from src.services.woocommerce.client import _partition_operational_data
+                    from src.services.woocommerce.client import (
+                        _partition_operational_data,
+                    )
+
                     _, df_prev_ext, _, _, _ = _partition_operational_data(full_raw)
                     _cmp_raw = df_prev_ext
                 except Exception:
@@ -183,6 +129,21 @@ def _refresh_core_metrics():
         forecast_val=0,
         avg_proc_time=0,
     )
+
+
+def _get_day_comparison_source():
+    """Combine live and prior partitions so yesterday covers 00:00–23:59 BD."""
+    frames = [
+        frame
+        for frame in (
+            st.session_state.get("wc_curr_df"),
+            st.session_state.get("wc_prev_df"),
+        )
+        if frame is not None and not frame.empty
+    ]
+    if not frames:
+        return None
+    return pd.concat(frames, ignore_index=True).drop_duplicates()
 
 
 # ── Staleness Monitor ────────────────────────────────────────────────────────
@@ -361,6 +322,94 @@ def render_staleness_monitor():
         )
 
 
+def _render_order_pipeline_summary(df):
+    """Show the non-cancelled workload without mixing it into sales KPIs."""
+    if df is None or df.empty:
+        return
+
+    status_col = (
+        "Order Status"
+        if "Order Status" in df.columns
+        else "Status"
+        if "Status" in df.columns
+        else None
+    )
+    if status_col is None:
+        return
+
+    order_col = "Order ID" if "Order ID" in df.columns else None
+    statuses = df[status_col].astype(str).str.lower().str.strip()
+
+    def count_orders(mask):
+        subset = df[mask]
+        return int(subset[order_col].nunique()) if order_col else len(subset)
+
+    sales_mask = statuses.isin({"shipped", "completed", "wc-shipped", "wc-completed"})
+    processing_mask = statuses.isin({"processing", "process", "wc-processing"})
+    held_mask = statuses.isin(
+        {
+            "on-hold",
+            "hold",
+            "pending",
+            "waiting",
+            "wc-on-hold",
+            "wc-hold",
+            "wc-pending",
+            "wc-waiting",
+        }
+    )
+    other_mask = ~(sales_mask | processing_mask | held_mask)
+
+    st.caption(
+        "Operational workload · "
+        f"🚚 Actual sales **{count_orders(sales_mask)}** · "
+        f"⚙️ Processing **{count_orders(processing_mask)}** · "
+        f"⏸ Hold / waiting **{count_orders(held_mask)}** · "
+        f"Other **{count_orders(other_mask)}**"
+    )
+
+    with st.expander("View all non-cancelled orders", expanded=False):
+        visible_columns = [
+            column
+            for column in (
+                "Order ID",
+                status_col,
+                "Full Name (Billing)",
+                "Order Date",
+                "Order Date Modified",
+                "Order Total Amount",
+            )
+            if column in df.columns
+        ]
+        workload = df[visible_columns]
+        if order_col and order_col in workload.columns:
+            workload = workload.drop_duplicates(subset=[order_col])
+        st.dataframe(workload, width="stretch", hide_index=True)
+
+
+def _render_empty_sales_kpis():
+    """Keep the day-over-day sales headline visible when today is still zero."""
+    previous_df = _get_day_comparison_source()
+    previous_df = filter_shipped_by_slot(
+        previous_df, "Today", is_comparison=True
+    )
+    if previous_df is None or previous_df.empty:
+        previous_orders = 0
+    elif "Order ID" in previous_df.columns:
+        previous_orders = int(previous_df["Order ID"].nunique())
+    else:
+        previous_orders = len(previous_df)
+
+    today_col, previous_col = st.columns(2)
+    today_col.metric(
+        "Actual Sales · Today",
+        "0 orders",
+        delta=f"{-previous_orders:+d} vs previous day",
+    )
+    previous_col.metric("Actual Sales · Previous Day", f"{previous_orders:,} orders")
+    st.caption("Actual sale = WooCommerce status `shipped` or `completed` only.")
+
+
 def render_live_tab():
     def _reset_live_state():
         st.session_state.wc_curr_df = None
@@ -369,7 +418,7 @@ def render_live_tab():
         st.session_state.wc_view_historical = False
         st.session_state.wc_sync_mode = "Operational Cycle"
         st.session_state.wc_nav_mode = "Today"
-        st.session_state.live_order_filter = "All Orders"
+        st.session_state.live_order_filter = "Shipped"
 
     render_reset_confirm("Live Dashboard", "live", _reset_live_state)
     st.session_state.manual_tab_active = False
@@ -378,7 +427,7 @@ def render_live_tab():
         st.session_state.wc_nav_mode = "Today"
 
     if "live_order_filter" not in st.session_state:
-        st.session_state.live_order_filter = "All Orders"
+        st.session_state.live_order_filter = "Shipped"
 
     # Force Operational Cycle in live dashboard
     st.session_state["wc_sync_mode"] = "Operational Cycle"
@@ -510,19 +559,11 @@ def render_live_tab():
     # Single responsibility: delegate to component module
     render_dashboard_banner(load_live_source)
 
-    # ── Date-Wise Completed Orders (Right After Banner) ─────────────────────
-    # Refactored with progressive disclosure and single primary action
-    show_kpis, selected_date, source_filter = _render_completed_orders_section()
-    
-    # Fetch and display KPIs only when primary action is triggered
-    if show_kpis:
-        _render_completed_kpis_display(selected_date, source_filter, df_live)
-
     st.markdown("---")
 
     # ── Final Data Filtering & Sanity Checks ──────────────────────────────────
     order_view_mode = (
-        st.session_state.get("live_order_filter", "All Orders")
+        st.session_state.get("live_order_filter", "Shipped")
         if nav_mode == "Today"
         else "All Orders"
     )
@@ -538,7 +579,9 @@ def render_live_tab():
     status_col = (
         "Order Status"
         if "Order Status" in df_live.columns
-        else "Status" if "Status" in df_live.columns else None
+        else "Status"
+        if "Status" in df_live.columns
+        else None
     )
     if status_col is None and order_view_mode != "All Orders":
         st.warning("⚠️ 'Order Status' column not found — cannot apply filter.")
@@ -546,9 +589,21 @@ def render_live_tab():
 
     df_live = apply_order_view(df_live, nav_mode, order_view_mode)
 
+    if order_view_mode == "All Orders":
+        _render_order_pipeline_summary(df_live)
+        # The operational summary includes every non-cancelled status, but all
+        # monetary KPIs and product analytics use recognized sales only.
+        df_live = filter_actual_sales(df_live)
+
     # Apply Online Only filter when Shipped + Online Only toggle is on
-    if order_view_mode == "Shipped" and st.session_state.get("shipped_online_only", False):
-        from src.processing.completed_analytics import classify_order_source, detect_source_column
+    if order_view_mode == "Shipped" and st.session_state.get(
+        "shipped_online_only", False
+    ):
+        from src.processing.completed_analytics import (
+            classify_order_source,
+            detect_source_column,
+        )
+
         source_col = detect_source_column(df_live)
         df_live["_order_source"] = df_live.apply(
             lambda row: classify_order_source(row, source_col), axis=1
@@ -557,7 +612,7 @@ def render_live_tab():
 
     if df_live is None or df_live.empty:
         if order_view_mode == "Shipped":
-            st.info(f"📦 No shipped orders found in the **{nav_mode}** slot.")
+            _render_empty_sales_kpis()
         elif order_view_mode == "Processing":
             st.info(f"📋 No processing orders found in the **{nav_mode}** slot.")
         else:
@@ -580,18 +635,22 @@ def render_live_tab():
     # Stash the granular frames so the auto-refresh KPI fragment renders the
     # exact same data as the charts below (no second, divergent filtering pass).
     st.session_state["live_df_standard"] = df_standard
-    _cmp_raw = (
-        st.session_state.get("wc_prev_df")
-        if nav_mode == "Today"
-        else st.session_state.get("wc_curr_df")
-        if nav_mode in ["Backlog", "Prev"]
-        else None
-    )
+    if nav_mode == "Today" and order_view_mode == "Shipped":
+        _cmp_raw = _get_day_comparison_source()
+    else:
+        _cmp_raw = (
+            st.session_state.get("wc_prev_df")
+            if nav_mode == "Today"
+            else st.session_state.get("wc_curr_df")
+            if nav_mode in ["Backlog", "Prev"]
+            else None
+        )
     if (_cmp_raw is None or _cmp_raw.empty) and nav_mode == "Today":
         full_raw = st.session_state.get("wc_full_df")
         if full_raw is not None and not full_raw.empty:
             try:
                 from src.services.woocommerce.client import _partition_operational_data
+
                 _, df_prev_ext, _, _, _ = _partition_operational_data(full_raw)
                 _cmp_raw = df_prev_ext
             except Exception:
@@ -599,6 +658,8 @@ def render_live_tab():
     _cmp_standard = None
     if _cmp_raw is not None and not _cmp_raw.empty:
         _cmp_f = apply_order_view_comparison(_cmp_raw, nav_mode, order_view_mode)
+        if order_view_mode == "All Orders":
+            _cmp_f = filter_actual_sales(_cmp_f)
         if _cmp_f is not None and not _cmp_f.empty:
             _cmp_standard, _ = prepare_granular_data(
                 _cmp_f, find_columns(_cmp_f) if not _cmp_f.empty else live_mapping
@@ -619,10 +680,26 @@ def render_live_tab():
     # ── KPI Cards (30s auto-refresh) ─────────────────────────────────────────
     _refresh_core_metrics()
 
-    # ── Top-level split: shift-speed "Today" vs deep-dive "Analysis" ──────────
-    tab_today, tab_analysis = st.tabs(["📋 Today", "🔍 Analysis"])
+    # A conditional view selector avoids executing hidden tab content on every
+    # Streamlit rerun.
+    if hasattr(st, "segmented_control"):
+        dashboard_view = st.segmented_control(
+            "Dashboard detail",
+            ["📋 Today", "🔍 Analysis"],
+            default="📋 Today",
+            key="live_dashboard_detail_view",
+            label_visibility="collapsed",
+        )
+    else:
+        dashboard_view = st.radio(
+            "Dashboard detail",
+            ["📋 Today", "🔍 Analysis"],
+            horizontal=True,
+            key="live_dashboard_detail_view_radio",
+            label_visibility="collapsed",
+        )
 
-    with tab_today:
+    if dashboard_view == "📋 Today":
         # ── Dashboard Output (charts, tables, AI briefing, export) ───────────
         safe_render(
             lambda: render_dashboard_output(
@@ -642,8 +719,7 @@ def render_live_tab():
         # ── Dispatch Export (Shipped Only mode only) ─────────────────────────
         if nav_mode == "Today" and order_view_mode == "Shipped":
             _render_dispatch_export()
-
-    with tab_analysis:
+    else:
         # ── Revenue vs. Cashback Impact Analysis (always available here) ─────
         from src.components.dashboard.dashboard_metrics import (
             render_revenue_cashback_comparison_section,
@@ -653,91 +729,6 @@ def render_live_tab():
 
     # ── Staleness monitor stays visible below both tabs ──────────────────────
     render_staleness_monitor()
-
-    # ── Date-Wise Completed Orders ─────────────────────────────────────────
-    st.markdown("---")
-    st.markdown("### 📅 Date-Wise Completed Orders")
-    st.caption("Pick a date and filter by source to see completed order KPIs.")
-
-    # Date picker
-    today_bd = bd_today()
-    default_date = st.session_state.get("completed_date", today_bd)
-    selected_date = st.date_input(
-        "Select Date",
-        value=default_date,
-        max_value=today_bd,
-        key="completed_date_picker",
-        help="Pick a date to view completed orders for that day",
-    )
-    if selected_date != default_date:
-        st.session_state["completed_date"] = selected_date
-
-    # Source toggle
-    source_filter = st.radio(
-        "Source",
-        ["Both", "Online", "Outlet"],
-        horizontal=True,
-        key="completed_source_filter",
-        help="Filter by order source: Online (website) or Outlet (physical store)",
-    )
-
-    # Fetch and filter
-    if st.button("📊 Show Completed KPIs", key="show_completed_kpis"):
-        with st.status(f"Loading completed orders for {selected_date}...", expanded=True) as status:
-            from src.processing.completed_analytics import (
-                filter_completed_orders_by_date,
-                compute_completed_kpis,
-            )
-
-            # Get full dataset
-            full_df = st.session_state.get("wc_full_df")
-            if full_df is None or full_df.empty:
-                status.update(label="⚠️ No data available", state="warning")
-                st.warning("No WooCommerce data loaded. Please sync first.")
-            else:
-                # Filter by date and source
-                completed_df = filter_completed_orders_by_date(
-                    full_df,
-                    pd.Timestamp(selected_date),
-                    source_filter=source_filter,
-                )
-
-                if completed_df.empty:
-                    status.update(label="ℹ️ No completed orders found", state="info")
-                    st.info(f"No completed orders found for {selected_date} ({source_filter})")
-                else:
-                    # Compute KPIs
-                    kpis = compute_completed_kpis(completed_df)
-                    status.update(label="✅ KPIs computed!", state="complete")
-
-                    # Display KPIs
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("Completed Orders", f"{kpis['orders']:,}")
-                    c2.metric("Items Shipped", f"{kpis['items']:,}")
-                    c3.metric("Net Revenue", f"TK {kpis['net_revenue']:,.0f}")
-                    c4.metric("Basket Size", f"TK {kpis['basket_size']:,.0f}")
-
-                    c5, c6 = st.columns(2)
-                    c5.metric("Gross Revenue", f"TK {kpis['gross_revenue']:,.0f}")
-                    c6.metric("Cashback/Discount", f"TK {kpis['cashback']:,.0f}")
-
-                    # Show data
-                    with st.expander("View Order Details", expanded=False):
-                        display_cols = [
-                            c for c in [
-                                "Order ID",
-                                "Full Name (Billing)",
-                                "Phone (Billing)",
-                                "Order Status",
-                                "Order Total Amount",
-                                "Dispatch Suggestion",
-                            ]
-                            if c in completed_df.columns
-                        ]
-                        st.dataframe(
-                            completed_df[display_cols].drop_duplicates(subset=["Order ID"]),
-                            use_container_width=True,
-                        )
 
 
 def _render_dispatch_export():
@@ -752,7 +743,11 @@ def _render_dispatch_export():
 
     # Apply Online Only filter if toggle is on
     if st.session_state.get("shipped_online_only", False):
-        from src.processing.completed_analytics import classify_order_source, detect_source_column
+        from src.processing.completed_analytics import (
+            classify_order_source,
+            detect_source_column,
+        )
+
         source_col = detect_source_column(raw_df)
         raw_df["_order_source"] = raw_df.apply(
             lambda row: classify_order_source(row, source_col), axis=1
@@ -771,7 +766,9 @@ def _render_dispatch_export():
     status_col = (
         "Order Status"
         if "Order Status" in raw_df.columns
-        else "Status" if "Status" in raw_df.columns else None
+        else "Status"
+        if "Status" in raw_df.columns
+        else None
     )
     if status_col is None:
         return

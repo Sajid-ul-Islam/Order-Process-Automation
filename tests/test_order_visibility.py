@@ -12,7 +12,7 @@ Rules locked in here:
 import streamlit as st
 from datetime import timedelta
 
-from conftest import build_order_df, now_bd
+from conftest import build_order_df
 
 from src.processing.data_processing import filter_all_orders_to_slot
 from src.services.woocommerce.client import _partition_operational_data
@@ -75,7 +75,6 @@ def test_processing_view_contains_all_processing_orders(op_state):
 
 def test_all_orders_is_processing_plus_shipped_today(op_state):
     pc = op_state["prev_cutoff"]
-    now = now_bd()
     orders = [
         (301, "processing", pc - timedelta(minutes=30), pc - timedelta(minutes=30), ""),
         (302, "processing", pc + timedelta(hours=1), pc + timedelta(hours=1), ""),

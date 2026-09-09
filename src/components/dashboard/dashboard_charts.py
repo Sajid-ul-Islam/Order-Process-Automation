@@ -592,7 +592,9 @@ def render_revenue_cashback_comparison_chart(m_df: pd.DataFrame) -> None:
     status_col = (
         "Order Status"
         if "Order Status" in m_df.columns
-        else "Status" if "Status" in m_df.columns else None
+        else "Status"
+        if "Status" in m_df.columns
+        else None
     )
 
     # Calculate overall metrics
@@ -719,7 +721,9 @@ def render_revenue_cashback_comparison_chart(m_df: pd.DataFrame) -> None:
     id_col = (
         "Order ID"
         if "Order ID" in m_df.columns
-        else "Order Number" if "Order Number" in m_df.columns else None
+        else "Order Number"
+        if "Order Number" in m_df.columns
+        else None
     )
     cb_mask = (
         (m_df["Cashback Discount"] > 0)
@@ -753,7 +757,9 @@ def render_revenue_cashback_comparison_chart(m_df: pd.DataFrame) -> None:
         gross_col = (
             "Gross Amount"
             if "Gross Amount" in m_df.columns
-            else "Total Amount" if "Total Amount" in m_df.columns else None
+            else "Total Amount"
+            if "Total Amount" in m_df.columns
+            else None
         )
         if gross_col:
             cb_gross = float(m_df.loc[cb_mask, gross_col].sum())

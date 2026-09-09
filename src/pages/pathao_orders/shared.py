@@ -11,7 +11,15 @@ from src.config.settings import get_pathao_config
 from src.services.pathao.client import PathaoClient
 from src.state.persistence import clear_state_keys
 
-REQUIRED_COLUMNS = ["Phone (Billing)", "Phone (Shipping)", "Phone", "Billing Phone", "Customer Phone", "Phone Number", "Mobile"]
+REQUIRED_COLUMNS = [
+    "Phone (Billing)",
+    "Phone (Shipping)",
+    "Phone",
+    "Billing Phone",
+    "Customer Phone",
+    "Phone Number",
+    "Mobile",
+]
 SOURCE_WOOCOM = "WooCommerce Processing"
 SOURCE_UPLOAD = "Upload / URL"
 
@@ -78,7 +86,9 @@ def _filter_processing_orders(df):
     status_col = (
         "Order Status"
         if "Order Status" in df.columns
-        else "Status" if "Status" in df.columns else None
+        else "Status"
+        if "Status" in df.columns
+        else None
     )
     if not status_col:
         return df.copy(), False

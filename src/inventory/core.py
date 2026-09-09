@@ -180,9 +180,9 @@ def load_inventory_from_uploads(uploaded_files: Dict[str, object]):
     Matching is based only on 'Title - Size' (computed from Title + Size).
     """
     inventory: Dict[str, Dict[str, int]] = {}
-    sku_to_title_size: Dict[str, str] = (
-        {}
-    )  # sku_key -> Title-Size key (for SKU match validation)
+    sku_to_title_size: Dict[
+        str, str
+    ] = {}  # sku_key -> Title-Size key (for SKU match validation)
     all_locations = list(uploaded_files.keys())
     warnings = []
     enriched_dfs: Dict[str, pd.DataFrame] = {}

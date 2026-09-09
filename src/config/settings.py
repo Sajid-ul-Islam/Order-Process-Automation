@@ -45,6 +45,8 @@ LLM_PROVIDER_SOURCES = {
     },
 }
 
+_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+
 
 def _secrets_root():
     try:
@@ -182,6 +184,20 @@ def is_auth_configured() -> bool:
     return all(auth.get(key) for key in ("redirect_uri", "cookie_secret")) and all(
         google.get(key) for key in ("client_id", "client_secret", "server_metadata_url")
     )
+
+
+def is_unauthenticated_access_allowed() -> bool:
+    """Return whether the explicit local-development auth bypass is enabled.
+
+    The default is deliberately false so a missing or partially configured auth
+    block cannot expose the operations terminal in production.
+    """
+    value = os.getenv("DEEN_OPS_ALLOW_UNAUTHENTICATED")
+    if value is None:
+        value = get_top_level_secret("DEEN_OPS_ALLOW_UNAUTHENTICATED", "")
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in _TRUE_VALUES
 
 
 def load_secrets_schema() -> dict[str, Any]:

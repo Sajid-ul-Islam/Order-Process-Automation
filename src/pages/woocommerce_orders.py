@@ -2,7 +2,7 @@
 
 Refactored following Hick's Law principles:
 - Single Primary Action per view
-- Progressive Disclosure for advanced options  
+- Progressive Disclosure for advanced options
 - Clear visual hierarchy between primary/secondary actions
 - Modular component architecture for maintainability
 """
@@ -41,12 +41,14 @@ def _render_live_orders_view():
         # Fallback to wc_curr_df if available
         df = st.session_state.get("wc_curr_df")
         if df is None or df.empty:
-            render_empty_state("Please select a date range and click 'Fetch Orders' to load data")
+            render_empty_state(
+                "Please select a date range and click 'Fetch Orders' to load data"
+            )
             return
 
     # Apply contextual filters with progressive disclosure
     df = render_order_filters(df)
-    
+
     if df.empty:
         render_empty_state("No orders match your current filters")
         return
@@ -115,12 +117,16 @@ def _render_live_orders_view():
     status_col = (
         "Order Status"
         if "Order Status" in display_df.columns
-        else "Status" if "Status" in display_df.columns else None
+        else "Status"
+        if "Status" in display_df.columns
+        else None
     )
     amount_col = (
         "Order Total Amount"
         if "Order Total Amount" in display_df.columns
-        else "Total Amount" if "Total Amount" in display_df.columns else None
+        else "Total Amount"
+        if "Total Amount" in display_df.columns
+        else None
     )
     if amount_col:
         display_df[amount_col] = (
@@ -130,7 +136,9 @@ def _render_live_orders_view():
     date_col = (
         "Order Date"
         if "Order Date" in display_df.columns
-        else "Date" if "Date" in display_df.columns else None
+        else "Date"
+        if "Date" in display_df.columns
+        else None
     )
     mod_date_col = (
         "Order Date Modified" if "Order Date Modified" in display_df.columns else None
@@ -722,11 +730,7 @@ def _render_customer_profiles_view():
         None,
     )
     email_col = next(
-        (
-            c
-            for c in ["Billing Email", "Email", "Customer Email"]
-            if c in df.columns
-        ),
+        (c for c in ["Billing Email", "Email", "Customer Email"] if c in df.columns),
         None,
     )
     order_id_col = next(
@@ -738,20 +742,14 @@ def _render_customer_profiles_view():
         "Order Status",
     )
     amount_col = next(
-        (
-            c
-            for c in ["Order Total Amount", "Total Amount", "Total"]
-            if c in df.columns
-        ),
+        (c for c in ["Order Total Amount", "Total Amount", "Total"] if c in df.columns),
         "Order Total Amount",
     )
     item_col = next(
         (c for c in ["Item Name", "Product Name", "Items"] if c in df.columns),
         "Item Name",
     )
-    qty_col = next(
-        (c for c in ["Quantity", "Qty"] if c in df.columns), "Quantity"
-    )
+    qty_col = next((c for c in ["Quantity", "Qty"] if c in df.columns), "Quantity")
     city_col = next(
         (
             c
@@ -769,9 +767,7 @@ def _render_customer_profiles_view():
     # Aggregate by Phone or Email or Name
     df_work = df.copy()
     if phone_col:
-        df_work["_norm_phone"] = df_work[phone_col].apply(
-            normalize_phone_number
-        )
+        df_work["_norm_phone"] = df_work[phone_col].apply(normalize_phone_number)
     else:
         df_work["_norm_phone"] = ""
 
@@ -822,23 +818,19 @@ def _render_customer_profiles_view():
         total_spend = 0.0
         if amount_col in unique_orders.columns:
             total_spend = float(
-                pd.to_numeric(
-                    unique_orders[amount_col], errors="coerce"
-                ).fillna(0).sum()
+                pd.to_numeric(unique_orders[amount_col], errors="coerce")
+                .fillna(0)
+                .sum()
             )
 
         items_list = []
         if item_col in grp.columns:
             for _, r in grp.iterrows():
                 i_name = str(r.get(item_col, ""))
-                i_qty = int(
-                    pd.to_numeric(r.get(qty_col, 1), errors="coerce") or 1
-                )
+                i_qty = int(pd.to_numeric(r.get(qty_col, 1), errors="coerce") or 1)
                 if i_name and i_name != "nan":
                     items_list.append(f"{i_qty}x {i_name}")
-        items_str = " | ".join(items_list[:4]) + (
-            "..." if len(items_list) > 4 else ""
-        )
+        items_str = " | ".join(items_list[:4]) + ("..." if len(items_list) > 4 else "")
 
         statuses = (
             unique_orders[status_col].dropna().astype(str).tolist()
@@ -898,16 +890,12 @@ def _render_customer_profiles_view():
     k2.metric(
         "🆕 First-Time Buyers",
         f"{new_cust_cnt:,}",
-        delta=f"{(new_cust_cnt / tot_cust_cnt * 100):.0f}%"
-        if tot_cust_cnt > 0
-        else "",
+        delta=f"{(new_cust_cnt / tot_cust_cnt * 100):.0f}%" if tot_cust_cnt > 0 else "",
     )
     k3.metric(
         "🔄 Returning Customers",
         f"{ret_cust_cnt:,}",
-        delta=f"{(ret_cust_cnt / tot_cust_cnt * 100):.0f}%"
-        if tot_cust_cnt > 0
-        else "",
+        delta=f"{(ret_cust_cnt / tot_cust_cnt * 100):.0f}%" if tot_cust_cnt > 0 else "",
     )
     k4.metric("💰 Total Customer Spend", f"৳{tot_sales_val:,}")
 
@@ -938,30 +926,18 @@ def _render_customer_profiles_view():
     # Apply filters
     filtered_cust = cust_df.copy()
     if type_filter != "All":
-        filtered_cust = filtered_cust[
-            filtered_cust["Customer Type"] == type_filter
-        ]
+        filtered_cust = filtered_cust[filtered_cust["Customer Type"] == type_filter]
     if st_filter != "All":
-        filtered_cust = filtered_cust[
-            filtered_cust["Latest Status"] == st_filter
-        ]
+        filtered_cust = filtered_cust[filtered_cust["Latest Status"] == st_filter]
     if q:
         q_low = q.lower().strip()
         mask = (
-            filtered_cust["Customer Name"]
-            .str.lower()
-            .str.contains(q_low, na=False)
+            filtered_cust["Customer Name"].str.lower().str.contains(q_low, na=False)
             | filtered_cust["Phone"].str.lower().str.contains(q_low, na=False)
             | filtered_cust["Email"].str.lower().str.contains(q_low, na=False)
-            | filtered_cust["Order Numbers"]
-            .str.lower()
-            .str.contains(q_low, na=False)
-            | filtered_cust["Items Summary"]
-            .str.lower()
-            .str.contains(q_low, na=False)
-            | filtered_cust["City / District"]
-            .str.lower()
-            .str.contains(q_low, na=False)
+            | filtered_cust["Order Numbers"].str.lower().str.contains(q_low, na=False)
+            | filtered_cust["Items Summary"].str.lower().str.contains(q_low, na=False)
+            | filtered_cust["City / District"].str.lower().str.contains(q_low, na=False)
         )
         filtered_cust = filtered_cust[mask]
 
@@ -1014,9 +990,7 @@ def _render_customer_profiles_view():
 
 def _render_bulk_updater_tab():
     """Renders the Bulk Status Sync & Pathao Match view."""
-    st.markdown(
-        "### :material/local_shipping: WooCommerce × Pathao Bulk Status Sync"
-    )
+    st.markdown("### :material/local_shipping: WooCommerce × Pathao Bulk Status Sync")
     st.markdown(
         "Match WooCommerce orders with a Pathao CSV/Excel export and update statuses directly."
     )
@@ -1152,9 +1126,7 @@ def _render_bulk_updater_tab():
                 )
 
             if pathao_file is not None:
-                unmatched_df = display_df[
-                    display_df["Pathao ID"] == "Not Found"
-                ].copy()
+                unmatched_df = display_df[display_df["Pathao ID"] == "Not Found"].copy()
                 if not unmatched_df.empty:
                     with c_action:
                         excel_bytes = export_to_styled_excel(
@@ -1180,9 +1152,7 @@ def _render_bulk_updater_tab():
                 "refunded",
                 "failed",
             ]
-            display_df["WC Status"] = (
-                display_df["WC Status"].astype(str).str.lower()
-            )
+            display_df["WC Status"] = display_df["WC Status"].astype(str).str.lower()
 
             st.data_editor(
                 display_df,
@@ -1215,9 +1185,9 @@ def _render_bulk_updater_tab():
                 hide_index=False,
             )
 
-            changes = st.session_state.get(
-                "wc_pathao_tracker_editor", {}
-            ).get("edited_rows", {})
+            changes = st.session_state.get("wc_pathao_tracker_editor", {}).get(
+                "edited_rows", {}
+            )
             if changes:
                 st.warning(f"You have {len(changes)} pending status updates.")
                 if st.button(
@@ -1230,15 +1200,11 @@ def _render_bulk_updater_tab():
                         for row_idx, col_changes in changes.items():
                             if "WC Status" in col_changes:
                                 new_status = col_changes["WC Status"]
-                                order_id = display_df.iloc[row_idx][
-                                    "Order Number"
-                                ]
+                                order_id = display_df.iloc[row_idx]["Order Number"]
                                 if update_order_status(order_id, new_status)[0]:
                                     success_count += 1
 
-                        st.toast(
-                            f"✅ Successfully applied {success_count} updates!"
-                        )
+                        st.toast(f"✅ Successfully applied {success_count} updates!")
 
 
 def render_woocommerce_orders_tab():

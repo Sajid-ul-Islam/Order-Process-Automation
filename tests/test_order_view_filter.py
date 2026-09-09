@@ -80,11 +80,29 @@ def test_apply_order_view_all_today_delegates_to_slot(fake_session):
             (1, "processing", "2026-08-13 19:00:00", "2026-08-13 19:00:00"),
             (2, "shipped", "2026-08-14 10:00:00", "2026-08-14 12:00:00"),
             (3, "cancelled", "2026-08-14 09:00:00", "2026-08-14 09:00:00"),
+            (4, "on-hold", "2026-08-10 09:00:00", "2026-08-10 09:00:00"),
+            (5, "waiting", "2026-08-10 09:00:00", "2026-08-10 09:00:00"),
+            (6, "custom-review", "2026-08-10 09:00:00", "2026-08-10 09:00:00"),
         ]
     )
     out = apply_order_view(df, "Today", "All Orders")
-    # Cancelled excluded; processing + shipped-today kept.
-    assert set(out["Order ID"]) == {1, 2}
+    # Cancelled is excluded; all other operational statuses remain visible.
+    assert set(out["Order ID"]) == {1, 2, 4, 5, 6}
+
+
+def test_filter_actual_sales_excludes_transitional_statuses(fake_session):
+    from src.processing.data_processing import filter_actual_sales
+
+    df = _orders(
+        [
+            (1, "completed", "2026-08-13 10:00:00", "2026-08-13 12:00:00"),
+            (2, "shipped", "2026-08-13 10:00:00", "2026-08-13 12:00:00"),
+            (3, "confirmed", "2026-08-13 10:00:00", "2026-08-13 12:00:00"),
+            (4, "on-hold", "2026-08-13 10:00:00", "2026-08-13 12:00:00"),
+        ]
+    )
+
+    assert set(filter_actual_sales(df)["Order ID"]) == {1, 2}
 
 
 def test_apply_order_view_shipped_delegates_to_shipped_filter(fake_session):

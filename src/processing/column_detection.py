@@ -1,5 +1,5 @@
 import pandas as pd
-import streamlit as st
+from src.utils.streamlit_runtime import cache_data
 
 from src.utils.logging import log_system_event
 
@@ -46,7 +46,7 @@ def pick_column(
     return next((c for c in candidates if c in df.columns), default)
 
 
-@st.cache_data(show_spinner=False)
+@cache_data(show_spinner=False)
 def find_columns(df: pd.DataFrame) -> dict[str, str]:
     """Detects primary columns using exact and then partial matching.
 
@@ -127,7 +127,7 @@ def find_columns(df: pd.DataFrame) -> dict[str, str]:
     return found
 
 
-@st.cache_data(show_spinner=False)
+@cache_data(show_spinner=False)
 def scrub_raw_dataframe(df):
     """Filters out dashboard analytics, empty rows, and summary tables from raw exports."""
     if df is None or df.empty:

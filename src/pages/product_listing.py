@@ -48,7 +48,9 @@ def _render_product_listing_content() -> None:
             df = wc_df.copy()
             st.info(f"Loaded **{len(df):,}** order rows from live WooCommerce sync.")
         else:
-            st.warning("⚠️ No live order data found in memory. Please fetch orders from the Live Dashboard or upload a file.")
+            st.warning(
+                "⚠️ No live order data found in memory. Please fetch orders from the Live Dashboard or upload a file."
+            )
     else:
         uploaded_file = st.file_uploader(
             "Upload Order File (CSV or Excel)",
@@ -98,7 +100,9 @@ def _render_product_listing_content() -> None:
         order_col = st.selectbox(
             "Order ID Column (Optional):",
             ["None"] + cols,
-            index=(cols.index(det["order_id"]) + 1) if det.get("order_id") in cols else 0,
+            index=(cols.index(det["order_id"]) + 1)
+            if det.get("order_id") in cols
+            else 0,
             key="pl_order_col",
         )
 
@@ -149,7 +153,9 @@ def _render_product_listing_content() -> None:
         for idx, row in data_df.iterrows():
             val = row[color_col]
             hex_c = color_dict.get(val, "#ffffff")
-            styles.loc[idx, :] = f"background-color: {hex_c}; color: #0f172a; font-weight: 500;"
+            styles.loc[idx, :] = (
+                f"background-color: {hex_c}; color: #0f172a; font-weight: 500;"
+            )
         return styles
 
     st.markdown("### 📋 Aggregated Product Picking List")
@@ -158,7 +164,9 @@ def _render_product_listing_content() -> None:
         use_container_width=True,
         height=min(600, max(300, len(merged_df) * 35 + 40)),
         column_config={
-            qty_col: st.column_config.NumberColumn("📦 Total Quantity", format="%d pcs"),
+            qty_col: st.column_config.NumberColumn(
+                "📦 Total Quantity", format="%d pcs"
+            ),
             item_col: st.column_config.TextColumn("🛍️ Item Name"),
         },
     )
@@ -182,4 +190,6 @@ def _render_product_listing_content() -> None:
 
 def render_product_listing_tab() -> None:
     """Public router entry point for Product Listing page."""
-    safe_render(_render_product_listing_content, fallback_msg="Product Listing unavailable.")
+    safe_render(
+        _render_product_listing_content, fallback_msg="Product Listing unavailable."
+    )

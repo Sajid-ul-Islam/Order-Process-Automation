@@ -9,8 +9,6 @@ from src.components.dashboard.live_components import (
     _render_operation_mode_selector,
     _render_order_filter_selector,
     _render_refresh_controls,
-    _render_completed_orders_section,
-    _render_completed_kpis_display,
     render_dashboard_banner,
 )
 
@@ -19,8 +17,6 @@ __all__ = [
     "_render_operation_mode_selector",
     "_render_order_filter_selector",
     "_render_refresh_controls",
-    "_render_completed_orders_section",
-    "_render_completed_kpis_display",
     "render_dashboard_banner",
 ]
 
@@ -29,14 +25,12 @@ render_date_range_selector = _render_date_range_selector
 render_operation_mode_selector = _render_operation_mode_selector
 render_order_filter_selector = _render_order_filter_selector
 render_refresh_controls = _render_refresh_controls
-render_completed_orders_section = _render_completed_orders_section
-render_completed_kpis_display = _render_completed_kpis_display
 
-__all__.extend([
-    "render_date_range_selector",
-    "render_operation_mode_selector",
-    "render_order_filter_selector",
-    "render_refresh_controls",
-    "render_completed_orders_section",
-    "render_completed_kpis_display",
-])
+__all__.extend(
+    [
+        "render_date_range_selector",
+        "render_operation_mode_selector",
+        "render_order_filter_selector",
+        "render_refresh_controls",
+    ]
+)

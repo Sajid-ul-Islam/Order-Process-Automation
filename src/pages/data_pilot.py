@@ -291,7 +291,9 @@ document.addEventListener('keydown', function(e) {
                 label_visibility="collapsed",
                 key="pilot_quick_prompts_pills",
             )
-            if selected_quick and selected_quick != st.session_state.get("_last_quick_prompt"):
+            if selected_quick and selected_quick != st.session_state.get(
+                "_last_quick_prompt"
+            ):
                 st.session_state["_last_quick_prompt"] = selected_quick
                 prompt = selected_quick
 

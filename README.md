@@ -41,11 +41,14 @@ git clone https://github.com/Sajid-ul-Islam/DEEN-OPS.git
 cd DEEN-OPS
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt
-pip install -r requirements_dev.txt
+pip install -r requirements-dev.lock
 pre-commit install
 streamlit run app.py
 ```
+
+Authentication fails closed by default. Configure the `[auth]` secrets block
+for shared or production deployments. For local development only, explicitly
+set `DEEN_OPS_ALLOW_UNAUTHENTICATED=true` in the shell before starting the app.
 
 ## ⚙️ Configuration
 

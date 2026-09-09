@@ -83,9 +83,7 @@ def render_donut_chartjs(
       });
     })();
     </script>
-    """.replace(
-        "{H}", str(height)
-    )
+    """.replace("{H}", str(height))
     html = (
         html.replace("{KEY}", key)
         .replace("{CENTER}", center_text)
@@ -149,9 +147,7 @@ def render_hbar_chartjs(
       });
     })();
     </script>
-    """.replace(
-        "{KEY}", key
-    )
+    """.replace("{KEY}", key)
     html = (
         html.replace("{CDN}", _CHARTJS_CDN)
         .replace("{LABELS}", _to_json(labels))

@@ -13,6 +13,7 @@ import streamlit as st
 
 from src.config.constants import ERROR_LOG_FILE
 from src.config.settings import is_auth_configured as auth_is_configured
+from src.config.settings import is_unauthenticated_access_allowed
 from src.config.settings import validate_runtime_configuration
 from src.config.ui_config import CLOUD_APP_URL, PRIMARY_NAV
 from src.state.persistence import STATE_FILE, init_state, save_state
@@ -347,16 +348,15 @@ def _render_header(selected_nav: str) -> None:
 
 def _route_page(selected_nav: str) -> None:
     """Route to the correct page renderer based on sidebar selection.
-    
+
     Jakob's Law Implementation:
     - 5 consolidated navigation tabs map to sub-feature selectors
     - Each tab uses session state to track which sub-feature to display
     """
-    from src.config.ui_config import LEGACY_NAV_MAPPING
-    
+
     # Lazy imports keep bootstrap resilient on cloud
     # when a module has runtime incompatibilities.
-    
+
     # === 📈 Live Dashboard (Home) ===
     if selected_nav == "📈 Live Dashboard":
         from src.components.layout.header import render_app_banner
@@ -364,121 +364,168 @@ def _route_page(selected_nav: str) -> None:
 
         safe_render(render_app_banner, fallback_msg="App banner unavailable.")
         safe_render(render_live_tab, fallback_msg="Live Dashboard unavailable.")
-    
+
     # === 🛒 Orders & Fulfillment (Consolidated) ===
     elif selected_nav == "🛒 Orders & Fulfillment":
         # Get sub-feature selection from session state
         sub_feature = st.session_state.get("orders_sub_feature", "Order Tracking")
-        
+
         # Render sub-feature selector if not already set
         if "orders_sub_feature" not in st.session_state:
             st.session_state.orders_sub_feature = "Order Tracking"
-        
+
         with st.expander("📂 Select Feature", expanded=False):
             sub_feature = st.radio(
                 "Choose a feature:",
                 ["Order Tracking", "Pathao Processor", "Delivery Data Parser"],
-                index=["Order Tracking", "Pathao Processor", "Delivery Data Parser"].index(st.session_state.orders_sub_feature),
+                index=[
+                    "Order Tracking",
+                    "Pathao Processor",
+                    "Delivery Data Parser",
+                ].index(st.session_state.orders_sub_feature),
                 label_visibility="collapsed",
-                horizontal=True
+                horizontal=True,
             )
             if sub_feature != st.session_state.orders_sub_feature:
                 st.session_state.orders_sub_feature = sub_feature
                 st.rerun()
-        
+
         # Route to appropriate sub-feature
         if sub_feature == "Order Tracking":
             from src.pages.woocommerce_orders import render_woocommerce_orders_tab
-            safe_render(render_woocommerce_orders_tab, fallback_msg="Order Tracking unavailable.")
+
+            safe_render(
+                render_woocommerce_orders_tab,
+                fallback_msg="Order Tracking unavailable.",
+            )
         elif sub_feature == "Pathao Processor":
             from src.pages.pathao_orders import render_pathao_tab
+
             safe_render(render_pathao_tab, fallback_msg="Pathao Processor unavailable.")
         elif sub_feature == "Delivery Data Parser":
             from src.pages.delivery_parser import render_fuzzy_parser_tab
-            safe_render(render_fuzzy_parser_tab, fallback_msg="Delivery Data Parser unavailable.")
-    
+
+            safe_render(
+                render_fuzzy_parser_tab,
+                fallback_msg="Delivery Data Parser unavailable.",
+            )
+
     # === 📦 Inventory & Stock (Consolidated) ===
     elif selected_nav == "📦 Inventory & Stock":
         sub_feature = st.session_state.get("inventory_sub_feature", "Product Listing")
-        
+
         if "inventory_sub_feature" not in st.session_state:
             st.session_state.inventory_sub_feature = "Product Listing"
-        
+
         with st.expander("📂 Select Feature", expanded=False):
             sub_feature = st.radio(
                 "Choose a feature:",
-                ["Product Listing", "Current Stock Analytics", "Inventory Distribution"],
-                index=["Product Listing", "Current Stock Analytics", "Inventory Distribution"].index(st.session_state.inventory_sub_feature),
+                [
+                    "Product Listing",
+                    "Current Stock Analytics",
+                    "Inventory Distribution",
+                ],
+                index=[
+                    "Product Listing",
+                    "Current Stock Analytics",
+                    "Inventory Distribution",
+                ].index(st.session_state.inventory_sub_feature),
                 label_visibility="collapsed",
-                horizontal=True
+                horizontal=True,
             )
             if sub_feature != st.session_state.inventory_sub_feature:
                 st.session_state.inventory_sub_feature = sub_feature
                 st.rerun()
-        
+
         if sub_feature == "Product Listing":
             from src.pages.product_listing import render_product_listing_tab
-            safe_render(render_product_listing_tab, fallback_msg="Product Listing unavailable.")
+
+            safe_render(
+                render_product_listing_tab, fallback_msg="Product Listing unavailable."
+            )
         elif sub_feature == "Current Stock Analytics":
             from src.pages.stock_analytics import render_stock_analytics_tab
-            safe_render(render_stock_analytics_tab, fallback_msg="Stock Analytics unavailable.")
+
+            safe_render(
+                render_stock_analytics_tab, fallback_msg="Stock Analytics unavailable."
+            )
         elif sub_feature == "Inventory Distribution":
             from src.pages.inventory_distribution import render_distribution_tab
+
             safe_render(
-                lambda: render_distribution_tab(search_q=st.session_state.get("inv_matrix_search", "")),
+                lambda: render_distribution_tab(
+                    search_q=st.session_state.get("inv_matrix_search", "")
+                ),
                 fallback_msg="Inventory Distribution unavailable.",
             )
-    
+
     # === 📊 Analytics & Insights (Consolidated) ===
     elif selected_nav == "📊 Analytics & Insights":
-        sub_feature = st.session_state.get("analytics_sub_feature", "Sales Data Ingestion")
-        
+        sub_feature = st.session_state.get(
+            "analytics_sub_feature", "Sales Data Ingestion"
+        )
+
         if "analytics_sub_feature" not in st.session_state:
             st.session_state.analytics_sub_feature = "Sales Data Ingestion"
-        
+
         with st.expander("📂 Select Feature", expanded=False):
             sub_feature = st.radio(
                 "Choose a feature:",
                 ["Sales Data Ingestion", "Return Analytics"],
-                index=["Sales Data Ingestion", "Return Analytics"].index(st.session_state.analytics_sub_feature),
+                index=["Sales Data Ingestion", "Return Analytics"].index(
+                    st.session_state.analytics_sub_feature
+                ),
                 label_visibility="collapsed",
-                horizontal=True
+                horizontal=True,
             )
             if sub_feature != st.session_state.analytics_sub_feature:
                 st.session_state.analytics_sub_feature = sub_feature
                 st.rerun()
-        
+
         if sub_feature == "Sales Data Ingestion":
             from src.pages.sales_ingestion import render_manual_tab
-            safe_render(render_manual_tab, fallback_msg="Sales Data Ingestion unavailable.")
+
+            safe_render(
+                render_manual_tab, fallback_msg="Sales Data Ingestion unavailable."
+            )
         elif sub_feature == "Return Analytics":
             from src.pages.return_analytics import render_return_analytics_tab
-            safe_render(render_return_analytics_tab, fallback_msg="Return Analytics unavailable.")
-    
+
+            safe_render(
+                render_return_analytics_tab,
+                fallback_msg="Return Analytics unavailable.",
+            )
+
     # === 🤖 Automation Tools (Consolidated) ===
     elif selected_nav == "🤖 Automation Tools":
-        sub_feature = st.session_state.get("automation_sub_feature", "WhatsApp Messaging")
-        
+        sub_feature = st.session_state.get(
+            "automation_sub_feature", "WhatsApp Messaging"
+        )
+
         if "automation_sub_feature" not in st.session_state:
             st.session_state.automation_sub_feature = "WhatsApp Messaging"
-        
+
         with st.expander("📂 Select Feature", expanded=False):
             sub_feature = st.radio(
                 "Choose a feature:",
                 ["WhatsApp Messaging", "Data Pilot"],
-                index=["WhatsApp Messaging", "Data Pilot"].index(st.session_state.automation_sub_feature),
+                index=["WhatsApp Messaging", "Data Pilot"].index(
+                    st.session_state.automation_sub_feature
+                ),
                 label_visibility="collapsed",
-                horizontal=True
+                horizontal=True,
             )
             if sub_feature != st.session_state.automation_sub_feature:
                 st.session_state.automation_sub_feature = sub_feature
                 st.rerun()
-        
+
         if sub_feature == "WhatsApp Messaging":
             from src.pages.whatsapp_messaging import render_wp_tab
+
             safe_render(render_wp_tab, fallback_msg="WhatsApp Messaging unavailable.")
         elif sub_feature == "Data Pilot":
             from src.pages.data_pilot import render_ai_pilot_page
+
             safe_render(render_ai_pilot_page, fallback_msg="Data Pilot unavailable.")
 
 
@@ -491,6 +538,14 @@ def run_app() -> None:
     is_auth_on = auth_is_configured()
     config_issues = validate_runtime_configuration()
 
+    if not is_auth_on and not is_unauthenticated_access_allowed():
+        st.error("Authentication is not configured. Access is disabled by default.")
+        st.info(
+            "Configure the [auth] secrets block. For local development only, set "
+            "DEEN_OPS_ALLOW_UNAUTHENTICATED=true."
+        )
+        st.stop()
+
     if is_auth_on and not st.user.is_logged_in:
         _render_auth_gate()
 
@@ -499,11 +554,10 @@ def run_app() -> None:
     from src.components.layout.header import render_header
     from src.components.ui.bike_animation import render_bike_animation
     from src.components.ui.styles import inject_base_styles
-    from src.config.ui_config import LEGACY_NAV_MAPPING
 
     # Jakob's Law: Navigation already consolidated to 5 tabs in ui_config.py
     # No runtime modifications needed - navigation is statically defined
-    
+
     # Prevent duplicate entries (defensive check)
     PRIMARY_NAV[:] = list(dict.fromkeys(PRIMARY_NAV))
 

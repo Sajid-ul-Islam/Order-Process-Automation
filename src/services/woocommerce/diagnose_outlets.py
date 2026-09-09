@@ -8,8 +8,9 @@ import json
 import re
 from typing import Any, Dict, List
 
-import requests
 from requests.auth import HTTPBasicAuth
+
+from src.utils.http import request_with_backoff
 
 
 def diagnose_woocommerce_outlets(
@@ -32,7 +33,8 @@ def diagnose_woocommerce_outlets(
     # ── Check for weLaunch Multi Inventory ──────────────────────────────────
     print("🔍 Checking for weLaunch Multi Inventory...")
     try:
-        res = requests.get(
+        res = request_with_backoff(
+            "GET",
             f"{base_url}/wp-json/wc/multi-inventory/v1/inventories",
             auth=auth,
             timeout=10,
@@ -56,7 +58,8 @@ def diagnose_woocommerce_outlets(
     print("🔍 Checking for Stock Locations for WooCommerce...")
     try:
         # Check if the plugin's taxonomy is registered
-        res = requests.get(
+        res = request_with_backoff(
+            "GET",
             f"{base_url}/wp-json/wc/v3/products/categories",
             auth=auth,
             params={"per_page": 1},
@@ -90,7 +93,8 @@ def diagnose_woocommerce_outlets(
         page = 1
         products_checked = 0
         while products_checked < 200:
-            res = requests.get(
+            res = request_with_backoff(
+                "GET",
                 f"{base_url}/wp-json/wc/v3/products",
                 auth=auth,
                 params={
@@ -152,7 +156,8 @@ def diagnose_woocommerce_outlets(
 
     for plugin_name, endpoint in custom_endpoints:
         try:
-            res = requests.get(
+            res = request_with_backoff(
+                "GET",
                 f"{base_url}{endpoint}",
                 auth=auth,
                 params={"per_page": 1},
@@ -169,7 +174,8 @@ def diagnose_woocommerce_outlets(
     # ── Check WooCommerce settings for multi-location hints ────────────────
     print("🔍 Checking WooCommerce settings...")
     try:
-        res = requests.get(
+        res = request_with_backoff(
+            "GET",
             f"{base_url}/wp-json/wc/v3/settings/general",
             auth=auth,
             timeout=10,
@@ -185,7 +191,8 @@ def diagnose_woocommerce_outlets(
     # ── Check installed plugins (if WP debug/info available) ───────────────
     print("🔍 Checking for plugin hints...")
     try:
-        res = requests.get(
+        res = request_with_backoff(
+            "GET",
             f"{base_url}/wp-json/wp/v2/plugins",
             auth=auth,
             timeout=10,
@@ -193,7 +200,8 @@ def diagnose_woocommerce_outlets(
         if res.status_code == 200:
             plugins = res.json()
             relevant = [
-                p for p in plugins
+                p
+                for p in plugins
                 if any(
                     kw in p.get("name", "").lower()
                     for kw in ["stock", "location", "warehouse", "inventory", "outlet"]

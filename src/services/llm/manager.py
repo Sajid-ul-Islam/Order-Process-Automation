@@ -5,15 +5,15 @@ import json
 import time
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-import aiohttp
 import requests
-import streamlit as st
 
+from src.config.constants import bd_today
 from src.config.settings import get_llm_provider_keys
+from src.utils.http import async_request_with_backoff, request_with_backoff
 from src.utils.logging import log_system_event
+from src.utils.streamlit_runtime import attach_script_run_context, runtime as st
 
 # ============================================
 # 1. PROVIDER CONFIGURATIONS (All Free Tiers)
@@ -89,7 +89,7 @@ PROVIDERS = {
 class APIKeyManager:
     def __init__(self, is_cloud: bool = False):
         self.keys: Dict[str, List[Dict]] = defaultdict(list)
-        self._last_reset_date = datetime.now().date()
+        self._last_reset_date = bd_today()
         self.is_cloud = is_cloud
         self.load_keys_from_secrets()
 
@@ -105,14 +105,18 @@ class APIKeyManager:
 
     def _check_ollama_alive(self) -> bool:
         try:
-            resp = requests.get("http://localhost:11434/api/tags", timeout=1)
+            resp = request_with_backoff(
+                "GET", "http://localhost:11434/api/tags", timeout=1, max_attempts=1
+            )
             return resp.status_code == 200
         except requests.exceptions.RequestException:
             return False
 
     def get_local_models(self) -> List[str]:
         try:
-            resp = requests.get("http://localhost:11434/api/tags", timeout=2)
+            resp = request_with_backoff(
+                "GET", "http://localhost:11434/api/tags", timeout=2, max_attempts=1
+            )
             if resp.status_code == 200:
                 models = resp.json().get("models", [])
                 return [m["name"] for m in models]
@@ -213,14 +217,17 @@ class DynamicLLMController:
         if key_res:
             api_key, _ = key_res
             try:
-                import requests
-
                 url = "https://api.groq.com/openai/v1/audio/transcriptions"
                 headers = {"Authorization": f"Bearer {api_key}"}
                 files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
                 data = {"model": "whisper-large-v3-turbo"}
-                resp = requests.post(
-                    url, headers=headers, files=files, data=data, timeout=15
+                resp = request_with_backoff(
+                    "POST",
+                    url,
+                    headers=headers,
+                    files=files,
+                    data=data,
+                    timeout=15,
                 )
                 if resp.status_code == 200:
                     return resp.json().get("text", "").strip()
@@ -263,20 +270,20 @@ class DynamicLLMController:
             payload = {"contents": gemini_messages}
             headers = {"Content-Type": "application/json"}
             full_url = f"{config.api_url}?key={api_key}"
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    full_url, json=payload, headers=headers
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        try:
-                            # v1beta structure: candidates[0].content.parts[0].text
-                            text = data["candidates"][0]["content"]["parts"][0]["text"]
-                            yield text
-                        except (KeyError, IndexError):
-                            yield "Error: Unexpected Gemini API response format."
-                    else:
-                        yield f"Error: {response.status}"
+            async with async_request_with_backoff(
+                "POST",
+                full_url,
+                json=payload,
+                headers=headers,
+                timeout=config.timeout,
+            ) as response:
+                data = await response.json()
+                try:
+                    # v1beta structure: candidates[0].content.parts[0].text
+                    text = data["candidates"][0]["content"]["parts"][0]["text"]
+                    yield text
+                except (KeyError, IndexError):
+                    yield "Error: Unexpected Gemini API response format."
         else:
             payload = {"model": config.model_name, "messages": messages, "stream": True}
             headers = (
@@ -286,33 +293,31 @@ class DynamicLLMController:
             )
             full_url = config.api_url
 
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    full_url, json=payload, headers=headers
-                ) as response:
-                    if response.status == 200:
-                        async for raw_line in response.content:
-                            line_str = raw_line.decode("utf-8").strip()
-                            if line_str.startswith("data: "):
-                                if line_str == "data: [DONE]":
-                                    break
-                                try:
-                                    content = json.loads(line_str[6:])
-                                    delta = content["choices"][0]["delta"].get(
-                                        "content", ""
-                                    )
-                                    if delta:
-                                        yield delta
-                                except (
-                                    ValueError,
-                                    KeyError,
-                                    IndexError,
-                                    TypeError,
-                                    AttributeError,
-                                ):
-                                    continue
-                    else:
-                        yield f"Error: {response.status}"
+            async with async_request_with_backoff(
+                "POST",
+                full_url,
+                json=payload,
+                headers=headers,
+                timeout=config.timeout,
+            ) as response:
+                async for raw_line in response.content:
+                    line_str = raw_line.decode("utf-8").strip()
+                    if line_str.startswith("data: "):
+                        if line_str == "data: [DONE]":
+                            break
+                        try:
+                            content = json.loads(line_str[6:])
+                            delta = content["choices"][0]["delta"].get("content", "")
+                            if delta:
+                                yield delta
+                        except (
+                            ValueError,
+                            KeyError,
+                            IndexError,
+                            TypeError,
+                            AttributeError,
+                        ):
+                            continue
 
     async def get_response_stream_async(self, messages: List[Dict[str, str]]) -> Any:
         available_providers = [
@@ -408,19 +413,7 @@ class DynamicLLMController:
 
                 t = threading.Thread(target=thread_run)
 
-                try:
-                    from streamlit.runtime.scriptrunner import add_script_run_ctx
-                except ImportError:
-                    try:
-                        from streamlit.runtime.scriptrunner_utils import (
-                            add_script_run_ctx,
-                        )
-                    except ImportError:
-
-                        def add_script_run_ctx(thread):
-                            pass
-
-                add_script_run_ctx(t)
+                attach_script_run_context(t)
                 t.start()
                 t.join()
                 return result[0] if result else ""

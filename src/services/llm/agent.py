@@ -11,7 +11,7 @@ import re
 from typing import Dict, List
 
 import pandas as pd
-import streamlit as st
+from src.utils.streamlit_runtime import get_session_state
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -117,12 +117,12 @@ class AIDataAgent:
         else:
             # Fallback to session state for interactive use
             self.context_dfs = {
-                "sales": st.session_state.get("wc_curr_df"),
-                "inventory_distribution": st.session_state.get("inv_res_data"),
-                "stock_levels": st.session_state.get("wc_stock_df"),
-                "pathao_dispatch": st.session_state.get("pathao_res_df"),
-                "pathao_tracking": st.session_state.get("pilot_pathao_tracking_df"),
-                "uploaded": st.session_state.get("pilot_uploaded_df"),
+                "sales": get_session_state().get("wc_curr_df"),
+                "inventory_distribution": get_session_state().get("inv_res_data"),
+                "stock_levels": get_session_state().get("wc_stock_df"),
+                "pathao_dispatch": get_session_state().get("pathao_res_df"),
+                "pathao_tracking": get_session_state().get("pilot_pathao_tracking_df"),
+                "uploaded": get_session_state().get("pilot_uploaded_df"),
             }
         self.app_knowledge = self._load_app_knowledge()
         self.vectorizer = TfidfVectorizer(stop_words="english", lowercase=True)

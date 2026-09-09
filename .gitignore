@@ -1,4 +1,3 @@
-```
 # Compiled and build artifacts
 *.pyc
 __pycache__/
@@ -19,6 +18,18 @@ node_modules/
 .env
 .env.local
 *.env.*
+.streamlit/secrets.toml
+
+# Generated operational data (may contain customer PII)
+BackEnd/cache/
+data/
+resources/customer_registry*.json
+resources/last_stock.csv
+resources/stock_snapshot.csv
+resources/pathao_status_cache.json
+resources/metric_snapshots/
+resources/sales_snapshot.csv
+resources/shipped_history.json
 
 # Editors
 .vscode/
@@ -38,4 +49,3 @@ target/
 # System files
 .DS_Store
 Thumbs.db
-```

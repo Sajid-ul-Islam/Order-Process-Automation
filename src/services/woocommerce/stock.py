@@ -2,7 +2,6 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
-import streamlit as st
 from requests.auth import HTTPBasicAuth
 
 from src.config.settings import get_woocommerce_config
@@ -10,6 +9,11 @@ from src.processing.categorization import get_category_for_sales
 from src.utils.http import request_with_backoff
 from src.utils.logging import log_system_event
 from src.utils.snapshots import save_stock_snapshot
+from src.utils.streamlit_runtime import (
+    attach_script_run_context,
+    get_script_run_context,
+    runtime as st,
+)
 
 
 @st.cache_data(ttl=3600)
@@ -152,16 +156,11 @@ def fetch_woocommerce_stock(filter_skus=None, filter_titles=None):
         if variable_tasks:
             import threading
 
-            from streamlit.runtime.scriptrunner import (
-                add_script_run_ctx,
-                get_script_run_ctx,
-            )
-
-            ctx = get_script_run_ctx()
+            ctx = get_script_run_context()
 
             def wrapped_fetch(tid, tname):
                 if ctx:
-                    add_script_run_ctx(threading.current_thread(), ctx)
+                    attach_script_run_context(threading.current_thread(), ctx)
                 return fetch_variations(tid, tname)
 
             with ThreadPoolExecutor(max_workers=10) as executor:

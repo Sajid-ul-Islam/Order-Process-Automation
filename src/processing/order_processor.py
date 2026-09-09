@@ -4,7 +4,7 @@ import re
 from typing import Any, Dict, List, Tuple
 
 import pandas as pd
-import streamlit as st
+from src.utils.streamlit_runtime import cache_data
 from rapidfuzz import process
 
 from src.config.constants import RESOURCES_DIR
@@ -13,13 +13,42 @@ from src.utils.text import normalize_city_name, peek_zone_from_address
 
 # Column aliases for fallback when files use different header names
 _COLUMN_ALIASES: Dict[str, List[str]] = {
-    "Quantity": ["Quantity (- Refund)", "Qty", "Quantity (Refund)", "Item Qty", "Quantity(-Refund)"],
+    "Quantity": [
+        "Quantity (- Refund)",
+        "Qty",
+        "Quantity (Refund)",
+        "Item Qty",
+        "Quantity(-Refund)",
+    ],
     "Item Cost": ["Line Item Price", "Price", "Item Price", "Cost", "Line Total"],
-    "Order Total Amount": ["Total", "Order Total", "Total Amount", "Grand Total", "Order Amount"],
-    "Phone (Billing)": ["Phone", "Billing Phone", "Customer Phone", "Phone Number", "Mobile", "Phone (Shipping)"],
-    "First Name (Shipping)": ["Shipping First Name", "First Name", "Recipient Name", "Customer Name"],
+    "Order Total Amount": [
+        "Total",
+        "Order Total",
+        "Total Amount",
+        "Grand Total",
+        "Order Amount",
+    ],
+    "Phone (Billing)": [
+        "Phone",
+        "Billing Phone",
+        "Customer Phone",
+        "Phone Number",
+        "Mobile",
+        "Phone (Shipping)",
+    ],
+    "First Name (Shipping)": [
+        "Shipping First Name",
+        "First Name",
+        "Recipient Name",
+        "Customer Name",
+    ],
     "Last Name (Shipping)": ["Shipping Last Name", "Last Name"],
-    "Address 1&2 (Shipping)": ["Shipping Address", "Address (Shipping)", "Address", "Delivery Address"],
+    "Address 1&2 (Shipping)": [
+        "Shipping Address",
+        "Address (Shipping)",
+        "Address",
+        "Delivery Address",
+    ],
     "City (Shipping)": ["Shipping City", "City"],
     "State Code (Shipping)": ["Shipping State", "State", "State Code"],
 }
@@ -92,16 +121,23 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     # Merge First Name + Last Name into Full Name (Shipping)
     if "Full Name (Shipping)" not in df.columns:
-        if "First Name (Shipping)" in df.columns and "Last Name (Shipping)" in df.columns:
+        if (
+            "First Name (Shipping)" in df.columns
+            and "Last Name (Shipping)" in df.columns
+        ):
             df["Full Name (Shipping)"] = (
                 df["First Name (Shipping)"].astype(str).str.strip()
                 + " "
                 + df["Last Name (Shipping)"].astype(str).str.strip()
             ).str.strip()
         elif "First Name (Shipping)" in df.columns:
-            df["Full Name (Shipping)"] = df["First Name (Shipping)"].astype(str).str.strip()
+            df["Full Name (Shipping)"] = (
+                df["First Name (Shipping)"].astype(str).str.strip()
+            )
         elif "Last Name (Shipping)" in df.columns:
-            df["Full Name (Shipping)"] = df["Last Name (Shipping)"].astype(str).str.strip()
+            df["Full Name (Shipping)"] = (
+                df["Last Name (Shipping)"].astype(str).str.strip()
+            )
 
     # Add empty Phone (Billing) if missing
     if "Phone (Billing)" not in df.columns:
@@ -201,7 +237,11 @@ def identify_columns(df: pd.DataFrame) -> Dict[str, Any]:
                 cols["name_col"] = c
                 break
             if any(k in c_l for k in ["shipping", "customer", "recipient"]):
-                if not cols["name_col"] or "first" in cols["name_col"].lower() or "last" in cols["name_col"].lower():
+                if (
+                    not cols["name_col"]
+                    or "first" in cols["name_col"].lower()
+                    or "last" in cols["name_col"].lower()
+                ):
                     cols["name_col"] = c
                     if "first" not in c_l and "last" not in c_l:
                         break
@@ -209,7 +249,9 @@ def identify_columns(df: pd.DataFrame) -> Dict[str, Any]:
                 cols["name_col"] = c
 
     # If name_col is still first/last only, prefer full name
-    if cols["name_col"] and ("first" in cols["name_col"].lower() or "last" in cols["name_col"].lower()):
+    if cols["name_col"] and (
+        "first" in cols["name_col"].lower() or "last" in cols["name_col"].lower()
+    ):
         for c in df.columns:
             if "full name" in c.lower():
                 cols["name_col"] = c
@@ -911,7 +953,7 @@ def process_single_order_group(
     return parcel_records
 
 
-@st.cache_data(show_spinner="Processing orders via Pathao Intelligence Engine...")
+@cache_data(show_spinner="Processing orders via Pathao Intelligence Engine...")
 def process_orders_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
     Main Logic: Takes raw DF, returns processed DF.
@@ -943,7 +985,9 @@ def process_orders_dataframe(df: pd.DataFrame) -> pd.DataFrame:
             for f in flag_list:
                 if f not in all_flags:
                     all_flags.append(f)
-        records = process_single_order_group(phone, group, data_cols, phone_flags=all_flags)
+        records = process_single_order_group(
+            phone, group, data_cols, phone_flags=all_flags
+        )
         processed_data.extend(records)
 
     # 4. Result DF

@@ -14,7 +14,6 @@ import pandas as pd
 import streamlit as st
 
 from src.components.dashboard.svg import _generate_sparkline_svg
-from src.config.ui_config import CHART_THEMES
 from src.processing.column_detection import (
     EMAIL_COL_CANDIDATES,
     PHONE_COL_CANDIDATES,
@@ -56,7 +55,6 @@ def render_modern_kpi_cards(
     else:
         c_df = None
 
-    active_df = m_df
     drill, summ, top, basket = aggregate_data(m_df, dummy_mapping)
 
     m_qty = m_df["Quantity"].sum() if "Quantity" in m_df.columns else 0
@@ -82,11 +80,7 @@ def render_modern_kpi_cards(
     # Net Revenue = Gross Revenue - Cashback/Discount Fees
     m_net_rev = max(0.0, m_gross_rev - m_cashback_disc)
 
-    m_loss_pct = (m_cashback_disc / m_gross_rev * 100) if m_gross_rev > 0 else 0.0
-    m_gross_bv = (m_gross_rev / m_ord) if m_ord > 0 else 0.0
     m_net_bv = (m_net_rev / m_ord) if m_ord > 0 else 0.0
-    m_cb_per_basket = (m_cashback_disc / m_ord) if m_ord > 0 else 0.0
-    m_bv = m_net_bv
 
     dq_str, dr_str, do_str, db_str = None, None, None, None
     pct_q, pct_r, pct_o, pct_b = None, None, None, None
@@ -128,10 +122,26 @@ def render_modern_kpi_cards(
             d_o = co_o - m_ord
             db = co_b - m_net_bv
 
-        pct_q = ((dq / co_q) * 100) if co_q > 0 else (100.0 if dq > 0 else 0.0 if dq == 0 else -100.0)
-        pct_r = ((dr / co_net_r) * 100) if co_net_r > 0 else (100.0 if dr > 0 else 0.0 if dr == 0 else -100.0)
-        pct_o = ((d_o / co_o) * 100) if co_o > 0 else (100.0 if d_o > 0 else 0.0 if d_o == 0 else -100.0)
-        pct_b = ((db / co_b) * 100) if co_b > 0 else (100.0 if db > 0 else 0.0 if db == 0 else -100.0)
+        pct_q = (
+            ((dq / co_q) * 100)
+            if co_q > 0
+            else (100.0 if dq > 0 else 0.0 if dq == 0 else -100.0)
+        )
+        pct_r = (
+            ((dr / co_net_r) * 100)
+            if co_net_r > 0
+            else (100.0 if dr > 0 else 0.0 if dr == 0 else -100.0)
+        )
+        pct_o = (
+            ((d_o / co_o) * 100)
+            if co_o > 0
+            else (100.0 if d_o > 0 else 0.0 if d_o == 0 else -100.0)
+        )
+        pct_b = (
+            ((db / co_b) * 100)
+            if co_b > 0
+            else (100.0 if db > 0 else 0.0 if db == 0 else -100.0)
+        )
 
         dq_str = f"{prefix}{dq:+,.0f}{suffix}"
         dr_str = f"{prefix}{'+' if dr >= 0 else '-'}TK {abs(dr):,.0f}{suffix}"
@@ -196,8 +206,6 @@ def render_modern_kpi_cards(
     extra_metric_label = "Avg Order Value"
     extra_metric_value = v_bv
     extra_metric_delta = html_db
-    extra_metric_icon = ""
-
     if nav_mode == "Backlog" and not m_df.empty:
         try:
             m_df["dt_temp"] = pd.to_datetime(
@@ -384,17 +392,19 @@ def render_modern_kpi_cards(
     # - Secondary metrics (Orders, Items, AOV, Customers) are smaller
 
     # Helper to build individual KPI card HTML
-    def build_kpi_card(label, value, delta_html, sparkline_html, prev_badge_html, is_primary=False):
+    def build_kpi_card(
+        label, value, delta_html, sparkline_html, prev_badge_html, is_primary=False
+    ):
         """Build a single KPI card with flat design."""
         size_class = "kpi-card-primary" if is_primary else "kpi-card-secondary"
         return (
             f'<div class="kpi-card {size_class}">'
             f'<div class="kpi-label">{label}</div>'
             f'<div class="kpi-value {"kpi-value-primary" if is_primary else ""}">{value}</div>'
-            f'{prev_badge_html}'
-            f'{delta_html}'
-            f'{sparkline_html}'
-            '</div>'
+            f"{prev_badge_html}"
+            f"{delta_html}"
+            f"{sparkline_html}"
+            "</div>"
         )
 
     # Build the KPI container with hierarchy
@@ -404,13 +414,13 @@ def render_modern_kpi_cards(
     card_html = (
         '<div class="kpi-container">'
         # PRIMARY METRIC - Revenue (largest, leftmost)
-        f'{build_kpi_card(f"Net Revenue · {time_period_label}", v_rev, html_dr, s_rev + d_rev, badge_rev, is_primary=True)}'
+        f"{build_kpi_card(f'Net Revenue · {time_period_label}', v_rev, html_dr, s_rev + d_rev, badge_rev, is_primary=True)}"
         # SECONDARY METRICS
-        f'{build_kpi_card("Orders", v_ord, html_do, s_ord + d_ord, badge_ord)}'
-        f'{build_kpi_card("Items Sold", v_qty, html_dq, s_qty + d_qty, badge_qty)}'
-        f'{build_kpi_card(extra_metric_label, extra_metric_value, extra_metric_delta, s_bv + d_bv if nav_mode != "Backlog" else "", badge_bv)}'
-        f'{build_kpi_card("Customers", v_cust, "", s_cust + d_cust, "")}'
-        '</div>'
+        f"{build_kpi_card('Orders', v_ord, html_do, s_ord + d_ord, badge_ord)}"
+        f"{build_kpi_card('Items Sold', v_qty, html_dq, s_qty + d_qty, badge_qty)}"
+        f"{build_kpi_card(extra_metric_label, extra_metric_value, extra_metric_delta, s_bv + d_bv if nav_mode != 'Backlog' else '', badge_bv)}"
+        f"{build_kpi_card('Customers', v_cust, '', s_cust + d_cust, '')}"
+        "</div>"
     )
 
     st.markdown(card_html, unsafe_allow_html=True)

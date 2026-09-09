@@ -133,10 +133,26 @@ def render_operational_metrics(
             d_o = co_o - m_ord
             db = co_b - m_net_bv
 
-        pct_q = ((dq / co_q) * 100) if co_q > 0 else (100.0 if dq > 0 else 0.0 if dq == 0 else -100.0)
-        pct_r = ((dr / co_net_r) * 100) if co_net_r > 0 else (100.0 if dr > 0 else 0.0 if dr == 0 else -100.0)
-        pct_o = ((d_o / co_o) * 100) if co_o > 0 else (100.0 if d_o > 0 else 0.0 if d_o == 0 else -100.0)
-        pct_b = ((db / co_b) * 100) if co_b > 0 else (100.0 if db > 0 else 0.0 if db == 0 else -100.0)
+        pct_q = (
+            ((dq / co_q) * 100)
+            if co_q > 0
+            else (100.0 if dq > 0 else 0.0 if dq == 0 else -100.0)
+        )
+        pct_r = (
+            ((dr / co_net_r) * 100)
+            if co_net_r > 0
+            else (100.0 if dr > 0 else 0.0 if dr == 0 else -100.0)
+        )
+        pct_o = (
+            ((d_o / co_o) * 100)
+            if co_o > 0
+            else (100.0 if d_o > 0 else 0.0 if d_o == 0 else -100.0)
+        )
+        pct_b = (
+            ((db / co_b) * 100)
+            if co_b > 0
+            else (100.0 if db > 0 else 0.0 if db == 0 else -100.0)
+        )
 
         dq_str = f"{prefix}{dq:+,.0f}{suffix}"
         dr_str = f"{prefix}{'+' if dr >= 0 else '-'}TK {abs(dr):,.0f}{suffix}"
@@ -184,10 +200,10 @@ def render_operational_metrics(
             return ""
         return (
             f'<div style="font-size:0.68rem;font-weight:600;color:{color};'
-            f'background:rgba(100,116,139,0.08);padding:2px 7px;'
-            f'border-radius:4px;margin-top:5px;display:inline-block;'
+            f"background:rgba(100,116,139,0.08);padding:2px 7px;"
+            f"border-radius:4px;margin-top:5px;display:inline-block;"
             f'letter-spacing:0.02em;">'
-            f'📅 Last Day: {prev_str}</div>'
+            f"📅 Last Day: {prev_str}</div>"
         )
 
     badge_qty = _last_day_badge(prev_q_str)
@@ -521,7 +537,7 @@ def render_operational_metrics(
     m_cb_orders_pct = (_cb_ord_cnt / _total_ord * 100) if _cb_ord_cnt > 0 else 0.0
 
     order_view_mode = (
-        st.session_state.get("live_order_filter", "All Orders")
+        st.session_state.get("live_order_filter", "Shipped")
         if nav_mode == "Today"
         else "All Orders"
     )
@@ -566,8 +582,8 @@ def render_operational_metrics(
             f'<div style="font-size:0.72rem;color:#f59e0b;font-weight:600;'
             f"background:rgba(245,158,11,0.10);padding:3px 8px;border-radius:4px;"
             f'margin-top:4px;display:inline-block;">'
-            f'Gross ৳{int(m_gross_rev):,} · {camp_info["campaign_name"]} −৳{int(camp_info["total_discount"]):,} '
-            f'({camp_info["affected_orders_pct"]:.0f}% of orders)</div>'
+            f"Gross ৳{int(m_gross_rev):,} · {camp_info['campaign_name']} −৳{int(camp_info['total_discount']):,} "
+            f"({camp_info['affected_orders_pct']:.0f}% of orders)</div>"
         )
     else:
         cb_badge = ""
@@ -670,7 +686,9 @@ def render_operational_metrics(
                 color_o = (
                     "#10b981"
                     if pct_o >= 1.0
-                    else "#f59e0b" if pct_o >= 0.7 else "#ef4444"
+                    else "#f59e0b"
+                    if pct_o >= 0.7
+                    else "#ef4444"
                 )
                 label_o = (
                     "✅ Goal Reached!"
@@ -789,7 +807,9 @@ def render_revenue_cashback_comparison_section(
         id_col = (
             "Order ID"
             if "Order ID" in m_df.columns
-            else "Order Number" if "Order Number" in m_df.columns else None
+            else "Order Number"
+            if "Order Number" in m_df.columns
+            else None
         )
         tot_orders = len(m_df.drop_duplicates(subset=[id_col])) if id_col else len(m_df)
 
@@ -809,7 +829,9 @@ def render_revenue_cashback_comparison_section(
     id_col = (
         "Order ID"
         if "Order ID" in m_df.columns
-        else "Order Number" if "Order Number" in m_df.columns else None
+        else "Order Number"
+        if "Order Number" in m_df.columns
+        else None
     )
     if id_col:
         unique_df = m_df.drop_duplicates(subset=[id_col])
@@ -831,7 +853,9 @@ def render_revenue_cashback_comparison_section(
         raw_status_col = (
             "Order Status"
             if "Order Status" in raw_df.columns
-            else "Status" if "Status" in raw_df.columns else None
+            else "Status"
+            if "Status" in raw_df.columns
+            else None
         )
         if raw_status_col:
             excl_mask = (
@@ -841,7 +865,9 @@ def render_revenue_cashback_comparison_section(
             raw_id_col = (
                 "Order ID"
                 if "Order ID" in excl_df.columns
-                else "Order Number" if "Order Number" in excl_df.columns else None
+                else "Order Number"
+                if "Order Number" in excl_df.columns
+                else None
             )
             if raw_id_col:
                 excl_orders_cnt = excl_df[raw_id_col].nunique()
@@ -864,9 +890,7 @@ def render_revenue_cashback_comparison_section(
 
     camp_info = detect_active_campaign(m_df)
     camp_title = (
-        camp_info["campaign_name"]
-        if camp_info["is_active"]
-        else "Campaign & Discount"
+        camp_info["campaign_name"] if camp_info["is_active"] else "Campaign & Discount"
     )
 
     st.markdown(f"### ⚖️ Revenue & Basket Size {camp_title} Impact Analysis")
@@ -1124,7 +1148,9 @@ def render_revenue_cashback_comparison_section(
         raw_status_col = (
             "Order Status"
             if "Order Status" in raw_df.columns
-            else "Status" if "Status" in raw_df.columns else None
+            else "Status"
+            if "Status" in raw_df.columns
+            else None
         )
         if raw_status_col:
             excl_mask = (

@@ -86,7 +86,9 @@ def filter_completed_orders_by_date(
     status_col = (
         "Order Status"
         if "Order Status" in df.columns
-        else "Status" if "Status" in df.columns else None
+        else "Status"
+        if "Status" in df.columns
+        else None
     )
     if status_col is None:
         return pd.DataFrame()
@@ -130,7 +132,9 @@ def filter_completed_orders_by_date(
     dt_effective = dt_mod.fillna(dt_create)
 
     # Filter by target date
-    target_date_only = target_date.date() if hasattr(target_date, "date") else target_date
+    target_date_only = (
+        target_date.date() if hasattr(target_date, "date") else target_date
+    )
     date_mask = dt_effective.dt.date == target_date_only
     result = shipped_df[date_mask].copy()
 
@@ -185,7 +189,11 @@ def compute_completed_kpis(df: pd.DataFrame) -> dict:
         gross_revenue = 0.0
 
     # Cashback
-    cashback = float(df["Cashback Discount"].sum()) if "Cashback Discount" in df.columns else 0.0
+    cashback = (
+        float(df["Cashback Discount"].sum())
+        if "Cashback Discount" in df.columns
+        else 0.0
+    )
 
     # Net revenue
     net_revenue = max(0.0, gross_revenue - cashback)
