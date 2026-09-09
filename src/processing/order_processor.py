@@ -81,12 +81,31 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
     cleans and standardizes the input dataframe columns.
     Applies column fallbacks for files with alternate header names.
+    Merges First/Last Name into Full Name (Shipping) if needed.
+    Adds empty Phone (Billing) if missing.
     """
     if df.empty:
         return df
 
     # Apply column fallbacks for alternate header names
     df = _apply_column_fallbacks(df)
+
+    # Merge First Name + Last Name into Full Name (Shipping)
+    if "Full Name (Shipping)" not in df.columns:
+        if "First Name (Shipping)" in df.columns and "Last Name (Shipping)" in df.columns:
+            df["Full Name (Shipping)"] = (
+                df["First Name (Shipping)"].astype(str).str.strip()
+                + " "
+                + df["Last Name (Shipping)"].astype(str).str.strip()
+            ).str.strip()
+        elif "First Name (Shipping)" in df.columns:
+            df["Full Name (Shipping)"] = df["First Name (Shipping)"].astype(str).str.strip()
+        elif "Last Name (Shipping)" in df.columns:
+            df["Full Name (Shipping)"] = df["Last Name (Shipping)"].astype(str).str.strip()
+
+    # Add empty Phone (Billing) if missing
+    if "Phone (Billing)" not in df.columns:
+        df["Phone (Billing)"] = ""
 
     # Convert numeric columns safely
     numeric_cols = ["Quantity", "Item Cost", "Order Total Amount"]
@@ -172,12 +191,24 @@ def identify_columns(df: pd.DataFrame) -> Dict[str, Any]:
     for c in df.columns:
         c_l = c.lower()
         if "name" in c_l:
-            # Prefer shipping/full name, but take any name
-            if any(k in c_l for k in ["shipping", "full", "customer", "recipient"]):
+            # Prefer Full Name first, then shipping/first/last
+            if "full" in c_l:
                 cols["name_col"] = c
                 break
+            if any(k in c_l for k in ["shipping", "customer", "recipient"]):
+                if not cols["name_col"] or "first" in cols["name_col"].lower() or "last" in cols["name_col"].lower():
+                    cols["name_col"] = c
+                    if "first" not in c_l and "last" not in c_l:
+                        break
             if not cols["name_col"]:
                 cols["name_col"] = c
+
+    # If name_col is still first/last only, prefer full name
+    if cols["name_col"] and ("first" in cols["name_col"].lower() or "last" in cols["name_col"].lower()):
+        for c in df.columns:
+            if "full name" in c.lower():
+                cols["name_col"] = c
+                break
 
     # Recipient ID Fallback
     if not cols["name_col"]:
