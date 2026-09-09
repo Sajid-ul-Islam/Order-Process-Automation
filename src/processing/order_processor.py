@@ -16,7 +16,7 @@ _COLUMN_ALIASES: Dict[str, List[str]] = {
     "Quantity": ["Quantity (- Refund)", "Qty", "Quantity (Refund)", "Item Qty", "Quantity(-Refund)"],
     "Item Cost": ["Line Item Price", "Price", "Item Price", "Cost", "Line Total"],
     "Order Total Amount": ["Total", "Order Total", "Total Amount", "Grand Total", "Order Amount"],
-    "Phone (Billing)": ["Phone", "Billing Phone", "Customer Phone", "Phone Number", "Mobile"],
+    "Phone (Billing)": ["Phone", "Billing Phone", "Customer Phone", "Phone Number", "Mobile", "Phone (Shipping)"],
     "First Name (Shipping)": ["Shipping First Name", "First Name", "Recipient Name", "Customer Name"],
     "Last Name (Shipping)": ["Shipping Last Name", "Last Name"],
     "Address 1&2 (Shipping)": ["Shipping Address", "Address (Shipping)", "Address", "Delivery Address"],
@@ -106,6 +106,11 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     # Add empty Phone (Billing) if missing
     if "Phone (Billing)" not in df.columns:
         df["Phone (Billing)"] = ""
+
+    # Normalize phone numbers to last 11 digits
+    df["Phone (Billing)"] = df["Phone (Billing)"].apply(
+        lambda x: normalize_phone(str(x))[0] if pd.notna(x) else ""
+    )
 
     # Convert numeric columns safely
     numeric_cols = ["Quantity", "Item Cost", "Order Total Amount"]
