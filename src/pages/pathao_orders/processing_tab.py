@@ -124,8 +124,8 @@ def _render_processing_tab():
             st.session_state.pathao_preview_source = source_mode
             st.session_state.pathao_auto_process = True
 
-            missing = [c for c in REQUIRED_COLUMNS if c not in preview_df.columns]
-            valid_file = len(missing) == 0
+            phone_cols_present = [c for c in REQUIRED_COLUMNS if c in preview_df.columns]
+            valid_file = len(phone_cols_present) > 0
 
             if preview_df.empty and used_status_filter:
                 st.warning("No WooCommerce rows are currently in `processing` status.")
@@ -137,11 +137,15 @@ def _render_processing_tab():
     elif uploaded_file:
         try:
             preview_df = read_uploaded(uploaded_file)
+            from src.processing.order_processor import clean_dataframe
+            preview_df = clean_dataframe(preview_df)
             st.session_state.pathao_preview_df = preview_df
             st.session_state.pathao_preview_source = source_mode
-            valid_file = render_file_summary(
-                uploaded_file, preview_df, REQUIRED_COLUMNS
-            )
+            # Check if any phone column exists (not all required)
+            phone_cols_present = [c for c in REQUIRED_COLUMNS if c in preview_df.columns]
+            valid_file = len(phone_cols_present) > 0
+            if not valid_file:
+                st.error(f"Missing required columns: Phone (Billing) or Phone (Shipping)")
         except Exception as exc:
             log_error(exc, context="Pathao Upload")
             st.error("Failed to read uploaded file.")
@@ -150,8 +154,8 @@ def _render_processing_tab():
         and st.session_state.get("pathao_preview_source") == source_mode
     ):
         preview_df = st.session_state.pathao_preview_df
-        missing = [c for c in REQUIRED_COLUMNS if c not in preview_df.columns]
-        valid_file = len(missing) == 0
+        phone_cols_present = [c for c in REQUIRED_COLUMNS if c in preview_df.columns]
+        valid_file = len(phone_cols_present) > 0
 
     if preview_df is not None:
         with st.expander("Preview source data", expanded=False):

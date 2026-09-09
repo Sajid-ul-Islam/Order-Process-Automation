@@ -11,7 +11,7 @@ from src.config.settings import get_pathao_config
 from src.services.pathao.client import PathaoClient
 from src.state.persistence import clear_state_keys
 
-REQUIRED_COLUMNS = ["Phone (Billing)"]
+REQUIRED_COLUMNS = ["Phone (Billing)", "Phone (Shipping)", "Phone", "Billing Phone", "Customer Phone", "Phone Number", "Mobile"]
 SOURCE_WOOCOM = "WooCommerce Processing"
 SOURCE_UPLOAD = "Upload / URL"
 
