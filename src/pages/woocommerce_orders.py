@@ -1,7 +1,21 @@
+"""WooCommerce Orders & Customer Management Module.
+
+Refactored following Hick's Law principles:
+- Single Primary Action per view
+- Progressive Disclosure for advanced options  
+- Clear visual hierarchy between primary/secondary actions
+- Modular component architecture for maintainability
+"""
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from src.components.orders.order_components import (
+    render_date_range_selector,
+    render_order_filters,
+    render_empty_state,
+)
 from src.services.exports.excel_exporter import export_to_styled_excel
 from src.services.woocommerce.orders import (
     extract_merchant_order_id,
@@ -10,6 +24,7 @@ from src.services.woocommerce.orders import (
 
 
 def _render_live_orders_view():
+    """Render live orders tracking view with single primary action pattern."""
     from src.components.ui.ui_components import render_premium_header
 
     render_premium_header(
@@ -18,65 +33,23 @@ def _render_live_orders_view():
         "🛒",
     )
 
-    from datetime import datetime
-
-    today = datetime.now().date()
-
-    c_date, c_fetch, c_search = st.columns([1.5, 1, 2.5])
-
-    with c_date:
-        date_range = st.date_input(
-            "📅 WooCommerce Date Range",
-            value=(today, today),
-            help="Select dates to fetch orders",
-        )
-
-    with c_fetch:
-        st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
-        if st.button("📥 Fetch Orders", use_container_width=True, type="primary"):
-            from src.services.woocommerce.client import load_from_woocommerce
-
-            st.session_state["wc_sync_mode"] = "Custom Range"
-            if isinstance(date_range, tuple) and len(date_range) == 2:
-                st.session_state["wc_sync_start_date"] = date_range[0]
-                st.session_state["wc_sync_end_date"] = date_range[1]
-            elif isinstance(date_range, tuple) and len(date_range) == 1:
-                st.session_state["wc_sync_start_date"] = date_range[0]
-                st.session_state["wc_sync_end_date"] = date_range[0]
-            else:
-                st.session_state["wc_sync_start_date"] = date_range
-                st.session_state["wc_sync_end_date"] = date_range
-
-            from datetime import time
-
-            st.session_state["wc_sync_start_time"] = time(0, 0, 0)
-            st.session_state["wc_sync_end_time"] = time(23, 59, 59)
-
-            with st.status(
-                "📡 Fetching from WooCommerce API...", expanded=True
-            ) as wc_status:
-                wc_status.write("🔄 Clearing cache...")
-                load_from_woocommerce.clear()
-                wc_status.write("📥 Downloading order pages...")
-                res = load_from_woocommerce()
-                wc_status.write("✅ Orders fetched successfully")
-                st.session_state["wc_tracking_df"] = res.get("df_to_return")
-                st.session_state["wc_pathao_statuses"] = (
-                    {}
-                )  # clear pathao cache for new orders
-                wc_status.update(
-                    label="WooCommerce sync complete", state="complete", expanded=False
-                )
+    # Single Primary Action: Fetch Orders
+    date_range, fetch_clicked = render_date_range_selector()
 
     df = st.session_state.get("wc_tracking_df")
     if df is None or df.empty:
         # Fallback to wc_curr_df if available
         df = st.session_state.get("wc_curr_df")
         if df is None or df.empty:
-            st.info(
-                "👆 Please select a date range and click 'Fetch Orders' to load data."
-            )
+            render_empty_state("Please select a date range and click 'Fetch Orders' to load data")
             return
+
+    # Apply contextual filters with progressive disclosure
+    df = render_order_filters(df)
+    
+    if df.empty:
+        render_empty_state("No orders match your current filters")
+        return
 
     df_copy = df.copy()
 

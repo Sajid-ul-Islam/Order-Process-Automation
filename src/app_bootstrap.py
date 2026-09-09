@@ -82,7 +82,6 @@ def _format_nav_item(item: str) -> str:
         "🛒 Order tracking": ":material/shopping_cart: Order Tracking",
         "📋 Product Listing": ":material/receipt_long: Product Listing",
         "📦 Pathao Processor": ":material/local_shipping: Pathao Processor",
-        "📦 Bulk Order Processor": ":material/local_shipping: Pathao Processor",
         "💬 WhatsApp Messaging": ":material/chat: WhatsApp Messaging",
         "📊 Inventory Distribution": ":material/inventory_2: Inventory Distribution",
         "📦 Current Stock Analytics": ":material/analytics: Stock Analytics",
@@ -347,76 +346,140 @@ def _render_header(selected_nav: str) -> None:
 
 
 def _route_page(selected_nav: str) -> None:
-    """Route to the correct page renderer based on sidebar selection."""
+    """Route to the correct page renderer based on sidebar selection.
+    
+    Jakob's Law Implementation:
+    - 5 consolidated navigation tabs map to sub-feature selectors
+    - Each tab uses session state to track which sub-feature to display
+    """
+    from src.config.ui_config import LEGACY_NAV_MAPPING
+    
     # Lazy imports keep bootstrap resilient on cloud
     # when a module has runtime incompatibilities.
+    
+    # === 📈 Live Dashboard (Home) ===
     if selected_nav == "📈 Live Dashboard":
         from src.components.layout.header import render_app_banner
         from src.pages.live_dashboard import render_live_tab
 
         safe_render(render_app_banner, fallback_msg="App banner unavailable.")
         safe_render(render_live_tab, fallback_msg="Live Dashboard unavailable.")
-    elif selected_nav in [
-        "\U0001f4e6 Bulk Order Processer",
-        "\U0001f4e6 Bulk Order Processor",
-        "\U0001f4e6 Pathao Processor",
-    ]:
-        from src.pages.pathao_orders import render_pathao_tab
-
-        safe_render(render_pathao_tab, fallback_msg="Pathao Processor unavailable.")
-    elif selected_nav == "\U0001f4ac WhatsApp Messaging":
-        from src.pages.whatsapp_messaging import render_wp_tab
-
-        safe_render(render_wp_tab, fallback_msg="WhatsApp Messaging unavailable.")
-    elif selected_nav == "\U0001f4ca Inventory Distribution":
-        from src.pages.inventory_distribution import render_distribution_tab
-
-        safe_render(
-            lambda: render_distribution_tab(
-                search_q=st.session_state.get("inv_matrix_search", "")
-            ),
-            fallback_msg="Inventory Distribution unavailable.",
-        )
-    elif selected_nav == "\U0001f4e6 Current Stock Analytics":
-        from src.pages.stock_analytics import render_stock_analytics_tab
-
-        safe_render(
-            render_stock_analytics_tab, fallback_msg="Stock Analytics unavailable."
-        )
-    elif selected_nav == "\U0001f9e9 Delivery Data Parser":
-        from src.pages.delivery_parser import render_fuzzy_parser_tab
-
-        safe_render(
-            render_fuzzy_parser_tab, fallback_msg="Delivery Data Parser unavailable."
-        )
-    elif selected_nav == "\U0001f4e5 Sales Data Ingestion":
-        from src.pages.sales_ingestion import render_manual_tab
-
-        safe_render(render_manual_tab, fallback_msg="Sales Data Ingestion unavailable.")
-    elif selected_nav == "\U0001f4c9 Return Analytics":
-        from src.pages.return_analytics import render_return_analytics_tab
-
-        safe_render(
-            render_return_analytics_tab, fallback_msg="Return Analytics unavailable."
-        )
-    elif selected_nav == "\U0001f680 Data Pilot":
-        from src.pages.data_pilot import render_ai_pilot_page
-
-        safe_render(render_ai_pilot_page, fallback_msg="Data Pilot unavailable.")
-    elif selected_nav in ["\U0001f6d2 Order Tracking", "\U0001f6d2 Order tracking"]:
-        from src.pages.woocommerce_orders import render_woocommerce_orders_tab
-
-        safe_render(
-            render_woocommerce_orders_tab,
-            fallback_msg="WooCommerce Orders unavailable.",
-        )
-    elif selected_nav in ["📋 Product Listing", "\U0001f4cb Product Listing"]:
-        from src.pages.product_listing import render_product_listing_tab
-
-        safe_render(
-            render_product_listing_tab,
-            fallback_msg="Product Listing unavailable.",
-        )
+    
+    # === 🛒 Orders & Fulfillment (Consolidated) ===
+    elif selected_nav == "🛒 Orders & Fulfillment":
+        # Get sub-feature selection from session state
+        sub_feature = st.session_state.get("orders_sub_feature", "Order Tracking")
+        
+        # Render sub-feature selector if not already set
+        if "orders_sub_feature" not in st.session_state:
+            st.session_state.orders_sub_feature = "Order Tracking"
+        
+        with st.expander("📂 Select Feature", expanded=False):
+            sub_feature = st.radio(
+                "Choose a feature:",
+                ["Order Tracking", "Pathao Processor", "Delivery Data Parser"],
+                index=["Order Tracking", "Pathao Processor", "Delivery Data Parser"].index(st.session_state.orders_sub_feature),
+                label_visibility="collapsed",
+                horizontal=True
+            )
+            if sub_feature != st.session_state.orders_sub_feature:
+                st.session_state.orders_sub_feature = sub_feature
+                st.rerun()
+        
+        # Route to appropriate sub-feature
+        if sub_feature == "Order Tracking":
+            from src.pages.woocommerce_orders import render_woocommerce_orders_tab
+            safe_render(render_woocommerce_orders_tab, fallback_msg="Order Tracking unavailable.")
+        elif sub_feature == "Pathao Processor":
+            from src.pages.pathao_orders import render_pathao_tab
+            safe_render(render_pathao_tab, fallback_msg="Pathao Processor unavailable.")
+        elif sub_feature == "Delivery Data Parser":
+            from src.pages.delivery_parser import render_fuzzy_parser_tab
+            safe_render(render_fuzzy_parser_tab, fallback_msg="Delivery Data Parser unavailable.")
+    
+    # === 📦 Inventory & Stock (Consolidated) ===
+    elif selected_nav == "📦 Inventory & Stock":
+        sub_feature = st.session_state.get("inventory_sub_feature", "Product Listing")
+        
+        if "inventory_sub_feature" not in st.session_state:
+            st.session_state.inventory_sub_feature = "Product Listing"
+        
+        with st.expander("📂 Select Feature", expanded=False):
+            sub_feature = st.radio(
+                "Choose a feature:",
+                ["Product Listing", "Current Stock Analytics", "Inventory Distribution"],
+                index=["Product Listing", "Current Stock Analytics", "Inventory Distribution"].index(st.session_state.inventory_sub_feature),
+                label_visibility="collapsed",
+                horizontal=True
+            )
+            if sub_feature != st.session_state.inventory_sub_feature:
+                st.session_state.inventory_sub_feature = sub_feature
+                st.rerun()
+        
+        if sub_feature == "Product Listing":
+            from src.pages.product_listing import render_product_listing_tab
+            safe_render(render_product_listing_tab, fallback_msg="Product Listing unavailable.")
+        elif sub_feature == "Current Stock Analytics":
+            from src.pages.stock_analytics import render_stock_analytics_tab
+            safe_render(render_stock_analytics_tab, fallback_msg="Stock Analytics unavailable.")
+        elif sub_feature == "Inventory Distribution":
+            from src.pages.inventory_distribution import render_distribution_tab
+            safe_render(
+                lambda: render_distribution_tab(search_q=st.session_state.get("inv_matrix_search", "")),
+                fallback_msg="Inventory Distribution unavailable.",
+            )
+    
+    # === 📊 Analytics & Insights (Consolidated) ===
+    elif selected_nav == "📊 Analytics & Insights":
+        sub_feature = st.session_state.get("analytics_sub_feature", "Sales Data Ingestion")
+        
+        if "analytics_sub_feature" not in st.session_state:
+            st.session_state.analytics_sub_feature = "Sales Data Ingestion"
+        
+        with st.expander("📂 Select Feature", expanded=False):
+            sub_feature = st.radio(
+                "Choose a feature:",
+                ["Sales Data Ingestion", "Return Analytics"],
+                index=["Sales Data Ingestion", "Return Analytics"].index(st.session_state.analytics_sub_feature),
+                label_visibility="collapsed",
+                horizontal=True
+            )
+            if sub_feature != st.session_state.analytics_sub_feature:
+                st.session_state.analytics_sub_feature = sub_feature
+                st.rerun()
+        
+        if sub_feature == "Sales Data Ingestion":
+            from src.pages.sales_ingestion import render_manual_tab
+            safe_render(render_manual_tab, fallback_msg="Sales Data Ingestion unavailable.")
+        elif sub_feature == "Return Analytics":
+            from src.pages.return_analytics import render_return_analytics_tab
+            safe_render(render_return_analytics_tab, fallback_msg="Return Analytics unavailable.")
+    
+    # === 🤖 Automation Tools (Consolidated) ===
+    elif selected_nav == "🤖 Automation Tools":
+        sub_feature = st.session_state.get("automation_sub_feature", "WhatsApp Messaging")
+        
+        if "automation_sub_feature" not in st.session_state:
+            st.session_state.automation_sub_feature = "WhatsApp Messaging"
+        
+        with st.expander("📂 Select Feature", expanded=False):
+            sub_feature = st.radio(
+                "Choose a feature:",
+                ["WhatsApp Messaging", "Data Pilot"],
+                index=["WhatsApp Messaging", "Data Pilot"].index(st.session_state.automation_sub_feature),
+                label_visibility="collapsed",
+                horizontal=True
+            )
+            if sub_feature != st.session_state.automation_sub_feature:
+                st.session_state.automation_sub_feature = sub_feature
+                st.rerun()
+        
+        if sub_feature == "WhatsApp Messaging":
+            from src.pages.whatsapp_messaging import render_wp_tab
+            safe_render(render_wp_tab, fallback_msg="WhatsApp Messaging unavailable.")
+        elif sub_feature == "Data Pilot":
+            from src.pages.data_pilot import render_ai_pilot_page
+            safe_render(render_ai_pilot_page, fallback_msg="Data Pilot unavailable.")
 
 
 # ── Public entry point ──────────────────────────────────────────────────────
@@ -436,17 +499,13 @@ def run_app() -> None:
     from src.components.layout.header import render_header
     from src.components.ui.bike_animation import render_bike_animation
     from src.components.ui.styles import inject_base_styles
+    from src.config.ui_config import LEGACY_NAV_MAPPING
 
-    # Ensure Pathao Processor is in the nav
-    if not any("Pathao Processor" in item for item in PRIMARY_NAV):
-        PRIMARY_NAV.append("\U0001f4e6 Pathao Processor")
-
-    # Remove hidden items from nav list (mutate in-place)
-    PRIMARY_NAV[:] = [
-        item
-        for item in PRIMARY_NAV
-        if "Excel Merger" not in item
-    ]
+    # Jakob's Law: Navigation already consolidated to 5 tabs in ui_config.py
+    # No runtime modifications needed - navigation is statically defined
+    
+    # Prevent duplicate entries (defensive check)
+    PRIMARY_NAV[:] = list(dict.fromkeys(PRIMARY_NAV))
 
     # ── State & styles ──────────────────────────────────────────────────────
     init_state()
