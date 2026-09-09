@@ -1666,3 +1666,212 @@ div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stElementC
     50%       { opacity: 0.5; }
 }
 
+/* ============================================================
+   MODERN KPI CARDS - Human-Centric Design (v1.0)
+   Following the five design principles for non-AI-generated look
+   ============================================================ */
+
+/* Container for KPI cards with proper spacing */
+.kpi-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin: 16px 0 24px 0;
+    width: 100%;
+}
+
+/* Base KPI card - flat design with hairline borders */
+.kpi-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    transition: border-color 0.2s ease;
+    position: relative;
+}
+
+.kpi-card:hover {
+    border-color: #cbd5e1;
+}
+
+/* Primary metric card - larger and more prominent */
+.kpi-card-primary {
+    grid-column: span 2;
+    padding: 20px;
+    background: #f8fafc;
+    border-color: #d1d5db;
+}
+
+/* Secondary metric cards - smaller, supporting role */
+.kpi-card-secondary {
+    padding: 14px;
+}
+
+/* Label styling - clear hierarchy, muted color */
+.kpi-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+    margin-bottom: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Value styling - the hero of the card */
+.kpi-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 6px;
+}
+
+/* Primary value - even larger for emphasis */
+.kpi-value-primary {
+    font-size: 2.2rem;
+    font-weight: 800;
+}
+
+/* Previous period badge - flat, subtle */
+.kpi-prev {
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: #94a3b8;
+    background: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-bottom: 6px;
+}
+
+/* Delta indicators - flat colors, meaningful only */
+.kpi-delta {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-top: 4px;
+}
+
+.kpi-delta-up {
+    color: #059669;
+    background: rgba(5, 150, 105, 0.08);
+}
+
+.kpi-delta-down {
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.08);
+}
+
+.kpi-delta-warning {
+    color: #d97706;
+    background: rgba(217, 119, 6, 0.08);
+}
+
+/* Sparkline container - minimal height for trends */
+.kpi-card .metric-sparkline {
+    margin-top: 8px;
+    width: 100%;
+    height: 28px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+    .kpi-container {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    
+    .kpi-card-primary {
+        grid-column: span 1;
+    }
+}
+
+@media (max-width: 900px) {
+    .kpi-container {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+    
+    .kpi-value {
+        font-size: 1.3rem;
+    }
+    
+    .kpi-value-primary {
+        font-size: 1.8rem;
+    }
+    
+    .kpi-card-primary {
+        padding: 16px;
+    }
+}
+
+@media (max-width: 600px) {
+    .kpi-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .kpi-card {
+        padding: 12px;
+    }
+    
+    .kpi-value {
+        font-size: 1.4rem;
+    }
+    
+    .kpi-value-primary {
+        font-size: 1.6rem;
+    }
+    
+    .kpi-label {
+        font-size: 0.65rem;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .kpi-card {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    
+    .kpi-card-primary {
+        background: #0f172a;
+        border-color: #475569;
+    }
+    
+    .kpi-label {
+        color: #94a3b8;
+    }
+    
+    .kpi-value {
+        color: #f1f5f9;
+    }
+    
+    .kpi-prev {
+        background: #334155;
+        color: #cbd5e1;
+    }
+    
+    .kpi-delta-up {
+        background: rgba(5, 150, 105, 0.15);
+    }
+    
+    .kpi-delta-down {
+        background: rgba(220, 38, 38, 0.15);
+    }
+    
+    .kpi-card:hover {
+        border-color: #475569;
+    }
+}
+

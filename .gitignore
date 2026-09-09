@@ -1,37 +1,41 @@
+```
+# Compiled and build artifacts
+*.pyc
 __pycache__/
-*.py[cod]
-*$py.class
-# Sensitive Credentials & Secrets (NEVER commit)
-.env
-*.env
-pathao_token.json
-*secrets*.toml
-*secrets*.tomal
-.streamlit/*
-!.streamlit/config.toml
-.venv/
-env/
-venv/
-ENV/
-data/error_logs.json
-data/session_state.json
-data/feedback/system_logs.json
-data/processed/
-data/raw/
-.kiro/
-.claude/
-.pytest_cache/
-.coverage
-htmlcov/
-.mypy_cache/
-scratch/
-test.xlsx
-test2.xlsx
 
-# Volatile runtime artifacts (regenerated on each sync; never commit)
-resources/customer_registry.json
-resources/metric_snapshots/
-resources/sales_snapshot.csv
-resources/shipped_history.json
-resources/snapshots/
-*.snapshot.json
+# Dependencies
+.venv/
+venv/
+node_modules/
+.mypy_cache/
+.pytest_cache/
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Build directories
+dist/
+build/
+target/
+.gradle/
+
+# System files
+.DS_Store
+Thumbs.db
+```

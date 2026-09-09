@@ -1,9 +1,22 @@
-# Live Operational Dashboard
+# Live Operational Dashboard - Refactored for Hick's Law Compliance
+"""
+Phase 2 Refactoring: Breaking down render_live_tab() into focused components.
+Follows Hick's Law principles:
+1. Single Primary Action per screen
+2. Visual Hierarchy with button types
+3. Progressive Disclosure for advanced options
+4. Contextual Relevance
+"""
 import pandas as pd
 import streamlit as st
 
 from src.components.dashboard.dashboard_metrics import render_operational_metrics
 from src.components.dashboard.dashboard_output import render_dashboard_output
+from src.components.dashboard.live_components import (
+    render_dashboard_banner,
+    _render_completed_orders_section,
+    _render_completed_kpis_display,
+)
 from src.components.ui.widgets import render_reset_confirm
 from src.config.constants import bd_now, bd_today
 from src.processing.column_detection import find_columns
@@ -493,258 +506,17 @@ def render_live_tab():
         df_live, find_columns(df_live) if df_live is not None else {}
     )
 
-    # ── Header: Date Range, Op Mode, Order View, Sync, Refresh ───────────────
-    c1, c2, c3, c4, c5 = st.columns([2.0, 1.8, 2.0, 0.8, 0.5])
-
-    # Column 1: Date Range Picker
-    with c1:
-        today_bd = bd_today()
-        curr_range = st.session_state.get("live_custom_range", (today_bd, today_bd))
-
-        sel_dates = st.date_input(
-            "📅 Date Range",
-            value=curr_range,
-            max_value=today_bd,
-            key="live_date_picker_widget",
-            label_visibility="collapsed",
-            help="Select custom start and end date range to filter orders.",
-        )
-
-        if isinstance(sel_dates, (list, tuple)) and len(sel_dates) == 2:
-            new_r = (sel_dates[0], sel_dates[1])
-            if st.session_state.get("live_custom_range") != new_r:
-                st.session_state["live_custom_range"] = new_r
-                st.session_state["wc_sync_start_date"] = sel_dates[0]
-                st.session_state["wc_sync_end_date"] = sel_dates[1]
-                st.rerun()
-        elif isinstance(sel_dates, (list, tuple)) and len(sel_dates) == 1:
-            new_r = (sel_dates[0], sel_dates[0])
-            if st.session_state.get("live_custom_range") != new_r:
-                st.session_state["live_custom_range"] = new_r
-                st.session_state["wc_sync_start_date"] = sel_dates[0]
-                st.session_state["wc_sync_end_date"] = sel_dates[0]
-                st.rerun()
-
-        if curr_range and (curr_range[0] != today_bd or curr_range[1] != today_bd):
-            if st.button(
-                "❌ Clear Range",
-                key="btn_clear_custom_range",
-                type="secondary",
-                use_container_width=True,
-            ):
-                st.session_state["live_custom_range"] = (today_bd, today_bd)
-                if "wc_sync_start_date" in st.session_state:
-                    del st.session_state["wc_sync_start_date"]
-                if "wc_sync_end_date" in st.session_state:
-                    del st.session_state["wc_sync_end_date"]
-                st.rerun()
-
-    # Column 2: Op Mode Pills
-    with c2:
-        st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
-        mode_options = ["Last Day", "Active", "Queue"]
-        mode_icons = {"Last Day": "⏳", "Active": "⚡", "Queue": "📥"}
-        mode_to_state = {"Last Day": "Prev", "Active": "Today", "Queue": "Backlog"}
-        state_to_mode = {v: k for k, v in mode_to_state.items()}
-        current_idx = mode_options.index(state_to_mode.get(nav_mode, "Active"))
-
-        if hasattr(st, "pills"):
-            selected_mode = st.pills(
-                "Op Mode",
-                mode_options,
-                default=mode_options[current_idx],
-                format_func=lambda x: f"{mode_icons.get(x, '')} {x}".strip(),
-                key="banner_op_mode_pills",
-                label_visibility="collapsed",
-            )
-            if not selected_mode:
-                selected_mode = mode_options[current_idx]
-        else:  # Fallback for older Streamlit versions
-            selected_mode = st.radio(
-                "Op Mode",
-                mode_options,
-                index=current_idx,
-                horizontal=True,
-                format_func=lambda x: f"{mode_icons.get(x, '')} {x}".strip(),
-                key="banner_op_mode_radio",
-                label_visibility="collapsed",
-            )
-
-        new_nav = mode_to_state[selected_mode]
-        if new_nav != nav_mode:
-            st.session_state.wc_nav_mode = new_nav
-            st.rerun()
-
-    with c3:
-        st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
-        if nav_mode == "Today":
-            opts_filter = ["All Orders", "Shipped", "Processing"]
-            filter_icons = {"All Orders": "📦", "Shipped": "🚚", "Processing": "⚙️"}
-            curr_filter = st.session_state.get("live_order_filter", "All Orders")
-            if curr_filter not in opts_filter:
-                curr_filter = "All Orders"
-
-            if hasattr(st, "pills"):
-                sel_filter = st.pills(
-                    "Shift View",
-                    opts_filter,
-                    default=curr_filter,
-                    format_func=lambda x: f"{filter_icons.get(x, '')} {x}".strip(),
-                    key="live_order_filter_pills",
-                    label_visibility="collapsed",
-                )
-            else:
-                sel_filter = st.radio(
-                    "Shift View",
-                    opts_filter,
-                    index=opts_filter.index(curr_filter),
-                    horizontal=True,
-                    format_func=lambda x: f"{filter_icons.get(x, '')} {x}".strip(),
-                    key="live_order_filter_radio",
-                    label_visibility="collapsed",
-                )
-
-            if sel_filter and sel_filter != curr_filter:
-                st.session_state.live_order_filter = sel_filter
-                st.rerun()
-
-            # Online Only toggle - appears when Shipped is selected
-            if sel_filter == "Shipped":
-                online_only = st.toggle(
-                    "Online Only",
-                    value=st.session_state.get("shipped_online_only", False),
-                    key="shipped_online_only_toggle",
-                    help="Show only online orders (exclude outlet)",
-                )
-                if online_only != st.session_state.get("shipped_online_only", False):
-                    st.session_state.shipped_online_only = online_only
-                    st.rerun()
-        else:
-            # Placeholder to maintain layout when not in "Today" mode
-            st.markdown('<div style="height: 38px;"></div>', unsafe_allow_html=True)
-
-    # Column 4: Auto-Sync Label
-    with c4:
-        st.markdown(
-            '<div style="height: 5px;"></div>', unsafe_allow_html=True
-        )  # Vertical alignment helper
-        order_view_mode = (
-            st.session_state.get("live_order_filter", "All Orders")
-            if nav_mode == "Today"
-            else "All Orders"
-        )
-        if nav_mode == "Today" and order_view_mode == "Shipped":
-            _sync_60s()
-        else:
-            _sync_180s()
-
-    # Column 5: Manual Refresh Button
-    with c5:
-        st.markdown(
-            '<div style="height: 5px;"></div>', unsafe_allow_html=True
-        )
-        if st.button(
-            "🔄",
-            use_container_width=True,
-            key="btn_refresh_newly_shipped",
-            type="secondary",
-            help="Force a manual data refresh",
-        ):
-            load_live_source(force_refresh=True)
-            st.toast("⚡ Data refreshed!")
-            st.rerun()
+    # ── Header: Refactored with Hick's Law Compliance ───────────────────────
+    # Single responsibility: delegate to component module
+    render_dashboard_banner(load_live_source)
 
     # ── Date-Wise Completed Orders (Right After Banner) ─────────────────────
-    st.markdown("---")
-    st.markdown("### 📅 Date-Wise Completed Orders")
-    st.caption("Pick a date and filter by source to see completed order KPIs.")
-
-    # Date picker and source toggle in a row
-    c_date, c_source, c_btn = st.columns([2, 2, 1])
-    with c_date:
-        today_bd = bd_today()
-        default_date = st.session_state.get("completed_date", today_bd)
-        selected_date = st.date_input(
-            "Select Date",
-            value=default_date,
-            max_value=today_bd,
-            key="completed_date_picker",
-            help="Pick a date to view completed orders for that day",
-        )
-        if selected_date != default_date:
-            st.session_state["completed_date"] = selected_date
-
-    with c_source:
-        st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
-        source_filter = st.radio(
-            "Source",
-            ["Both", "Online", "Outlet"],
-            horizontal=True,
-            key="completed_source_filter",
-            help="Filter by order source: Online (website) or Outlet (physical store)",
-        )
-
-    with c_btn:
-        st.markdown('<div style="height: 5px;"></div>', unsafe_allow_html=True)
-        show_kpis = st.button("📊 Show KPIs", key="show_completed_kpis", use_container_width=True)
-
-    # Fetch and filter
+    # Refactored with progressive disclosure and single primary action
+    show_kpis, selected_date, source_filter = _render_completed_orders_section()
+    
+    # Fetch and display KPIs only when primary action is triggered
     if show_kpis:
-        with st.status(f"Loading completed orders for {selected_date}...", expanded=True) as status:
-            from src.processing.completed_analytics import (
-                filter_completed_orders_by_date,
-                compute_completed_kpis,
-            )
-
-            # Get full dataset
-            full_df = st.session_state.get("wc_full_df")
-            if full_df is None or full_df.empty:
-                status.update(label="⚠️ No data available", state="warning")
-                st.warning("No WooCommerce data loaded. Please sync first.")
-            else:
-                # Filter by date and source
-                completed_df = filter_completed_orders_by_date(
-                    full_df,
-                    pd.Timestamp(selected_date),
-                    source_filter=source_filter,
-                )
-
-                if completed_df.empty:
-                    status.update(label="ℹ️ No completed orders found", state="info")
-                    st.info(f"No completed orders found for {selected_date} ({source_filter})")
-                else:
-                    # Compute KPIs
-                    kpis = compute_completed_kpis(completed_df)
-                    status.update(label="✅ KPIs computed!", state="complete")
-
-                    # Display KPIs
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("Completed Orders", f"{kpis['orders']:,}")
-                    c2.metric("Items Shipped", f"{kpis['items']:,}")
-                    c3.metric("Net Revenue", f"TK {kpis['net_revenue']:,.0f}")
-                    c4.metric("Basket Size", f"TK {kpis['basket_size']:,.0f}")
-
-                    c5, c6 = st.columns(2)
-                    c5.metric("Gross Revenue", f"TK {kpis['gross_revenue']:,.0f}")
-                    c6.metric("Cashback/Discount", f"TK {kpis['cashback']:,.0f}")
-
-                    # Show data
-                    with st.expander("View Order Details", expanded=False):
-                        display_cols = [
-                            c for c in [
-                                "Order ID",
-                                "Full Name (Billing)",
-                                "Phone (Billing)",
-                                "Order Status",
-                                "Order Total Amount",
-                                "Dispatch Suggestion",
-                            ]
-                            if c in completed_df.columns
-                        ]
-                        st.dataframe(
-                            completed_df[display_cols].drop_duplicates(subset=["Order ID"]),
-                            use_container_width=True,
-                        )
+        _render_completed_kpis_display(selected_date, source_filter, df_live)
 
     st.markdown("---")
 
