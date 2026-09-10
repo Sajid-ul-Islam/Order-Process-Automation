@@ -78,7 +78,12 @@ def _reset_pathao_state():
             "pathao_auto_process",
             "pathao_manual_items_df",
             "pathao_manual_desc",
+            "pathao_upload_fingerprint",
+            "pathao_mapping_confirmation",
+            "pathao_source_mode_last",
+            "pathao_up",
         ]
+        + [key for key in st.session_state if key.startswith("pathao_map_")]
     )
 
 
@@ -91,9 +96,14 @@ def _filter_processing_orders(df):
         else None
     )
     if not status_col:
-        return df.copy(), False
+        raise ValueError(
+            "The WooCommerce source is missing its order status column. "
+            "Refresh the WooCommerce snapshot before pulling processing orders."
+        )
 
-    filtered_df = df[df[status_col].astype(str).str.lower() == "processing"].copy()
+    filtered_df = df[
+        df[status_col].astype(str).str.strip().str.lower() == "processing"
+    ].copy()
     return filtered_df, True
 
 

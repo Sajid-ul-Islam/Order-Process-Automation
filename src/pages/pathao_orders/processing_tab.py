@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from typing import Dict, List, Optional
 
@@ -55,6 +56,7 @@ STANDARD_COLUMNS = [
 COLUMN_ALIASES: Dict[str, List[str]] = {
     "Phone (Billing)": [
         "Phone",
+        "Phone (Shipping)",
         "Billing Phone",
         "Customer Phone",
         "Phone Number",
@@ -67,6 +69,8 @@ COLUMN_ALIASES: Dict[str, List[str]] = {
         "Recipient Name",
         "Customer Name",
         "Name",
+        "Full Name (Shipping)",
+        "Full Name",
     ],
     "Last Name (Shipping)": ["Last Name", "Shipping Last Name", "Surname"],
     "Address 1&2 (Shipping)": [
@@ -76,15 +80,85 @@ COLUMN_ALIASES: Dict[str, List[str]] = {
         "Address (Shipping)",
     ],
     "City (Shipping)": ["City", "Shipping City", "Town", "Area"],
-    "State Code (Shipping)": ["State", "State Code", "District", "Zone", "Region"],
+    "State Code (Shipping)": [
+        "State",
+        "State Code",
+        "Shipping State",
+        "District",
+        "Zone",
+        "Region",
+    ],
     "Order ID": ["Order ID", "Order #", "ID", "Order_ID"],
     "Order Number": ["Order Number", "Order No", "Order #", "Order_No"],
     "Item Name": ["Item Name", "Product Name", "Product", "Item", "SKU Name"],
-    "Quantity": ["Quantity", "Qty", "Item Qty", "Quantity (- Refund)"],
-    "Item Cost": ["Item Cost", "Price", "Unit Price", "Line Item Price"],
-    "Order Total Amount": ["Order Total Amount", "Total", "Grand Total", "Order Total"],
+    "Quantity": [
+        "Quantity",
+        "Qty",
+        "Item Qty",
+        "Quantity (- Refund)",
+        "Quantity (Refund)",
+        "Quantity(-Refund)",
+    ],
+    "Item Cost": [
+        "Item Cost",
+        "Price",
+        "Unit Price",
+        "Line Item Price",
+        "Item Price",
+        "Cost",
+        "Line Total",
+    ],
+    "Order Total Amount": [
+        "Order Total Amount",
+        "Total",
+        "Grand Total",
+        "Order Total",
+        "Total Amount",
+        "Order Amount",
+    ],
     "Payment Method Title": ["Payment Method", "Payment", "Payment Method Title"],
 }
+
+
+REQUIRED_UPLOAD_COLUMNS = [
+    "Phone (Billing)",
+    "First Name (Shipping)",
+    "Address 1&2 (Shipping)",
+    "Item Name",
+    "Quantity",
+    "Item Cost",
+    "Order Total Amount",
+]
+
+
+def _invalidate_processing_result():
+    """Discard output that no longer belongs to the currently approved input."""
+    had_result = st.session_state.get("pathao_res_df") is not None
+    st.session_state.pathao_res_df = None
+    st.session_state.pathao_vlink_df = None
+    st.session_state.show_vlink_gen = False
+    st.session_state.pathao_auto_process = False
+    if had_result:
+        save_state()
+
+
+def _clear_processing_source():
+    _invalidate_processing_result()
+    st.session_state.pathao_preview_df = None
+    st.session_state.pathao_preview_source = None
+    st.session_state.pathao_upload_fingerprint = None
+    st.session_state.pathao_mapping_confirmation = None
+    for key in list(st.session_state):
+        if key.startswith("pathao_map_"):
+            del st.session_state[key]
+
+
+def _upload_fingerprint(uploaded_file):
+    """Use file contents as well as its name; uploader objects change on reruns."""
+    return (
+        uploaded_file.name,
+        hashlib.sha256(uploaded_file.getvalue()).hexdigest(),
+    )
 
 
 def _detect_and_map_columns(
@@ -130,14 +204,14 @@ def _render_column_mapping_ui(df: pd.DataFrame) -> tuple[Optional[pd.DataFrame],
     st.markdown("### 🔍 Column Detection")
 
     # Auto-detect columns
-    df_mapped, mapping, missing = _detect_and_map_columns(df)
+    df_mapped, mapping, _ = _detect_and_map_columns(df)
 
     # Show detection results
     detected_cols = {k: v for k, v in mapping.items() if v is not None}
     undetected_cols = [k for k, v in mapping.items() if v is None]
 
     if detected_cols:
-        st.success(f"✅ Detected {len(detected_cols)} required columns automatically")
+        st.success(f"✅ Detected {len(detected_cols)} columns automatically")
         with st.expander("View detected mappings", expanded=False):
             for standard, source in detected_cols.items():
                 if standard == source:
@@ -155,7 +229,10 @@ def _render_column_mapping_ui(df: pd.DataFrame) -> tuple[Optional[pd.DataFrame],
     # Show manual mapping interface for missing columns
     if undetected_cols:
         st.markdown("#### Manual Column Mapping")
-        st.caption("Map your file's columns to the required fields below:")
+        st.caption(
+            "Map the missing fields below. Last name, city, state and payment method "
+            "are optional; either order ID or order number is required."
+        )
 
         all_file_cols = list(df.columns)
         custom_mapping = {}
@@ -166,7 +243,7 @@ def _render_column_mapping_ui(df: pd.DataFrame) -> tuple[Optional[pd.DataFrame],
                 selected = st.selectbox(
                     f"Select column for '{required_col}'",
                     options=["-- None --"] + all_file_cols,
-                    key=f"map_{required_col}",
+                    key=f"pathao_map_{required_col}",
                     index=0,
                 )
                 if selected != "-- None --":
@@ -181,6 +258,28 @@ def _render_column_mapping_ui(df: pd.DataFrame) -> tuple[Optional[pd.DataFrame],
             # Refresh missing list
             undetected_cols = [k for k, v in mapping.items() if v is None]
 
+    def has_values(column):
+        return column in df_mapped and (
+            df_mapped[column].notna()
+            & df_mapped[column].astype(str).str.strip().ne("")
+        ).any()
+
+    required_missing = [col for col in REQUIRED_UPLOAD_COLUMNS if not has_values(col)]
+    if not any(has_values(col) for col in ("Order ID", "Order Number")):
+        required_missing.append("Order ID or Order Number")
+    if df.empty:
+        st.error("The uploaded file has no order rows.")
+    if required_missing:
+        st.error("Map columns containing values for: " + ", ".join(required_missing))
+
+    confirmation = (
+        st.session_state.get("pathao_upload_fingerprint"),
+        tuple(mapping.items()),
+    )
+    if st.session_state.get("pathao_mapping_confirmation") != confirmation:
+        st.session_state.pathao_mapping_confirmation = None
+        _invalidate_processing_result()
+
     # User confirmation
     st.markdown("---")
     c1, c2 = st.columns([3, 1])
@@ -194,15 +293,38 @@ def _render_column_mapping_ui(df: pd.DataFrame) -> tuple[Optional[pd.DataFrame],
             type="primary",
             use_container_width=True,
             key="confirm_columns",
+            disabled=bool(required_missing) or df.empty,
         )
 
-    if confirm_btn:
+    if confirm_btn and not required_missing and not df.empty:
+        st.session_state.pathao_mapping_confirmation = confirmation
+        st.session_state.pathao_auto_process = True
+
+    if (
+        st.session_state.get("pathao_mapping_confirmation") == confirmation
+        and not required_missing
+        and not df.empty
+    ):
         return df_mapped, True
 
     return None, False
 
 
 def _render_processing_tab():
+    for key, default in {
+        "pathao_res_df": None,
+        "pathao_preview_df": None,
+        "pathao_preview_source": None,
+        "pathao_vlink_df": None,
+        "show_vlink_gen": False,
+        "pathao_auto_process": False,
+        "pathao_source_mode_last": None,
+        "pathao_upload_fingerprint": None,
+        "pathao_mapping_confirmation": None,
+    }.items():
+        if key not in st.session_state:
+            st.session_state[key] = default
+
     render_reset_confirm("Pathao Processor", "pathao", _reset_pathao_state)
 
     with st.expander("Pathao API & Sync Settings", expanded=False):
@@ -257,13 +379,8 @@ def _render_processing_tab():
         )
 
     if st.session_state.get("pathao_source_mode_last") != source_mode:
+        _clear_processing_source()
         st.session_state.pathao_source_mode_last = source_mode
-        st.session_state.pathao_preview_df = None
-        st.session_state.pathao_preview_source = None
-        st.session_state.pathao_res_df = None
-        st.session_state.pathao_vlink_df = None
-        st.session_state.show_vlink_gen = False
-        st.session_state.pathao_auto_process = False
 
     preview_df = None
     valid_file = False
@@ -286,16 +403,17 @@ def _render_processing_tab():
         st.caption("Upload an Excel or CSV export.")
 
     if fetch_live_clicked:
+        _clear_processing_source()
         try:
             preview_df, used_status_filter = _load_processing_orders_from_woocommerce()
             st.session_state.pathao_preview_df = preview_df
             st.session_state.pathao_preview_source = source_mode
-            st.session_state.pathao_auto_process = True
 
             phone_cols_present = [
                 c for c in REQUIRED_COLUMNS if c in preview_df.columns
             ]
-            valid_file = len(phone_cols_present) > 0
+            valid_file = len(phone_cols_present) > 0 and not preview_df.empty
+            st.session_state.pathao_auto_process = valid_file
 
             if preview_df.empty and used_status_filter:
                 st.warning("No WooCommerce rows are currently in `processing` status.")
@@ -306,21 +424,13 @@ def _render_processing_tab():
             st.error(f"Failed to fetch data: {exc}")
     elif uploaded_file:
         try:
-            preview_df = read_uploaded(uploaded_file)
-            from src.processing.order_processor import clean_dataframe
+            fingerprint = _upload_fingerprint(uploaded_file)
+            if st.session_state.pathao_upload_fingerprint != fingerprint:
+                _clear_processing_source()
+                st.session_state.pathao_upload_fingerprint = fingerprint
 
-            preview_df = clean_dataframe(preview_df)
-            st.session_state.pathao_preview_df = preview_df
+            preview_df = read_uploaded(uploaded_file)
             st.session_state.pathao_preview_source = source_mode
-            # Check if any phone column exists (not all required)
-            phone_cols_present = [
-                c for c in REQUIRED_COLUMNS if c in preview_df.columns
-            ]
-            valid_file = len(phone_cols_present) > 0
-            if not valid_file:
-                st.error(
-                    "Missing required columns: Phone (Billing) or Phone (Shipping)"
-                )
 
             # Show column detection and mapping UI for uploaded files
             mapped_df, confirmed = _render_column_mapping_ui(preview_df)
@@ -331,20 +441,24 @@ def _render_processing_tab():
                 st.session_state.pathao_preview_df = preview_df
                 st.success("✅ Column mapping confirmed. Ready to process.")
             else:
+                st.session_state.pathao_preview_df = None
                 st.info(
                     "👆 Please confirm or adjust the column mappings above before processing."
                 )
                 valid_file = False
         except Exception as exc:
+            _clear_processing_source()
             log_error(exc, context="Pathao Upload")
             st.error("Failed to read uploaded file.")
+    elif source_mode == SOURCE_UPLOAD:
+        _clear_processing_source()
     elif (
         st.session_state.get("pathao_preview_df") is not None
         and st.session_state.get("pathao_preview_source") == source_mode
     ):
         preview_df = st.session_state.pathao_preview_df
         phone_cols_present = [c for c in REQUIRED_COLUMNS if c in preview_df.columns]
-        valid_file = len(phone_cols_present) > 0
+        valid_file = len(phone_cols_present) > 0 and not preview_df.empty
 
     if preview_df is not None:
         with st.expander("Preview source data", expanded=False):
@@ -369,6 +483,7 @@ def _render_processing_tab():
         st.rerun()
 
     if run_clicked:
+        _invalidate_processing_result()
         if preview_df is None or not valid_file:
             st.warning("Load a valid source before processing orders.")
         else:
@@ -402,7 +517,7 @@ def _render_processing_tab():
         c1, c2 = st.columns(2)
         with c1:
             pathao_excel_bytes = export_to_styled_excel(
-                {"Pathao": result_df}, group_by_col="Order ID"
+                {"Pathao": result_df}, group_by_col="MerchantOrderId"
             )
 
             st.download_button(
@@ -440,7 +555,7 @@ def _render_processing_tab():
             vlink_df = st.session_state.get("pathao_vlink_df")
             if vlink_df is not None:
                 vlink_excel_bytes = export_to_styled_excel(
-                    {"Verification": vlink_df}, group_by_col="Order ID"
+                    {"Verification": vlink_df}, group_by_col="MerchantOrderId"
                 )
 
                 st.download_button(

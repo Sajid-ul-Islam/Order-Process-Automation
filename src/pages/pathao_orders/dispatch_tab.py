@@ -1,174 +1,215 @@
-"""Auto-Dispatch tab: create Pathao consignments and update WooCommerce status."""
+"""Auto-Dispatch: validate parcels, select pickup stores, and track creation results."""
 
 from __future__ import annotations
+
+import hashlib
+import json
 
 import pandas as pd
 import streamlit as st
 
-from src.components.ui.dataframe_search import render_dataframe_search
 from src.components.ui.widgets import section_card
-from src.pages.pathao_orders.shared import _get_pathao_client
+from src.pages.pathao_orders.shared import SOURCE_WOOCOM, _get_pathao_client
+from src.services.pathao.dispatch_ledger import DispatchLedger, ledger_key
+from src.services.pathao.orders import PathaoOrderError, build_order_payload
 from src.services.woocommerce.orders import extract_order_id, update_order_status
 
 
+def _warehouse(row):
+    value = row.get("WarehouseOutlet", "")
+    return str(value).strip() if pd.notna(value) and str(value).strip() else "Default pickup"
+
+
+def _prepare_dispatch(result_df, stores, account_scope, **settings):
+    """Validate the entire batch before permitting any order creation."""
+    prepared, errors, seen = [], [], set()
+    for position, (_, row) in enumerate(result_df.iterrows(), start=1):
+        outlet = _warehouse(row)
+        try:
+            payload = build_order_payload(row, stores.get(outlet), **settings)
+            key = ledger_key(account_scope, payload["merchant_order_id"], outlet)
+            if key in seen:
+                raise ValueError("Duplicate merchant order ID for the same pickup outlet.")
+            seen.add(key)
+            prepared.append({"key": key, "outlet": outlet, "payload": payload})
+        except (ValueError, TypeError) as exc:
+            errors.append({"Row": position, "Order": str(row.get("MerchantOrderId", "")), "Error": str(exc)})
+    return prepared, errors
+
+
+def _dispatch_batch(client, ledger, prepared, progress=None):
+    """Reserve each parcel durably before POST; never resend an uncertain attempt."""
+    report = []
+    for index, entry in enumerate(prepared):
+        payload, key = entry["payload"], entry["key"]
+        record = {"Order": payload["merchant_order_id"], "Outlet": entry["outlet"],
+                  "Consignment": "", "Status": "", "Message": ""}
+        if not ledger.reserve(key, record["Order"]):
+            previous = ledger.get(key) or {}
+            record.update(
+                Status="Already created" if previous.get("status") == "created" else "Check Pathao",
+                Consignment=previous.get("consignment_id", ""),
+                Message=previous.get("message", "") or "Earlier attempt recorded; no new request sent.",
+            )
+        else:
+            try:
+                data = client.create_order(payload)
+            except PathaoOrderError as exc:
+                status = "uncertain" if exc.uncertain else "failed"
+                ledger.finish(key, status, message=str(exc))
+                record.update(Status="Check Pathao" if exc.uncertain else "Failed", Message=str(exc))
+            except Exception:
+                # An unexpected failure could occur after the server accepted the POST.
+                message = "Creation could not be confirmed. Check this merchant order ID in Pathao before retrying."
+                ledger.finish(key, "uncertain", message=message)
+                record.update(Status="Check Pathao", Message=message)
+            else:
+                consignment = data["consignment_id"]
+                ledger.finish(key, "created", consignment_id=consignment)
+                record.update(Status="Created", Consignment=consignment)
+        report.append(record)
+        if progress:
+            progress((index + 1) / len(prepared))
+    return report
+
+
+def _sync_created_orders(report):
+    """Update a grouped WooCommerce order only when all its parcels succeeded."""
+    grouped = {}
+    messages = []
+    for parcel in report:
+        # The processor joins merged WooCommerce references with commas.
+        for reference in parcel["Order"].split(","):
+            order_id = extract_order_id(reference)
+            if order_id:
+                grouped.setdefault(order_id, []).append(parcel)
+    for order_id, parcels in grouped.items():
+        if not all(p["Status"] in {"Created", "Already created"} for p in parcels):
+            messages.append({"Order": order_id, "Result": "Not updated: one or more parcels were not created."})
+            continue
+        # An all-already-created batch is a rerun, not another WC update request.
+        if not any(p["Status"] == "Created" for p in parcels):
+            continue
+        consignments = ", ".join(dict.fromkeys(p["Consignment"] for p in parcels))
+        try:
+            ok, message = update_order_status(order_id, "confirmed", note=f"Dispatched via Pathao — Consignments: {consignments}")
+        except Exception:
+            ok, message = False, "Status update failed. Check WooCommerce before updating manually."
+        messages.append({"Order": order_id, "Result": "Updated to confirmed" if ok else message})
+    return messages
+
+
 def _render_auto_dispatch_tab():
-    """Feature #1: Push processed Pathao orders directly via Pathao API (bulk create)."""
     section_card(
-        "Auto-Dispatch to Pathao — One-Click API Push",
-        "Automatically create consignments on Pathao for all processed orders without manual portal upload.",
+        "Auto-Dispatch to Pathao",
+        "Review processed parcels, choose their pickup stores, and create consignments.",
     )
+    for key, default in (("pathao_dispatch_report", []), ("pathao_dispatch_wc_report", []),
+                         ("pathao_dispatch_stores", []), ("pathao_dispatch_account", "")):
+        if key not in st.session_state:
+            st.session_state[key] = default
 
     result_df = st.session_state.get("pathao_res_df")
     if result_df is None or result_df.empty:
-        st.info(
-            "⚡ No processed orders found. Go to **Order Processing** tab first, pull orders and run 'Process orders'."
-        )
+        st.info("Go to Order Processing and process orders first.")
         return
 
-    with st.expander("📄 Preview Orders for Dispatch", expanded=False):
-        dispatch_search = render_dataframe_search(
-            result_df, "pathao_dispatch", height=400
+    client = _get_pathao_client()
+    if client is None:
+        return
+    account_scope = hashlib.sha256(json.dumps(
+        [client.base_url, client.client_id, client.username], ensure_ascii=False
+    ).encode()).hexdigest()
+    if st.session_state["pathao_dispatch_account"] != account_scope:
+        st.session_state["pathao_dispatch_account"] = account_scope
+        st.session_state["pathao_dispatch_stores"] = []
+        st.session_state["pathao_dispatch_report"] = []
+        st.session_state["pathao_dispatch_wc_report"] = []
+
+    with st.expander("Preview all parcels for dispatch", expanded=True):
+        st.dataframe(result_df, use_container_width=True)
+        st.caption("Every row above is a parcel. Review recipient details, COD, and split-parcel instructions before dispatch.")
+
+    if st.button("Load pickup stores", key="pathao_load_stores", use_container_width=True):
+        stores, error = client.get_stores()
+        st.session_state["pathao_dispatch_stores"] = stores if not error else []
+        if error:
+            st.error(error)
+        elif not stores:
+            st.warning("No pickup stores are available on this Pathao account.")
+
+    store_options = {}
+    for store in st.session_state["pathao_dispatch_stores"]:
+        if str(store.get("is_active", 1)).lower() in {"0", "false"}:
+            continue
+        try:
+            store_id = int(store["store_id"])
+            if store_id > 0:
+                store_options[store_id] = f"{store.get('store_name', store.get('name', 'Store'))} (ID {store_id})"
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    stores_by_outlet = {}
+    for outlet in dict.fromkeys(_warehouse(row) for _, row in result_df.iterrows()):
+        widget_key = "pathao_store_" + hashlib.sha256(f"{account_scope}:{outlet}".encode()).hexdigest()[:16]
+        stores_by_outlet[outlet] = st.selectbox(
+            f"Pickup store for {outlet}", [None, *store_options],
+            format_func=lambda value: "Select a pickup store" if value is None else store_options[value],
+            key=widget_key,
         )
-        st.dataframe(dispatch_search.head(20), use_container_width=True)
+    if not store_options:
+        st.info("Load pickup stores, then select the correct store for each outlet.")
 
-    with st.expander("⚙️ Dispatch Settings", expanded=True):
-        dc1, dc2, dc3 = st.columns(3)
-        with dc1:
-            item_type = st.selectbox(
-                "Item Type",
-                [2, 1, 3],
-                format_func=lambda x: {2: "Parcel", 1: "Document", 3: "Fragile"}[x],
-            )
-        with dc2:
-            delivery_type = st.selectbox(
-                "Delivery Type",
-                [48, 12],
-                format_func=lambda x: {48: "Normal (48h)", 12: "Express (12h)"}[x],
-            )
-        with dc3:
-            special_instructions = st.text_input(
-                "Special Instructions", placeholder="Handle with care..."
-            )
+    dc1, dc2 = st.columns(2)
+    with dc1:
+        item_type = st.selectbox("Item Type", [2, 1], format_func=lambda value: {2: "Parcel", 1: "Document"}[value], key="pathao_dispatch_item_type")
+    with dc2:
+        delivery_type = st.selectbox("Delivery Type", [48, 12], format_func=lambda value: {48: "Normal", 12: "On demand"}[value], key="pathao_dispatch_delivery_type")
+    instructions = st.text_input("Special Instructions", placeholder="Handle with care...", key="pathao_dispatch_instructions")
+    st.caption("Pathao resolves delivery locations from the full address. Pickup selection does not change the recipient address.")
+    source_is_wc = st.session_state.get("pathao_preview_source") == SOURCE_WOOCOM
+    sync_wc = st.checkbox(
+        "Update matching WooCommerce orders to confirmed after creation",
+        value=source_is_wc, key=f"pathao_dispatch_sync_wc_{source_is_wc}",
+        help="Enable only if these merchant order IDs belong to the connected WooCommerce store. An order is updated after all of its parcels succeed.",
+    )
 
-    if st.button(
-        "🚀 Push to Pathao API",
-        type="primary",
-        use_container_width=True,
-        key="pathao_autodispatch_btn",
-    ):
-        client = _get_pathao_client()
-        if client is None:
-            return
+    prepared, errors = _prepare_dispatch(
+        result_df, stores_by_outlet, account_scope, item_type=item_type,
+        delivery_type=delivery_type, special_instructions=instructions,
+    )
+    if errors and all(stores_by_outlet.values()):
+        st.error("Correct the following source data and process again before dispatching.")
+        st.dataframe(pd.DataFrame(errors), use_container_width=True)
 
-        success_count = 0
-        fail_count = 0
-        fail_details = []
-        wc_status_fails = []
+    if st.button("🚀 Push to Pathao API", type="primary", use_container_width=True,
+                 key="pathao_autodispatch_btn", disabled=bool(errors) or not prepared):
+        st.session_state["pathao_dispatch_wc_report"] = []
+        try:
+            with DispatchLedger() as ledger, st.status("Creating Pathao consignments...", expanded=True) as status:
+                progress = st.progress(0)
+                report = _dispatch_batch(client, ledger, prepared, progress.progress)
+                st.session_state["pathao_dispatch_report"] = report
+                if sync_wc:
+                    st.session_state["pathao_dispatch_wc_report"] = _sync_created_orders(report)
+                failed = sum(r["Status"] not in {"Created", "Already created"} for r in report)
+                created = sum(r["Status"] == "Created" for r in report)
+                status.update(label=f"{created} consignments created; {failed} need attention.",
+                              state="error" if failed else "complete", expanded=bool(failed))
+        except Exception:
+            st.error("Dispatch stopped because its results could not be saved. Check Pathao before retrying; recorded attempts will not be sent again.")
 
-        with st.status(
-            f"Dispatching {len(result_df)} orders to Pathao...", expanded=True
-        ) as dispatch_status:
-            progress = st.progress(0)
-            total = len(result_df)
-
-            for i, (_, row) in enumerate(result_df.iterrows()):
-                try:
-                    # Build Pathao order payload from processed dataframe columns
-                    payload = {
-                        "merchant_order_id": str(row.get("Order ID", f"ORD-{i}")),
-                        "recipient_name": str(row.get("Name", "Customer")),
-                        "recipient_phone": str(row.get("Phone", "")).replace(" ", ""),
-                        "recipient_address": str(row.get("Address", "")),
-                        "recipient_city": int(row.get("CityId", 1)),
-                        "recipient_zone": int(row.get("ZoneId", 1)),
-                        "recipient_area": (
-                            int(row.get("AreaId", 0)) if row.get("AreaId") else None
-                        ),
-                        "delivery_type": delivery_type,
-                        "item_type": item_type,
-                        "special_instruction": str(
-                            row.get("SpecialInstruction", special_instructions)
-                        ),
-                        "item_quantity": int(row.get("Qty", 1)),
-                        "item_weight": float(row.get("Weight", 0.5)),
-                        "amount_to_collect": float(row.get("COD", row.get("Total", 0))),
-                        "item_description": str(row.get("ItemDesc", "")),
-                    }
-                    # Remove None fields
-                    payload = {
-                        k: v for k, v in payload.items() if v is not None and v != ""
-                    }
-
-                    headers = client._get_headers()
-                    from src.utils.http import request_with_backoff
-
-                    res = request_with_backoff(
-                        "POST",
-                        f"{client.base_url}/aladdin/api/v1/orders",
-                        json=payload,
-                        headers=headers,
-                        timeout=15,
-                    )
-                    res.raise_for_status()
-                    resp_data = res.json().get("data", {})
-                    consignment_id = resp_data.get("consignment_id", "Created")
-
-                    # Update the WooCommerce order status so the dispatched order
-                    # shows up in the dashboard's shipped views.
-                    wc_order_id = extract_order_id(payload["merchant_order_id"])
-                    if wc_order_id:
-                        wc_ok, wc_msg = update_order_status(
-                            wc_order_id,
-                            "confirmed",
-                            note=f"Dispatched via Pathao — Consignment {consignment_id}",
-                        )
-                        if not wc_ok:
-                            wc_status_fails.append(
-                                {
-                                    "Order": wc_order_id,
-                                    "Consignment": consignment_id,
-                                    "Error": wc_msg,
-                                }
-                            )
-                            st.write(
-                                f"⚠️ Order {wc_order_id} dispatched, but WooCommerce status update failed ({wc_msg})"
-                            )
-
-                    st.write(
-                        f"✅ Order {payload['merchant_order_id']} → Consignment: {consignment_id}"
-                    )
-                    success_count += 1
-                except Exception as exc:
-                    fail_count += 1
-                    fail_details.append(
-                        {"Order": str(row.get("Order ID", i)), "Error": str(exc)}
-                    )
-                    st.write(f"❌ Order {row.get('Order ID', i)}: {exc}")
-
-                progress.progress((i + 1) / total)
-
-            if fail_count == 0:
-                dispatch_status.update(
-                    label=f"✅ All {success_count} orders dispatched!",
-                    state="complete",
-                    expanded=False,
-                )
-            else:
-                dispatch_status.update(
-                    label=f"⚠️ {success_count} dispatched, {fail_count} failed",
-                    state="error",
-                    expanded=True,
-                )
-
-        if fail_details:
-            with st.expander(f"❌ {fail_count} Failed Orders"):
-                st.dataframe(pd.DataFrame(fail_details), use_container_width=True)
-
-        if wc_status_fails:
-            with st.expander(
-                f"⚠️ {len(wc_status_fails)} WooCommerce Status Update Failures"
-            ):
-                st.caption(
-                    "Orders were dispatched on Pathao, but their WooCommerce status could not be updated. Update them manually in WooCommerce Orders."
-                )
-                st.dataframe(pd.DataFrame(wc_status_fails), use_container_width=True)
+    report = st.session_state["pathao_dispatch_report"]
+    if report:
+        st.caption("Most recent dispatch attempt")
+        report_df = pd.DataFrame(report)
+        st.dataframe(report_df, use_container_width=True)
+        st.download_button("Download dispatch results", report_df.to_csv(index=False).encode("utf-8-sig"),
+                           "Pathao_Dispatch_Results.csv", mime="text/csv", key="pathao_dispatch_download")
+        if any(r["Status"] == "Check Pathao" for r in report):
+            st.warning("Some requests could have reached Pathao. Search their merchant order IDs in Order Tracking or the Pathao portal. These parcels are blocked from being sent again.")
+        if any(r["Status"] == "Failed" for r in report):
+            st.info("Correct rejected orders and retry. Previously created parcels will be skipped.")
+    if st.session_state["pathao_dispatch_wc_report"]:
+        st.caption("WooCommerce status results; Pathao creations are retained even if a status update fails.")
+        st.dataframe(pd.DataFrame(st.session_state["pathao_dispatch_wc_report"]), use_container_width=True)
