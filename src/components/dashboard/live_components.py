@@ -269,6 +269,7 @@ def _get_live_combined_source():
     frames = [
         frame
         for frame in (
+            st.session_state.get("wc_full_df"),
             st.session_state.get("wc_curr_df"),
             st.session_state.get("wc_prev_df"),
             st.session_state.get("wc_backlog_df"),
@@ -277,7 +278,16 @@ def _get_live_combined_source():
     ]
     if not frames:
         return None
-    return pd.concat(frames, ignore_index=True).drop_duplicates()
+    combined = pd.concat(frames, ignore_index=True)
+    try:
+        return combined.drop_duplicates()
+    except TypeError:
+        subset = [
+            c
+            for c in ["Order ID", "Line Item ID", "Line Item Index", "Product Name"]
+            if c in combined.columns
+        ]
+        return combined.drop_duplicates(subset=subset) if subset else combined
 
 
 def _render_dashboard_view_selector():

@@ -17,11 +17,12 @@ from src.components.dashboard.live_components import (
     render_dashboard_banner,
 )
 from src.components.ui.widgets import render_reset_confirm
+from datetime import timedelta
+
 from src.config.constants import bd_now, bd_today
 from src.processing.column_detection import find_columns
 from src.processing.data_processing import (
     aggregate_data,
-    apply_order_view,
     apply_order_view_comparison,
     filter_live_dashboard_view,
     filter_shipped_by_slot,
@@ -30,6 +31,93 @@ from src.processing.data_processing import (
 from src.services.woocommerce.client import load_live_source
 from src.utils.logging import log_system_event
 from src.utils.safe_ops import safe_render
+
+
+def _get_dashboard_source(fallback=None):
+    """Combine dashboard partitions so view rules operate on one source."""
+    frames = [
+        frame
+        for frame in (
+            st.session_state.get("wc_full_df"),
+            st.session_state.get("wc_curr_df"),
+            st.session_state.get("wc_prev_df"),
+            st.session_state.get("wc_backlog_df"),
+        )
+        if frame is not None and not frame.empty
+    ]
+    if not frames:
+        return fallback
+    combined = pd.concat(frames, ignore_index=True)
+    try:
+        return combined.drop_duplicates()
+    except TypeError:
+        subset = [
+            c
+            for c in ["Order ID", "Line Item ID", "Line Item Index", "Product Name"]
+            if c in combined.columns
+        ]
+        return combined.drop_duplicates(subset=subset) if subset else combined
+
+
+def _get_comparison_frame(
+    selected_view: str,
+    nav_mode: str,
+    order_view_mode: str,
+    live_mapping: dict | None = None,
+):
+    """Retrieve and prepare the comparison DataFrame for KPI delta and badge rendering."""
+    if selected_view == "Queue":
+        return None
+
+    _dash_src = _get_dashboard_source()
+    _cmp_f = None
+
+    if selected_view in {"Today Shipped", "Today"}:
+        _cmp_f = filter_live_dashboard_view(_dash_src, "Last Day Shipped")
+    elif selected_view == "All Orders":
+        if _dash_src is not None and not _dash_src.empty:
+            _cmp_f = filter_live_dashboard_view(
+                _dash_src, "All Orders", reference_date=bd_today() - timedelta(days=1)
+            )
+        if _cmp_f is None or _cmp_f.empty:
+            _cmp_raw = st.session_state.get("wc_prev_df")
+            if _cmp_raw is None or _cmp_raw.empty:
+                full_raw = st.session_state.get("wc_full_df")
+                if full_raw is not None and not full_raw.empty:
+                    try:
+                        from src.services.woocommerce.client import (
+                            _partition_operational_data,
+                        )
+
+                        _, df_prev_ext, _, _, _ = _partition_operational_data(full_raw)
+                        _cmp_raw = df_prev_ext
+                    except Exception:
+                        pass
+            if _cmp_raw is not None and not _cmp_raw.empty:
+                _cmp_f = apply_order_view_comparison(_cmp_raw, nav_mode, order_view_mode)
+    elif selected_view in {"Last Day Shipped", "Last Day"}:
+        if _dash_src is not None and not _dash_src.empty:
+            _cmp_f = filter_live_dashboard_view(
+                _dash_src,
+                "Last Day Shipped",
+                reference_date=bd_today() - timedelta(days=1),
+            )
+    else:
+        _cmp_raw = (
+            st.session_state.get("wc_prev_df")
+            if nav_mode == "Today"
+            else st.session_state.get("wc_curr_df")
+            if nav_mode in ["Backlog", "Prev"]
+            else None
+        )
+        if _cmp_raw is not None and not _cmp_raw.empty:
+            _cmp_f = apply_order_view_comparison(_cmp_raw, nav_mode, order_view_mode)
+
+    if _cmp_f is not None and not _cmp_f.empty:
+        mapping = find_columns(_cmp_f) or live_mapping or {}
+        _cmp_standard, _ = prepare_granular_data(_cmp_f, mapping)
+        return _cmp_standard
+    return None
 
 
 # KPI cards are rendered once per page run. The data-sync fragment triggers a
@@ -49,56 +137,24 @@ def _refresh_core_metrics():
     m_df = st.session_state.get("live_df_standard")
     c_df = st.session_state.get("live_cmp_standard")
 
-    if m_df is None or m_df.empty:
+    if m_df is None:
         # Fallback: nothing stashed yet (e.g. very first render before the
         # main pipeline ran) — recompute from session state via the shared helper.
-        if nav_mode == "Today":
-            raw = st.session_state.get("wc_curr_df")
-        elif nav_mode == "Backlog":
-            raw = st.session_state.get("wc_backlog_df")
-        else:
-            raw = st.session_state.get("wc_prev_df")
-        if raw is None:
+        raw = _get_dashboard_source()
+        if raw is None or raw.empty:
             st.caption("⏳ Waiting for data...")
             return
-        m_df = apply_order_view(raw, nav_mode, order_view_mode)
+        m_df = filter_live_dashboard_view(raw, selected_view)
         if m_df is None:
             m_df = pd.DataFrame()
         m_df, _ = prepare_granular_data(
             m_df, find_columns(m_df) if not m_df.empty else {}
         )
 
-    if selected_view not in {"Today", "Today Shipped"}:
+    if selected_view == "Queue":
         c_df = None
-    elif c_df is None or c_df.empty:
-        if nav_mode == "Today" and order_view_mode == "Shipped":
-            _cmp_raw = _get_day_comparison_source()
-        else:
-            _cmp_raw = (
-                st.session_state.get("wc_prev_df")
-                if nav_mode == "Today"
-                else st.session_state.get("wc_curr_df")
-                if nav_mode in ["Backlog", "Prev"]
-                else None
-            )
-        if (_cmp_raw is None or _cmp_raw.empty) and nav_mode == "Today":
-            full_raw = st.session_state.get("wc_full_df")
-            if full_raw is not None and not full_raw.empty:
-                try:
-                    from src.services.woocommerce.client import (
-                        _partition_operational_data,
-                    )
-
-                    _, df_prev_ext, _, _, _ = _partition_operational_data(full_raw)
-                    _cmp_raw = df_prev_ext
-                except Exception:
-                    pass
-        if _cmp_raw is not None and not _cmp_raw.empty:
-            _cmp_f = apply_order_view_comparison(_cmp_raw, nav_mode, order_view_mode)
-            if _cmp_f is not None and not _cmp_f.empty:
-                c_df, _ = prepare_granular_data(
-                    _cmp_f, find_columns(_cmp_f) if not _cmp_f.empty else {}
-                )
+    elif c_df is None:
+        c_df = _get_comparison_frame(selected_view, nav_mode, order_view_mode)
 
     dummy_mapping = {
         "name": "Product Name",
@@ -142,22 +198,6 @@ def _get_day_comparison_source():
     ]
     if not frames:
         return None
-    return pd.concat(frames, ignore_index=True).drop_duplicates()
-
-
-def _get_dashboard_source(fallback=None):
-    """Combine dashboard partitions so view rules operate on one source."""
-    frames = [
-        frame
-        for frame in (
-            st.session_state.get("wc_curr_df"),
-            st.session_state.get("wc_prev_df"),
-            st.session_state.get("wc_backlog_df"),
-        )
-        if frame is not None and not frame.empty
-    ]
-    if not frames:
-        return fallback
     return pd.concat(frames, ignore_index=True).drop_duplicates()
 
 
@@ -443,6 +483,8 @@ def render_live_tab():
         st.session_state.live_dashboard_view = "All Orders"
         st.session_state.wc_nav_mode = "Today"
         st.session_state.live_order_filter = "All Orders"
+        st.session_state.live_cmp_standard = None
+        st.session_state.pop("shift_goals", None)
 
     render_reset_confirm("Live Dashboard", "live", _reset_live_state)
     st.session_state.manual_tab_active = False
@@ -593,11 +635,6 @@ def render_live_tab():
     elif nav_mode == "Today" and "wc_curr_df" in st.session_state:
         df_live = st.session_state.wc_curr_df
 
-    # Prepare granular data early
-    df_standard, timeframe = prepare_granular_data(
-        df_live, find_columns(df_live) if df_live is not None else {}
-    )
-
     # ── Header: Refactored with Hick's Law Compliance ───────────────────────
     # Single responsibility: delegate to component module
     render_dashboard_banner(load_live_source)
@@ -609,83 +646,54 @@ def render_live_tab():
     df_live = filter_live_dashboard_view(
         _get_dashboard_source(fallback=df_live), selected_view
     )
-
-    if df_live is None or df_live.empty:
-        st.warning(f"No data found for the **{nav_mode}** slot.")
-        if nav_mode != "Today" and nav_mode != "Offline":
-            st.session_state.wc_nav_mode = "Today"
-            st.rerun()
-        return
-
-    status_col = (
-        "Order Status"
-        if "Order Status" in df_live.columns
-        else "Status"
-        if "Status" in df_live.columns
-        else None
-    )
-    if status_col is None and order_view_mode != "All Orders":
-        st.warning("⚠️ 'Order Status' column not found — cannot apply filter.")
-        return
-
-    if df_live is None or df_live.empty:
-        if selected_view in {
-            "Today Shipped",
-            "Today",
-            "Last Day Shipped",
-            "Last Day",
-        }:
-            _render_empty_sales_kpis(selected_view)
-        elif selected_view == "Queue":
-            st.info("📋 No hold or waiting orders in the queue.")
-        else:
-            st.info(f"📦 No active orders found in the **{nav_mode}** slot.")
-        return
+    if df_live is None:
+        df_live = pd.DataFrame()
 
     # ── Column Detection ──────────────────────────────────────────────────────
-    auto_cols = find_columns(df_live) if df_live is not None else {}
+    auto_cols = find_columns(df_live) if not df_live.empty else {}
     live_mapping = {
-        "name": auto_cols.get("name"),
-        "cost": auto_cols.get("cost"),
-        "qty": auto_cols.get("qty"),
-        "date": auto_cols.get("date"),
-        "order_id": auto_cols.get("order_id"),
-        "phone": auto_cols.get("phone"),
+        "name": auto_cols.get("name", "Product Name"),
+        "cost": auto_cols.get("cost", "Item Cost"),
+        "qty": auto_cols.get("qty", "Quantity"),
+        "date": auto_cols.get("date", "Order Date"),
+        "order_id": auto_cols.get("order_id", "Order ID"),
+        "phone": auto_cols.get("phone", "Phone"),
     }
-    # Re-assign df_standard with the finally filtered df_live
+    # Standardize data for current view
     df_standard, timeframe = prepare_granular_data(df_live, live_mapping)
 
-    # Stash the granular frames so the auto-refresh KPI fragment renders the
-    # exact same data as the charts below (no second, divergent filtering pass).
+    # Stash the granular frames so the KPI cards and downstream charts share
+    # the exact same synchronized dataset.
     st.session_state["live_df_standard"] = df_standard
-    _cmp_standard = None
-    if selected_view in {"Today Shipped", "Today"}:
-        _cmp_f = filter_live_dashboard_view(
-            _get_dashboard_source(), "Last Day Shipped"
-        )
-        if _cmp_f is not None and not _cmp_f.empty:
-            _cmp_standard, _ = prepare_granular_data(
-                _cmp_f, find_columns(_cmp_f) if not _cmp_f.empty else live_mapping
-            )
-    st.session_state["live_cmp_standard"] = _cmp_standard
+    st.session_state["live_cmp_standard"] = _get_comparison_frame(
+        selected_view, nav_mode, order_view_mode, live_mapping
+    )
 
+    # ── KPI Cards (5 core metric cards + comparison deltas) ────────────────────
+    _refresh_core_metrics()
+
+    # ── Operational Pipeline Summary (for All Orders view) ────────────────────
+    if selected_view == "All Orders" and not df_live.empty:
+        _render_order_pipeline_summary(df_live)
+
+    # ── Detail & Performance Charts ─────────────────────────────────────────
     if df_standard.empty:
-        st.warning("Data preparation returned empty results.")
-        st.dataframe(df_live.head(20), use_container_width=True)
+        if selected_view in {"Today Shipped", "Today"}:
+            st.info("🚚 **No orders shipped yet today.** Today's dispatches will appear here once fulfilled.")
+        elif selected_view in {"Last Day Shipped", "Last Day"}:
+            st.info("🕘 **No shipped orders recorded** for the previous calendar day.")
+        elif selected_view == "Queue":
+            st.info("📋 **Queue is clear.** There are currently no orders on hold or waiting.")
+        else:
+            st.info(f"📦 **No active orders found** for the **{selected_view}** view.")
+        render_staleness_monitor()
         return
 
     drill, summ, top, basket = aggregate_data(df_standard, live_mapping)
     if drill is None or summ is None:
-        st.warning("Data aggregation failed.")
-        st.dataframe(df_standard.head(20), use_container_width=True)
+        st.info("ℹ️ Insufficient category data available to display charts for this view.")
+        render_staleness_monitor()
         return
-
-    # ── KPI Cards (30s auto-refresh) ─────────────────────────────────────────
-    _refresh_core_metrics()
-
-    # ── Operational Pipeline Summary (for All Orders view) ────────────────────
-    if selected_view == "All Orders":
-        _render_order_pipeline_summary(df_live)
 
     # A conditional view selector avoids executing hidden tab content on every
     # Streamlit rerun.
@@ -724,7 +732,7 @@ def render_live_tab():
         )
 
         # ── Dispatch Export (Shipped Only mode only) ─────────────────────────
-        if selected_view == "Today":
+        if selected_view in {"Today Shipped", "Today"}:
             _render_dispatch_export()
     else:
         # ── Market Basket & Cross-Selling Intelligence ───────────────────────

@@ -57,7 +57,14 @@ def _render_operational_cycle_metrics(
         )
 
     dashboard_view = st.session_state.get("live_dashboard_view")
-    is_pre_scoped = dashboard_view in {"Today", "Last Day", "Queue", "All Orders"}
+    is_pre_scoped = dashboard_view in {
+        "Today",
+        "Today Shipped",
+        "Last Day",
+        "Last Day Shipped",
+        "Queue",
+        "All Orders",
+    }
 
     if not is_pre_scoped and order_view_mode == "All Orders" and nav_mode == "Today":
         m_df = filter_all_orders_to_slot(m_df, nav_mode)
@@ -588,54 +595,15 @@ def _render_ai_briefing_section(
 
 
 def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, today_aov):
-    """Render the bottom tabbed section: Goals, History, Handover."""
+    """Render the bottom tabbed section: History, Handover."""
     bottom_tabs = st.tabs(
         [
-            "🎯 Shift Goals",
             "📅 30-Day History",
             "📝 Shift Handover",
         ]
     )
 
     with bottom_tabs[0]:
-        st.markdown("#### 🎯 Set Shift Targets")
-        st.caption(
-            "Targets appear as progress bars on the Core Metrics KPI cards above."
-        )
-        goals = st.session_state.get("shift_goals", {})
-        gc1, gc2, gc3 = st.columns(3)
-        with gc1:
-            rev_g = st.number_input(
-                "💰 Revenue Goal (৳)",
-                min_value=0,
-                max_value=5_000_000,
-                value=int(goals.get("revenue", 0)),
-                step=5000,
-                key="goal_revenue_input",
-            )
-        with gc2:
-            ord_g = st.number_input(
-                "🛒 Order Goal",
-                min_value=0,
-                max_value=5000,
-                value=int(goals.get("orders", 0)),
-                step=10,
-                key="goal_orders_input",
-            )
-        with gc3:
-            st.markdown('<div style="padding-top:28px;"></div>', unsafe_allow_html=True)
-            if st.button(
-                "✅ Apply Goals",
-                use_container_width=True,
-                type="primary",
-                key="apply_goals_btn",
-            ):
-                st.session_state["shift_goals"] = {"revenue": rev_g, "orders": ord_g}
-                st.session_state["_last_snap_key"] = ""
-                st.toast(f"🎯 Goals set — Revenue: ৳{rev_g:,} | Orders: {ord_g}")
-                st.rerun()
-
-    with bottom_tabs[1]:
         st.markdown("#### 📈 30-Day Revenue & Order Trend")
         hist_df = load_snapshot_history(30)
         if hist_df.empty or len(hist_df) < 2:
@@ -699,7 +667,7 @@ def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, toda
                     hide_index=True,
                 )
 
-    with bottom_tabs[2]:
+    with bottom_tabs[1]:
         st.markdown("#### 📝 Shift Handover Report")
         st.caption(
             "Generate a formatted summary ready to share with the next shift or management."
@@ -730,20 +698,12 @@ def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, toda
                 ):
                     top_lines += f"  • {row.get(name_col_h, 'Unknown')} — {row.get(qty_col_h, 0):.0f} units | ৳{row.get(amt_col_h, 0):,.0f}\n"
 
-            goals_h = st.session_state.get("shift_goals", {})
-            rev_goal_h = goals_h.get("revenue", 0)
-            rev_pct_h = (
-                f"{today_rev / rev_goal_h * 100:.0f}%"
-                if rev_goal_h > 0
-                else "No target set"
-            )
-
             now_bd = bd_now()
             handover_text = (
                 f"*🛡️ DEEN OPS — Shift Handover Report*\n"
                 f"Generated: {now_bd.strftime('%d %b %Y, %I:%M %p')} (BD)\n\n"
                 f"*📊 Shift Summary*\n"
-                f"  Revenue: ৳{today_rev:,.0f}{f' ({rev_pct_h} of target)' if rev_goal_h else ''}\n"
+                f"  Revenue: ৳{today_rev:,.0f}\n"
                 f"  Orders: {today_orders}\n"
                 f"  Units Sold: {today_qty:.0f}\n"
                 f"  Basket Size: ৳{today_aov:,.0f}\n\n"

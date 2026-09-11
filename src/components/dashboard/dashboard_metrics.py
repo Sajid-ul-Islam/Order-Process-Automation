@@ -1,4 +1,4 @@
-"""Operational metrics rendering: KPI cards, deltas, status breakdown, and goal tracking."""
+"""Operational metrics rendering: KPI cards, deltas, and status breakdown."""
 
 from __future__ import annotations
 
@@ -123,18 +123,31 @@ def render_operational_metrics(
         co_net_r = max(0.0, co_gross - co_cb)
         co_b = (co_gross / co_o) if co_o > 0 else 0.0
 
-        prefix = "Today " if nav_mode == "Prev" else ""
-        suffix = "" if nav_mode == "Prev" else " vs Prev"
-
-        dq = m_qty - co_q
-        dr = m_gross_rev - co_gross
-        d_o = m_ord - co_o
-        db = m_gross_bv - co_b
-        if nav_mode == "Prev":
+        dashboard_view = st.session_state.get("live_dashboard_view")
+        if dashboard_view in {"Last Day Shipped", "Last Day"}:
+            prefix = ""
+            suffix = " vs Prior"
+            dq = m_qty - co_q
+            dr = m_gross_rev - co_gross
+            d_o = m_ord - co_o
+            db = m_gross_bv - co_b
+            cmp_label = "Day Prior"
+        elif nav_mode == "Prev":
+            prefix = "Today "
+            suffix = ""
             dq = co_q - m_qty
             dr = co_gross - m_gross_rev
             d_o = co_o - m_ord
             db = co_b - m_gross_bv
+            cmp_label = "Today"
+        else:
+            prefix = ""
+            suffix = " vs Prev"
+            dq = m_qty - co_q
+            dr = m_gross_rev - co_gross
+            d_o = m_ord - co_o
+            db = m_gross_bv - co_b
+            cmp_label = "Last Day"
 
         pct_q = (
             ((dq / co_q) * 100)
@@ -198,7 +211,7 @@ def render_operational_metrics(
     # ── "Last Day" Comparison Badges ─────────────────────────────────────
     # Prominent badges showing the previous period's absolute values,
     # placed between the main value and the delta on each KPI card.
-    def _last_day_badge(prev_str, color="#64748b"):
+    def _last_day_badge(prev_str, label="Last Day", color="#64748b"):
         if not prev_str:
             return ""
         return (
@@ -206,13 +219,14 @@ def render_operational_metrics(
             f"background:rgba(100,116,139,0.08);padding:2px 7px;"
             f"border-radius:4px;margin-top:5px;display:inline-block;"
             f'letter-spacing:0.02em;">'
-            f"📅 Last Day: {prev_str}</div>"
+            f"📅 {label}: {prev_str}</div>"
         )
 
-    badge_qty = _last_day_badge(prev_q_str)
-    badge_rev = _last_day_badge(prev_r_str)
-    badge_ord = _last_day_badge(prev_o_str)
-    badge_bv = _last_day_badge(prev_b_str)
+    cmp_badge_label = cmp_label if "cmp_label" in locals() else "Last Day"
+    badge_qty = _last_day_badge(prev_q_str, label=cmp_badge_label)
+    badge_rev = _last_day_badge(prev_r_str, label=cmp_badge_label)
+    badge_ord = _last_day_badge(prev_o_str, label=cmp_badge_label)
+    badge_bv = _last_day_badge(prev_b_str, label=cmp_badge_label)
 
     extra_metric_label = "Basket Size"
     extra_metric_value = v_bv
@@ -654,59 +668,6 @@ def render_operational_metrics(
     )
 
     st.markdown(card_html, unsafe_allow_html=True)
-
-    # ── Feature #3: Goal Threshold Alerts ──────────────────────────────────────
-    goals = st.session_state.get("shift_goals", {})
-    rev_goal = goals.get("revenue", 0)
-    ord_goal = goals.get("orders", 0)
-
-    if rev_goal > 0 or ord_goal > 0:
-        st.markdown("###### 🎯 Shift Goal Progress")
-        g1, g2 = st.columns(2)
-        with g1:
-            if rev_goal > 0:
-                pct = min(m_gross_rev / rev_goal, 1.0)
-                color = (
-                    "#10b981" if pct >= 1.0 else "#f59e0b" if pct >= 0.7 else "#ef4444"
-                )
-                label = (
-                    "✅ Goal Reached!"
-                    if pct >= 1.0
-                    else f"৳{m_gross_rev:,.0f} / ৳{rev_goal:,.0f}"
-                )
-                st.markdown(
-                    f'<div style="margin-bottom:8px;">'
-                    f'<span style="font-size:0.72rem;font-weight:700;color:{color};letter-spacing:0.05em;">'
-                    f"💰 REVENUE — {label}</span>"
-                    f'<div style="background:rgba(255,255,255,0.08);border-radius:6px;height:8px;margin-top:4px;overflow:hidden;">'
-                    f'<div style="background:{color};width:{pct * 100:.1f}%;height:100%;border-radius:6px;'
-                    f'transition:width 0.6s ease;"></div></div></div>',
-                    unsafe_allow_html=True,
-                )
-        with g2:
-            if ord_goal > 0:
-                pct_o = min(m_ord / ord_goal, 1.0)
-                color_o = (
-                    "#10b981"
-                    if pct_o >= 1.0
-                    else "#f59e0b"
-                    if pct_o >= 0.7
-                    else "#ef4444"
-                )
-                label_o = (
-                    "✅ Goal Reached!"
-                    if pct_o >= 1.0
-                    else f"{m_ord} / {ord_goal} orders"
-                )
-                st.markdown(
-                    f'<div style="margin-bottom:8px;">'
-                    f'<span style="font-size:0.72rem;font-weight:700;color:{color_o};letter-spacing:0.05em;">'
-                    f"🛒 ORDERS — {label_o}</span>"
-                    f'<div style="background:rgba(255,255,255,0.08);border-radius:6px;height:8px;margin-top:4px;overflow:hidden;">'
-                    f'<div style="background:{color_o};width:{pct_o * 100:.1f}%;height:100%;border-radius:6px;'
-                    f'transition:width 0.6s ease;"></div></div></div>',
-                    unsafe_allow_html=True,
-                )
 
     # ── Feature #5: Auto-Save Shift Snapshot ───────────────────────────────────
     # Only save once per render cycle, silently — keyed by data fingerprint

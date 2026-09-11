@@ -55,6 +55,9 @@ def fake_session(monkeypatch):
     monkeypatch.setattr(
         "src.processing.data_processing.bd_today", lambda: fixture_today
     )
+    monkeypatch.setattr(
+        "src.pages.live_dashboard.bd_today", lambda: fixture_today
+    )
     return st.session_state
 
 
@@ -311,3 +314,65 @@ def test_kpi_label_mapping_uses_actual_filter_values():
     # Ensure the dead 'Only' variants are NOT what drive labels.
     assert "Shipped Only" not in label_branches
     assert "Processing Only" not in label_branches
+
+
+def test_all_orders_comparison_frame_resolves_previous_day(fake_session):
+    from src.pages.live_dashboard import _get_comparison_frame
+
+    fake_session["live_dashboard_view"] = "All Orders"
+    fake_session["wc_nav_mode"] = "Today"
+    fake_session["live_order_filter"] = "All Orders"
+
+    # Today is 2026-08-13 (frozen by fake_session fixture)
+    orders_df = _orders(
+        [
+            (101, "completed", "2026-08-13 10:00:00", "2026-08-13 11:00:00"),
+            (102, "processing", "2026-08-13 10:00:00", "2026-08-13 10:00:00"),
+            (201, "completed", "2026-08-12 10:00:00", "2026-08-12 11:00:00"),
+            (202, "processing", "2026-08-12 10:00:00", "2026-08-12 10:00:00"),
+            (203, "cancelled", "2026-08-12 10:00:00", "2026-08-12 10:00:00"),
+            (204, "on-hold", "2026-08-12 10:00:00", "2026-08-12 10:00:00"),
+        ]
+    )
+    orders_df["Item Cost"] = 500
+    orders_df["Quantity"] = 2
+    orders_df["Product Name"] = "Test Product"
+
+    fake_session["wc_full_df"] = orders_df
+
+    cmp_df = _get_comparison_frame("All Orders", "Today", "All Orders")
+    assert cmp_df is not None and not cmp_df.empty
+    # Orders 201 (completed) and 202 (processing) from yesterday must be in comparison
+    assert set(cmp_df["Order ID"]) == {201, 202}
+
+
+def test_today_shipped_comparison_frame_resolves_last_day_shipped(fake_session):
+    from src.pages.live_dashboard import _get_comparison_frame
+
+    fake_session["live_dashboard_view"] = "Today Shipped"
+    fake_session["wc_nav_mode"] = "Today"
+    fake_session["live_order_filter"] = "Shipped"
+
+    orders_df = _orders(
+        [
+            (101, "completed", "2026-08-13 10:00:00", "2026-08-13 11:00:00"),
+            (201, "shipped", "2026-08-12 10:00:00", "2026-08-12 11:00:00"),
+            (202, "processing", "2026-08-12 10:00:00", "2026-08-12 10:00:00"),
+        ]
+    )
+    orders_df["Item Cost"] = 500
+    orders_df["Quantity"] = 2
+    orders_df["Product Name"] = "Test Product"
+
+    fake_session["wc_full_df"] = orders_df
+
+    cmp_df = _get_comparison_frame("Today Shipped", "Today", "Shipped")
+    assert cmp_df is not None and not cmp_df.empty
+    assert set(cmp_df["Order ID"]) == {201}
+
+
+def test_queue_view_has_no_comparison_frame(fake_session):
+    from src.pages.live_dashboard import _get_comparison_frame
+
+    cmp_df = _get_comparison_frame("Queue", "Backlog", "Queue")
+    assert cmp_df is None
