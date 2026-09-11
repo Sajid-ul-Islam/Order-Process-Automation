@@ -186,21 +186,6 @@ def _refresh_core_metrics():
     )
 
 
-def _get_day_comparison_source():
-    """Combine live and prior partitions so yesterday covers 00:00–23:59 BD."""
-    frames = [
-        frame
-        for frame in (
-            st.session_state.get("wc_curr_df"),
-            st.session_state.get("wc_prev_df"),
-        )
-        if frame is not None and not frame.empty
-    ]
-    if not frames:
-        return None
-    return pd.concat(frames, ignore_index=True).drop_duplicates()
-
-
 # ── Staleness Monitor ────────────────────────────────────────────────────────
 # Graphs how often the store's REST API serves cached/older order data by
 # charting WC_STALE_DATA detection events (and their retry outcomes) from
@@ -447,32 +432,6 @@ def _render_order_pipeline_summary(df):
         st.dataframe(workload, width="stretch", hide_index=True)
 
 
-def _render_empty_sales_kpis(selected_view="All Orders"):
-    """Keep the selected sales headline visible when its result is zero."""
-    if selected_view in {"Last Day Shipped", "Last Day"}:
-        st.metric("Actual Sales · Last Day", "0 orders")
-        st.caption("Actual sale = WooCommerce status `shipped` or `completed` only.")
-        return
-
-    previous_df = _get_day_comparison_source()
-    previous_df = filter_shipped_by_slot(previous_df, "Today", is_comparison=True)
-    if previous_df is None or previous_df.empty:
-        previous_orders = 0
-    elif "Order ID" in previous_df.columns:
-        previous_orders = int(previous_df["Order ID"].nunique())
-    else:
-        previous_orders = len(previous_df)
-
-    today_col, previous_col = st.columns(2)
-    today_col.metric(
-        "Actual Sales · Today",
-        "0 orders",
-        delta=f"{-previous_orders:+d} vs previous day",
-    )
-    previous_col.metric("Actual Sales · Previous Day", f"{previous_orders:,} orders")
-    st.caption("Actual sale = WooCommerce status `shipped` or `completed` only.")
-
-
 def render_live_tab():
     def _reset_live_state():
         st.session_state.wc_curr_df = None
@@ -484,7 +443,6 @@ def render_live_tab():
         st.session_state.wc_nav_mode = "Today"
         st.session_state.live_order_filter = "All Orders"
         st.session_state.live_cmp_standard = None
-        st.session_state.pop("shift_goals", None)
 
     render_reset_confirm("Live Dashboard", "live", _reset_live_state)
     st.session_state.manual_tab_active = False
@@ -787,8 +745,6 @@ def _render_dispatch_export():
     )
     if status_col is None:
         return
-
-    from src.processing.data_processing import filter_shipped_by_slot
 
     shipped_today = filter_shipped_by_slot(
         raw_df, nav_mode="Today", is_comparison=False

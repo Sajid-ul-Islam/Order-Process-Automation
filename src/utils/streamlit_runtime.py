@@ -21,13 +21,6 @@ def get_session_state() -> Any:
     return _st.session_state
 
 
-def get_secret(key: str, default: Any = None) -> Any:
-    try:
-        return _st.secrets.get(key, default)
-    except Exception:
-        return default
-
-
 def show_error(message: str) -> None:
     _st.error(message)
 

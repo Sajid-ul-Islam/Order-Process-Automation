@@ -8,9 +8,6 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from src.components.dashboard.market_basket_view import (
-    render_market_basket_analysis_section,
-)
 from src.components.dashboard.svg import _generate_sparkline_svg
 from src.processing.column_detection import (
     EMAIL_COL_CANDIDATES,
@@ -716,8 +713,3 @@ def render_operational_metrics(
     }
 
     return drill, summ, top, basket, active_df
-
-
-# ── Market Basket Analysis & Cross-Selling (re-export) ──────────────────────
-# Backward-compatibility alias so any historical reference seamlessly routes to Market Basket Analysis
-render_revenue_cashback_comparison_section = render_market_basket_analysis_section

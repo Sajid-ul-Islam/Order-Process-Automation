@@ -219,34 +219,6 @@ def _handle_auto_sync(auto_sync: bool):
             st.error(f"Auto-sync failed: {e}")
 
 
-def _handle_audio_input():
-    """Handle audio input transcription and return the transcribed prompt."""
-    if not hasattr(st, "audio_input"):
-        return None
-
-    audio_bytes = st.audio_input("Speak to Data Pilot", label_visibility="collapsed")
-    if not audio_bytes or audio_bytes == st.session_state.get("last_audio_bytes"):
-        return None
-
-    st.session_state.last_audio_bytes = audio_bytes
-    with st.spinner("🎧 Transcribing audio command..."):
-        from src.services.llm.manager import init_llm_controller
-
-        controller = init_llm_controller()
-        transcription = controller.transcribe_audio(audio_bytes.getvalue())
-
-    if transcription and not transcription.startswith("*(Failed"):
-        return transcription
-    else:
-        st.session_state.agent_messages.append(
-            {"role": "user", "content": "*(🎤 Voice Command Captured)*"}
-        )
-        st.session_state.agent_messages.append(
-            {"role": "assistant", "content": transcription}
-        )
-        return None
-
-
 def _render_chat_tab(provider, api_key, model_name, auto_sync):
     """Render the Pilot Interface chat tab."""
     col_chat, col_info = st.columns([3, 1])

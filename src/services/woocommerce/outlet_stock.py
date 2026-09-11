@@ -397,19 +397,3 @@ def fetch_live_outlet_stock() -> Optional[pd.DataFrame]:
         return df
 
     return None
-
-
-def get_outlet_stock_summary(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Generate a summary of total stock per outlet from the outlet stock DataFrame.
-    """
-    if df is None or df.empty:
-        return pd.DataFrame()
-
-    outlet_cols = [c for c in df.columns if c not in ["SKU", "Product"]]
-    summary = {}
-
-    for col in outlet_cols:
-        summary[col] = df[col].sum()
-
-    return pd.DataFrame([summary])

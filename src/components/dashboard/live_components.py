@@ -457,7 +457,7 @@ def _render_completed_kpis_display(selected_date, source_filter, df_live):
         status.update(label="✅ KPIs computed", state="complete")
 
     # Display KPIs using the modern flat design
-    from src.components.modern_kpi import render_modern_kpi_cards
+    from src.components.dashboard.modern_kpi import render_modern_kpi_cards
 
     # Primary metric: Total Revenue (largest)
     # Secondary metrics: Order Count, AOV, Completion Rate (smaller)

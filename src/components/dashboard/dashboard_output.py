@@ -240,37 +240,6 @@ def _render_charts(summ, total_rev=None):
     return color_map
 
 
-def _render_spotlight_and_sku_report(top, color_map, wc_raw_mapping):
-    """Render the Products Spotlight chart and SKU-Wise report."""
-    if top is None or top.empty:
-        return
-
-    prev_top = None
-    if st.session_state.get("wc_sync_mode") == "Operational Cycle":
-        nav_mode = st.session_state.get("wc_nav_mode", "Today")
-        comp_df = (
-            st.session_state.get("wc_prev_df")
-            if nav_mode == "Today"
-            else st.session_state.get("wc_curr_df")
-            if nav_mode == "Prev"
-            else None
-        )
-
-        if comp_df is not None and not comp_df.empty:
-            from src.processing.data_processing import (
-                aggregate_data,
-                prepare_granular_data,
-            )
-
-            comp_df_std, _ = prepare_granular_data(comp_df, wc_raw_mapping)
-            if not comp_df_std.empty:
-                _, _, prev_top, _ = aggregate_data(comp_df_std, wc_raw_mapping)
-
-    render_spotlight(top, color_map, prev_top=prev_top)
-    st.divider()
-    _render_sku_report(top)
-
-
 def _render_sku_report(top):
     """Render the Master SKU-Wise Product Sales Report table."""
     if top is None or top.empty:
@@ -1041,7 +1010,7 @@ def render_dashboard_output(
 
     st.divider()
 
-    # ── BOTTOM SECTION: Goals | History | Handover | WhatsApp ──
+    # ── BOTTOM SECTION: History | Handover ──
     _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, today_aov)
 
     st.divider()
