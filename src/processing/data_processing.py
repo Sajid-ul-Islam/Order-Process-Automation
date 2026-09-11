@@ -368,11 +368,11 @@ def filter_actual_sales(df):
 def filter_live_dashboard_view(df, view: str, reference_date=None):
     """Apply the four mutually exclusive Live Dashboard visibility rules.
 
-    - "All Orders" (Default): All orders placed today (any non-cancelled status)
-      PLUS all orders from previous days that are not yet shipped (queue/processing/hold).
+    - "All Orders" (Default): All orders placed today (excluding cancelled, hold, and waiting)
+      PLUS unfulfilled processing orders from previous days.
     - "Today Shipped" / "Today": Only orders shipped or completed today (00:00-23:59 BD).
     - "Last Day Shipped" / "Last Day": Only orders shipped or completed yesterday (previous BD calendar day).
-    - "Queue": All orders currently in processing, hold, or waiting status regardless of date placed.
+    - "Queue": Orders currently on hold, waiting, or pending across all dates (processing excluded).
     """
     if df is None or df.empty:
         return df
@@ -434,13 +434,23 @@ def filter_live_dashboard_view(df, view: str, reference_date=None):
     sale_date = modified.fillna(created).dt.date
     created_date = created.dt.date
 
+    processing_statuses = {
+        "processing",
+        "process",
+        "wc-processing",
+        "wc-process",
+    }
+    is_processing = statuses.isin(processing_statuses) | statuses.str.contains(
+        r"process", case=False, na=False
+    )
+
     v = str(view).strip()
     if v in {"Today Shipped", "Today"}:
         mask = is_sale & (sale_date == today)
     elif v in {"Last Day Shipped", "Last Day"}:
         mask = is_sale & (sale_date == previous_day)
     elif v == "Queue":
-        mask = is_queue
+        mask = is_queue & ~is_processing
     elif v == "All Orders":
         mask = (
             ~is_cancelled

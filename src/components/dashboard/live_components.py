@@ -287,7 +287,7 @@ def _render_dashboard_view_selector():
         "All Orders": "Today's placed orders + backlog unfulfilled queue (excluding hold & waiting)",
         "Today Shipped": "Only orders shipped or completed today (00:00–23:59 BD time)",
         "Last Day Shipped": "Only orders shipped or completed yesterday (previous BD calendar day)",
-        "Queue": "All unfulfilled orders currently in processing, hold, or waiting status across all dates",
+        "Queue": "All orders currently on hold, waiting, or pending across all dates (processing excluded)",
     }
 
     current = st.session_state.get("live_dashboard_view", "All Orders")
@@ -341,7 +341,7 @@ def _render_dashboard_view_selector():
             "All Orders": "All Orders",
             "Today Shipped": "Shipped",
             "Last Day Shipped": "Shipped",
-            "Queue": "Processing",
+            "Queue": "Queue",
         }
         st.session_state["live_dashboard_view"] = selected
         st.session_state["wc_nav_mode"] = nav_modes[selected]

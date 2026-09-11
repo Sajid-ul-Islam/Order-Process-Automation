@@ -130,7 +130,7 @@ def test_live_dashboard_today_and_last_day_are_sales_only():
     ) == {2}
 
 
-def test_live_dashboard_queue_is_date_independent():
+def test_live_dashboard_queue_is_date_independent_and_excludes_processing():
     reference = date(2026, 9, 11)
     df = _orders(
         [
@@ -143,8 +143,10 @@ def test_live_dashboard_queue_is_date_independent():
         ]
     )
 
+    # 1 (processing) is excluded from Queue.
+    # 5 (completed) and 6 (cancelled) are excluded.
+    # 2 (on-hold), 3 (waiting), 4 (pending) are kept across dates.
     assert set(filter_live_dashboard_view(df, "Queue", reference)["Order ID"]) == {
-        1,
         2,
         3,
         4,
@@ -193,7 +195,7 @@ def test_compute_live_filter_counts_matches_filter_views():
         "All Orders": 3,
         "Today Shipped": 1,
         "Last Day Shipped": 1,
-        "Queue": 4,
+        "Queue": 2,
     }
 
 

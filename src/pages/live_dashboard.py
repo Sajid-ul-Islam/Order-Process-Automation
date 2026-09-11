@@ -455,7 +455,7 @@ def render_live_tab():
         "All Orders": ("Today", "All Orders"),
         "Today Shipped": ("Today", "Shipped"),
         "Last Day Shipped": ("Prev", "Shipped"),
-        "Queue": ("Backlog", "Processing"),
+        "Queue": ("Backlog", "Queue"),
         # Backward-compatible aliases:
         "Today": ("Today", "Shipped"),
         "Last Day": ("Prev", "Shipped"),
@@ -644,7 +644,7 @@ def render_live_tab():
         }:
             _render_empty_sales_kpis(selected_view)
         elif selected_view == "Queue":
-            st.info("📋 No processing, hold, or waiting orders in the queue.")
+            st.info("📋 No hold or waiting orders in the queue.")
         else:
             st.info(f"📦 No active orders found in the **{nav_mode}** slot.")
         return
