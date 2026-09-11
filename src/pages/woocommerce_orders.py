@@ -289,7 +289,6 @@ def _render_live_orders_view():
         if "Cashback Discount" in display_df.columns
         else max(0.0, gross_revenue - net_revenue)
     )
-    cb_loss_pct = (cashback_fee / gross_revenue * 100) if gross_revenue > 0 else 0.0
 
     processing = 0
     completed = 0
@@ -311,16 +310,10 @@ def _render_live_orders_view():
             ]
         )
 
-    cb_str = (
-        f'<div style="font-size:0.75rem;color:#f59e0b;font-weight:700;background:rgba(245,158,11,0.12);padding:3px 8px;border-radius:4px;margin-top:4px;display:inline-block;">Gross ৳{gross_revenue:,.0f} - ৳{cashback_fee:,.0f} cashback (-{cb_loss_pct:.1f}%)</div>'
-        if cashback_fee > 0
-        else ""
-    )
-
     metrics_html = (
         '<div class="metric-container">'
         f'<div class="metric-card"><div><div class="metric-label">FILTERED ORDERS</div><div class="metric-value">{total_orders:,.0f}</div></div><div class="metric-icon">📦</div></div>'
-        f'<div class="metric-card"><div><div class="metric-label">ACTUAL NET REVENUE</div><div class="metric-value">TK {net_revenue:,.0f}</div>{cb_str}</div><div class="metric-icon">৳</div></div>'
+        f'<div class="metric-card"><div><div class="metric-label">GROSS REVENUE</div><div class="metric-value">TK {gross_revenue:,.0f}</div></div><div class="metric-icon">৳</div></div>'
         f'<div class="metric-card"><div><div class="metric-label">PROCESSING</div><div class="metric-value">{processing:,.0f}</div></div><div class="metric-icon">⏳</div></div>'
         f'<div class="metric-card"><div><div class="metric-label">COMPLETED</div><div class="metric-value">{completed:,.0f}</div></div><div class="metric-icon">✅</div></div>'
         "</div>"

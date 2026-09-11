@@ -65,22 +65,13 @@ def render_modern_kpi_cards(
         else 0.0
     )
 
-    # Gross Revenue, Cashback, and Net Revenue Calculation
-    m_cashback_disc = (
-        float(m_df["Cashback Discount"].sum())
-        if "Cashback Discount" in m_df.columns
-        else 0.0
-    )
+    # Gross Revenue Calculation
     m_gross_rev = (
         float(m_df["Gross Amount"].sum())
         if "Gross Amount" in m_df.columns
         else m_item_rev
     )
-
-    # Net Revenue = Gross Revenue - Cashback/Discount Fees
-    m_net_rev = max(0.0, m_gross_rev - m_cashback_disc)
-
-    m_net_bv = (m_net_rev / m_ord) if m_ord > 0 else 0.0
+    m_gross_bv = (m_gross_rev / m_ord) if m_ord > 0 else 0.0
 
     dq_str, dr_str, do_str, db_str = None, None, None, None
     pct_q, pct_r, pct_o, pct_b = None, None, None, None
@@ -96,31 +87,25 @@ def render_modern_kpi_cards(
         _, _, _, co_basket = aggregate_data(c_df, dummy_mapping)
         co_o = co_basket["total_orders"] if co_basket else 0
 
-        co_cb = (
-            float(c_df["Cashback Discount"].sum())
-            if "Cashback Discount" in c_df.columns
-            else 0.0
-        )
         co_gross = (
             float(c_df["Gross Amount"].sum())
             if "Gross Amount" in c_df.columns
             else co_item_r
         )
-        co_net_r = max(0.0, co_gross - co_cb)
-        co_b = (co_net_r / co_o) if co_o > 0 else 0.0
+        co_b = (co_gross / co_o) if co_o > 0 else 0.0
 
         prefix = "Today " if nav_mode == "Prev" else ""
         suffix = "" if nav_mode == "Prev" else " vs Prev"
 
         dq = m_qty - co_q
-        dr = m_net_rev - co_net_r
+        dr = m_gross_rev - co_gross
         d_o = m_ord - co_o
-        db = m_net_bv - co_b
+        db = m_gross_bv - co_b
         if nav_mode == "Prev":
             dq = co_q - m_qty
-            dr = co_net_r - m_net_rev
+            dr = co_gross - m_gross_rev
             d_o = co_o - m_ord
-            db = co_b - m_net_bv
+            db = co_b - m_gross_bv
 
         pct_q = (
             ((dq / co_q) * 100)
@@ -128,8 +113,8 @@ def render_modern_kpi_cards(
             else (100.0 if dq > 0 else 0.0 if dq == 0 else -100.0)
         )
         pct_r = (
-            ((dr / co_net_r) * 100)
-            if co_net_r > 0
+            ((dr / co_gross) * 100)
+            if co_gross > 0
             else (100.0 if dr > 0 else 0.0 if dr == 0 else -100.0)
         )
         pct_o = (
@@ -149,7 +134,7 @@ def render_modern_kpi_cards(
         db_str = f"{prefix}{'+' if db >= 0 else '-'}TK {abs(db):,.0f}{suffix}"
 
         prev_q_str = f"{co_q:,.0f}"
-        prev_r_str = f"TK {co_net_r:,.0f}"
+        prev_r_str = f"TK {co_gross:,.0f}"
         prev_o_str = f"{co_o:,.0f}"
         prev_b_str = f"TK {int(co_b):,}"
 
@@ -182,9 +167,9 @@ def render_modern_kpi_cards(
 
     # Format numbers with tabular alignment in mind (monospace-friendly)
     v_qty = f"{int(m_qty):,}"
-    v_rev = f"৳{int(m_net_rev):,}"
+    v_rev = f"৳{int(m_gross_rev):,}"
     v_ord = f"{int(m_ord):,}"
-    v_bv = f"৳{int(m_net_bv):,}"
+    v_bv = f"৳{int(m_gross_bv):,}"
 
     html_dq = format_delta_clean(dq_str, pct_val=pct_q)
     html_dr = format_delta_clean(dr_str, pct_val=pct_r)
@@ -276,10 +261,10 @@ def render_modern_kpi_cards(
                     src_df.columns[0],
                 )
 
-            if "Total Amount" in src_df.columns:
-                src_df["_rev"] = src_df["Total Amount"]
-            elif "Gross Amount" in src_df.columns:
+            if "Gross Amount" in src_df.columns:
                 src_df["_rev"] = src_df["Gross Amount"]
+            elif "Total Amount" in src_df.columns:
+                src_df["_rev"] = src_df["Total Amount"]
             else:
                 src_df["_rev"] = src_df["Quantity"] * src_df["Item Cost"]
 
@@ -414,7 +399,7 @@ def render_modern_kpi_cards(
     card_html = (
         '<div class="kpi-container">'
         # PRIMARY METRIC - Revenue (largest, leftmost)
-        f"{build_kpi_card(f'Net Revenue · {time_period_label}', v_rev, html_dr, s_rev + d_rev, badge_rev, is_primary=True)}"
+        f"{build_kpi_card(f'Gross Revenue · {time_period_label}', v_rev, html_dr, s_rev + d_rev, badge_rev, is_primary=True)}"
         # SECONDARY METRICS
         f"{build_kpi_card('Orders', v_ord, html_do, s_ord + d_ord, badge_ord)}"
         f"{build_kpi_card('Items Sold', v_qty, html_dq, s_qty + d_qty, badge_qty)}"

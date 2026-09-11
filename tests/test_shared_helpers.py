@@ -131,6 +131,29 @@ def test_pick_column_none_dataframe():
     assert pick_column(None, ["Phone"]) is None
 
 
+def test_detect_column_exact_and_case_insensitive():
+    from src.processing.column_detection import (
+        ITEM_NAME_COL_CANDIDATES,
+        ORDER_ID_COL_CANDIDATES,
+        QTY_COL_CANDIDATES,
+        SKU_COL_CANDIDATES,
+        detect_column,
+    )
+
+    df1 = pd.DataFrame(columns=["Order ID", "Date", "Item Name", "SKU", "Quantity"])
+    assert detect_column(df1, ITEM_NAME_COL_CANDIDATES) == "Item Name"
+    assert detect_column(df1, SKU_COL_CANDIDATES) == "SKU"
+    assert detect_column(df1, QTY_COL_CANDIDATES) == "Quantity"
+    assert detect_column(df1, ORDER_ID_COL_CANDIDATES) == "Order ID"
+
+    # Lowercase / variant column names
+    df2 = pd.DataFrame(columns=["order_number", "product_name", "item_sku", "qty"])
+    assert detect_column(df2, ITEM_NAME_COL_CANDIDATES) == "product_name"
+    assert detect_column(df2, SKU_COL_CANDIDATES) == "item_sku"
+    assert detect_column(df2, QTY_COL_CANDIDATES) == "qty"
+    assert detect_column(df2, ORDER_ID_COL_CANDIDATES) == "order_number"
+
+
 # ── File reading ──────────────────────────────────────────────────────────────
 
 

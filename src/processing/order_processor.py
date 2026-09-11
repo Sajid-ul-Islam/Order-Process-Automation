@@ -8,7 +8,6 @@ from src.utils.streamlit_runtime import cache_data
 from rapidfuzz import process
 
 from src.config.constants import RESOURCES_DIR
-from src.processing.categorization import get_category_for_sales
 from src.utils.text import normalize_city_name, peek_zone_from_address
 
 # Column aliases for fallback when files use different header names
@@ -290,7 +289,6 @@ def identify_columns(df: pd.DataFrame) -> Dict[str, Any]:
 def get_short_sub_category(item_name: str) -> str:
     """Extracts a shortened sub-category name for Pathao ItemDesc formatting."""
     name_lower = str(item_name).lower()
-    name_lower = str(item_name).lower()
 
     if "tank top" in name_lower or "tanktop" in name_lower or "tank-top" in name_lower:
         return "TankTop"
@@ -309,12 +307,23 @@ def get_short_sub_category(item_name: str) -> str:
         or "jersey" in name_lower
     ):
         return "Active Wear"
-    if (
-        "full sleeve" in name_lower
-        or "fs t-shirt" in name_lower
-        or "fs tshirt" in name_lower
-    ):
-        return "FS T-Shirt"
+
+    # T-Shirt categorization: check t-shirt explicitly before generic sleeve keywords
+    is_tshirt = (
+        "t-shirt" in name_lower
+        or "tshirt" in name_lower
+        or "tee" in name_lower
+        or "t shirt" in name_lower
+    )
+    if is_tshirt:
+        if (
+            "full sleeve" in name_lower
+            or "fs" in name_lower
+            or "long sleeve" in name_lower
+        ):
+            return "FS T-Shirt"
+        return "HS T-Shirt"
+
     if "sweatshirt" in name_lower:
         return "Sweatshirt"
     if "sweater" in name_lower:
@@ -323,17 +332,12 @@ def get_short_sub_category(item_name: str) -> str:
         return "Hoodie"
     if "jacket" in name_lower:
         return "Jacket"
-    if (
-        "t-shirt" in name_lower
-        or "tshirt" in name_lower
-        or "tee" in name_lower
-        or "t shirt" in name_lower
-    ):
-        return "HS T-Shirt"
     if "polo" in name_lower:
         return "Polo"
     if "panjabi" in name_lower or "punjabi" in name_lower:
         return "Panjabi"
+    if "pajama" in name_lower or "payjama" in name_lower:
+        return "Pajama"
     if "oxford" in name_lower:
         return "Oxford"
     if "cuban" in name_lower:
@@ -354,13 +358,34 @@ def get_short_sub_category(item_name: str) -> str:
         return "Trouser"
     if "executive" in name_lower or "formal" in name_lower:
         return "Formal"
+
+    # Casual Shirt: Don't show generic 'Shirt =', show 'Casual ='
+    if "casual" in name_lower:
+        return "Casual"
+
+    # Full Sleeve Shirt (non-casual) -> FS Shirt
+    if (
+        "full sleeve shirt" in name_lower
+        or "fs shirt" in name_lower
+        or ("full sleeve" in name_lower and "shirt" in name_lower)
+        or (name_lower.startswith("fs ") and "shirt" in name_lower)
+    ):
+        return "FS Shirt"
+
+    # Half Sleeve Shirt (non-casual) -> HS Shirt
+    if (
+        "half sleeve shirt" in name_lower
+        or "hs shirt" in name_lower
+        or ("half sleeve" in name_lower and "shirt" in name_lower)
+        or (name_lower.startswith("hs ") and "shirt" in name_lower)
+    ):
+        return "HS Shirt"
+
     if "shirt" in name_lower:
         return "Shirt"
     if "wallet" in name_lower:
         return "Wallet"
 
-    if "t-shirt" in name_lower:
-        return "T-Shirt"
     if "belt" in name_lower:
         return "Belt"
     if "kaftan" in name_lower:
@@ -369,8 +394,6 @@ def get_short_sub_category(item_name: str) -> str:
         return "Boxer"
     if "mask" in name_lower:
         return "Mask"
-    if "polo" in name_lower:
-        return "Polo"
     if "turtleneck" in name_lower or "turtle neck" in name_lower:
         return "Turtleneck"
 
@@ -470,7 +493,7 @@ def parse_manual_item_lines(raw_text: str) -> Tuple[Dict[str, Dict[str, int]], i
         item_str = item_str.strip().rstrip(";")
         item_str = item_str.replace(" | ", " - ")
 
-        category = get_category_for_sales(item_str)
+        category = get_short_sub_category(item_str)
 
         if category not in cat_map:
             cat_map[category] = {}

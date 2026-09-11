@@ -425,27 +425,13 @@ def _stream_ai_briefing(
         if (active_df is not None and "Gross Amount" in active_df.columns)
         else today_rev
     )
-    cashback_disc = (
-        active_df["Cashback Discount"].sum()
-        if (active_df is not None and "Cashback Discount" in active_df.columns)
-        else max(0.0, gross_rev - today_rev)
-    )
-    loss_pct = (cashback_disc / gross_rev * 100) if gross_rev > 0 else 0.0
-
     gross_aov = (gross_rev / today_orders) if today_orders > 0 else today_aov
-    net_aov = (today_rev / today_orders) if today_orders > 0 else today_aov
-    cb_per_basket = (cashback_disc / today_orders) if today_orders > 0 else 0.0
-    pct_basket_lost = (cb_per_basket / gross_aov * 100) if gross_aov > 0 else 0.0
 
     prompt = (
         f"Generate an executive briefing for today's e-commerce operations.\n"
         f"Today's key metrics:\n"
-        f"- Net Realized Revenue (After Cashback): ৳{today_rev:,.0f}\n"
-        f"- Gross Revenue (Pre-Discount): ৳{gross_rev:,.0f}\n"
-        f"- Total Cashback / Discount Fee Given: ৳{cashback_disc:,.0f} ({loss_pct:.1f}% revenue lost)\n"
-        f"- Net Basket Size: ৳{net_aov:,.0f}\n"
-        f"- Gross Basket Size: ৳{gross_aov:,.0f}\n"
-        f"- Basket Cashback Impact: -৳{cb_per_basket:,.0f} per basket ({pct_basket_lost:.1f}% lost/basket)\n"
+        f"- Gross Revenue: ৳{gross_rev:,.0f}\n"
+        f"- Basket Size (AOV): ৳{gross_aov:,.0f}\n"
         f"- Shift Orders: {today_orders}\n"
         f"- Items Sold: {today_qty}\n"
         f"- Customer Breakdown: {new_customers or 0} New Customers | {returning_customers or 0} Returning Customers\n\n"
@@ -457,7 +443,7 @@ def _stream_ai_briefing(
         f"- Ecom Orders: {dm.get('ecom_dispatch', 0)} | Outlet: {dm.get('outlet_dispatch', 0)} | Exchange: {dm.get('exchange_dispatch', 0)}\n"
         f"{top_spotlight_str}\n\n"
         f"Based on the provided context data (sales_summary, top_products), write a concise, professional, and insightful narrative.\n"
-        f'Highlight Net Realized Revenue as the primary headline figure, explicitly analyze actual shipped status counts (total dispatched orders, Pathao vs other courier breakdown, pending fulfillment status, and dispatch rate), analyze customer acquisition mix (New vs Returning customer count and ratio), analyze cashback/fee discount impact on overall revenue & basket size, summarize the "Product Spotlight" to point out what is driving revenue, and provide a concluding remark on the day\'s performance.\n'
+        f'Highlight Gross Revenue as the primary headline figure, explicitly analyze actual shipped status counts (total dispatched orders, Pathao vs other courier breakdown, pending fulfillment status, and dispatch rate), analyze customer acquisition mix (New vs Returning customer count and ratio), summarize the "Product Spotlight" to point out what is driving revenue, and provide a concluding remark on the day\'s performance.\n'
         f"The entire response should be a single block of text formatted for WhatsApp (using markdown like *bold* and _italic_)."
     )
 
@@ -956,13 +942,13 @@ def render_dashboard_output(
     color_map = {}
 
     if hub_view == "Category Share":
-        color_map = _render_charts(summ, total_rev=today_rev)
+        color_map = _render_charts(summ, total_rev=gross_rev)
 
     if is_operational:
-        net_aov = float(
+        gross_aov = float(
             hero.get(
-                "net_aov",
-                (today_rev / today_orders) if today_orders > 0 else float(today_aov),
+                "gross_aov",
+                (gross_rev / today_orders) if today_orders > 0 else float(today_aov),
             )
         )
 
@@ -978,19 +964,19 @@ def render_dashboard_output(
             )
 
         report_text = generate_executive_briefing(
-            today_rev,
+            gross_rev,
             today_qty,
             today_orders,
-            net_aov,
+            gross_aov,
             dm,
             top,
             gross_rev=gross_rev,
-            cashback_disc=cashback_disc,
+            cashback_disc=0.0,
             new_customers=new_cust_cnt,
             returning_customers=ret_cust_cnt,
         )
 
-        current_data_fingerprint = f"{today_rev}_{today_orders}_{dm.get('pathao_count', 0)}_{dm.get('other_count', 0)}_{new_cust_cnt}_{ret_cust_cnt}"
+        current_data_fingerprint = f"{gross_rev}_{today_orders}_{dm.get('pathao_count', 0)}_{dm.get('other_count', 0)}_{new_cust_cnt}_{ret_cust_cnt}"
 
         if (
             st.session_state.get("last_ai_data_fingerprint", "")
@@ -1008,7 +994,7 @@ def render_dashboard_output(
             today_rev,
             today_qty,
             today_orders,
-            net_aov,
+            gross_aov,
             dm,
             current_data_fingerprint,
             final_report_text,
@@ -1043,25 +1029,20 @@ def render_dashboard_output(
     if hub_view == "SKU Report":
         _render_sku_report(top)
 
-    # ── Revenue & Cashback Impact Analysis (Ingestion mode) ──────────────────
+    # ── Market Basket & Cross-Selling Analysis (Ingestion mode) ──────────────
     if not is_operational and active_df is not None and not active_df.empty:
-        has_cashback = (
-            "Cashback Discount" in active_df.columns
-            and (active_df["Cashback Discount"] > 0).any()
+        st.divider()
+        show_mba = st.toggle(
+            "🛒 Market Basket & Cross-Sell Analysis",
+            value=st.session_state.get("ingest_show_mba", False),
+            key="ingest_show_mba",
         )
-        if has_cashback:
-            st.divider()
-            compare_cb = st.toggle(
-                "⚖️ Compare Revenue vs Cashback/Fee",
-                value=st.session_state.get("ingest_compare_cashback", True),
-                key="ingest_compare_cashback",
+        if show_mba:
+            from src.components.dashboard.market_basket_view import (
+                render_market_basket_analysis_section,
             )
-            if compare_cb:
-                from src.components.dashboard.dashboard_metrics import (
-                    render_revenue_cashback_comparison_section,
-                )
 
-                render_revenue_cashback_comparison_section(active_df, raw_df=active_df)
+            render_market_basket_analysis_section(active_df, raw_df=active_df)
 
     # ── Export Preparation ──
     export_data = _build_export_data(

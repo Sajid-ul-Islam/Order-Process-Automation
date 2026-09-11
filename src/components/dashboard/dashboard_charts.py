@@ -40,6 +40,10 @@ def get_short_category_label(name: str) -> str:
         return "Polo"
     if "cargo" in lower_n:
         return "Cargo"
+    if "full sleeve shirt" in lower_n or lower_n == "fs shirt":
+        return "FS Shirt"
+    if "half sleeve shirt" in lower_n or lower_n == "hs shirt":
+        return "HS Shirt"
 
     for prefix in [
         "FS Shirt - ",
@@ -263,29 +267,6 @@ def render_category_charts(
             fig_pie, use_container_width=True, config={"displayModeBar": False}
         )
 
-        # Executive Category Leaderboard Pills with Rank Medals
-        pill_htmls = []
-        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣"]
-        for idx, p_row in pie_display.head(6).reset_index(drop=True).iterrows():
-            c_name = str(p_row.get(display_col, p_row.get("Pie_Name", "")))
-            c_rev = float(p_row.get("Total Amount", 0))
-            c_color = color_map.get(c_name, "#a855f7")
-            c_pct = (c_rev / total_amt * 100) if total_amt > 0 else 0
-            medal = medals[idx] if idx < len(medals) else f"#{idx + 1}"
-
-            pill_htmls.append(
-                f"<div style='background: var(--card-bg, rgba(255,255,255,0.04)); border: 1px solid var(--border-color, rgba(255,255,255,0.08)); border-radius: 8px; padding: 4px 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.12);'>"
-                f"<span style='font-size:12px;'>{medal}</span> "
-                f"<b>{truncate_label(c_name, 12)}</b>: "
-                f"<span style='color:{c_color}; font-weight:bold;'>৳{c_rev:,.0f}</span> "
-                f"<span style='opacity:0.75; font-size:10px;'>({c_pct:.1f}%)</span>"
-                f"</div>"
-            )
-        if pill_htmls:
-            st.markdown(
-                f"<div style='display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; margin-bottom:8px;'>{''.join(pill_htmls)}</div>",
-                unsafe_allow_html=True,
-            )
 
     with v2:
         bar_axis = "Sub-Category" if "Sub-Category" in summ.columns else display_col

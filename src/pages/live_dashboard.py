@@ -718,12 +718,12 @@ def render_live_tab():
         if nav_mode == "Today" and order_view_mode == "Shipped":
             _render_dispatch_export()
     else:
-        # ── Revenue vs. Cashback Impact Analysis (always available here) ─────
-        from src.components.dashboard.dashboard_metrics import (
-            render_revenue_cashback_comparison_section,
+        # ── Market Basket & Cross-Selling Intelligence ───────────────────────
+        from src.components.dashboard.market_basket_view import (
+            render_market_basket_analysis_section,
         )
 
-        render_revenue_cashback_comparison_section(df_standard, raw_df=df_live)
+        render_market_basket_analysis_section(df_standard, raw_df=df_live)
 
     # ── Staleness monitor stays visible below both tabs ──────────────────────
     render_staleness_monitor()

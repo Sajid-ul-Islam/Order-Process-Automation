@@ -192,24 +192,16 @@ def generate_report_data():
         if (_adf is not None and "Gross Amount" in _adf.columns)
         else net_rev
     )
-    cashback_disc = (
-        float(_adf["Cashback Discount"].sum())
-        if (_adf is not None and "Cashback Discount" in _adf.columns)
-        else max(0.0, gross_rev - net_rev)
-    )
-    net_aov = (net_rev / today_orders) if today_orders > 0 else today_aov
-    loss_pct = (cashback_disc / gross_rev * 100) if gross_rev > 0 else 0.0
+    gross_aov = (gross_rev / today_orders) if today_orders > 0 else today_aov
 
     prompt = f"""
     Generate a high-impact executive briefing for today's e-commerce operations.
 
     *Core Metrics:*
-    - Today Net Realized Revenue (After Cashback): ৳{net_rev:,.0f} ({today_orders} orders, {today_qty} items).
-    - Gross Revenue (Pre-Discount): ৳{gross_rev:,.0f}.
-    - Total Cashback & Fee Discounts: ৳{cashback_disc:,.0f} ({loss_pct:.1f}% revenue lost).
-    - Net Basket Size: ৳{net_aov:,.0f}.
+    - Today Gross Revenue: ৳{gross_rev:,.0f} ({today_orders} orders, {today_qty} items).
+    - Basket Size (AOV): ৳{gross_aov:,.0f}.
     - Customer Breakdown: {new_customers} New Customers | {returning_customers} Returning Customers.
-    - Yesterday Net Revenue: ৳{prev_rev:,.0f} revenue, {prev_orders} orders.
+    - Yesterday Gross Revenue: ৳{prev_rev:,.0f} revenue, {prev_orders} orders.
     - Logistics & Shipped Status: {dm.get("dispatched", 0)} Dispatched ({dm.get("dispatch_rate", 0.0):.1f}% fulfillment rate), {dm.get("pending", 0)} Pending. ({dm.get("pathao_count", 0)} Pathao, {dm.get("other_count", 0)} Other).
     - Prediction: {forecast_str}
 
@@ -218,7 +210,7 @@ def generate_report_data():
 
     *Instructions:*
     Write a structured, professional narrative optimized for WhatsApp.
-    1. 📊 *Performance Snapshot*: Highlight Net Realized Revenue as the key headline figure, include New and Returning customer counts/ratio, and analyze cashback discount impact.
+    1. 📊 *Performance Snapshot*: Highlight Gross Revenue as the key headline figure and include New and Returning customer counts/ratio.
     2. 🏆 *Top Movers*: Highlight categories or SKUs driving today's volume.
     3. 🚚 *Logistics Status*: Detail the actual shipped status counts (total dispatched orders, Pathao vs. other courier breakdown, pending fulfillment status, and dispatch rate).
     4. 💡 *Strategic Outlook*: A concise, actionable tactical note for tomorrow based on metrics and forecasts.
@@ -243,17 +235,17 @@ def generate_report_data():
         from src.processing.data_processing import generate_executive_briefing
 
         report_text = generate_executive_briefing(
-            net_rev,
+            gross_rev,
             today_qty,
             today_orders,
-            net_aov,
+            gross_aov,
             dm,
             top,
             prev_rev=prev_rev,
             prev_orders=prev_orders,
             forecast_str=forecast_str,
             gross_rev=gross_rev,
-            cashback_disc=cashback_disc,
+            cashback_disc=0.0,
             new_customers=new_customers,
             returning_customers=returning_customers,
         )

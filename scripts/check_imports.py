@@ -60,6 +60,8 @@ MODULES = [
     "src.components.dashboard.dashboard_charts",
     "src.components.dashboard.dashboard_filters",
     "src.components.dashboard.dashboard_output",
+    "src.processing.market_basket",
+    "src.components.dashboard.market_basket_view",
     "src.pages.data_pilot",
     "src.pages.product_listing",
     "src.inventory.core",

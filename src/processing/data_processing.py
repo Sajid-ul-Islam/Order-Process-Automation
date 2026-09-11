@@ -982,44 +982,18 @@ def generate_executive_briefing(
 
     dm = dm or {}
 
-    net_rev = today_rev
-    g_rev = gross_rev if gross_rev is not None else net_rev
-    cb_disc = cashback_disc if cashback_disc is not None else max(0.0, g_rev - net_rev)
-    loss_pct = (cb_disc / g_rev * 100) if g_rev > 0 else 0.0
-
+    g_rev = gross_rev if gross_rev is not None else today_rev
     gross_aov = (g_rev / today_orders) if today_orders > 0 else today_aov
-    net_aov = (net_rev / today_orders) if today_orders > 0 else today_aov
-    cb_per_basket = (cb_disc / today_orders) if today_orders > 0 else 0.0
-    pct_basket_lost = (cb_per_basket / gross_aov * 100) if gross_aov > 0 else 0.0
 
     report_lines = [
         "📊 *DEEN-OPS Executive Briefing*",
         f"📅 {bd_now().strftime('%A, %d %B %Y')}",
         "",
-        f"💵 *NET REALIZED REVENUE (After Cashback):* ৳{net_rev:,.0f}",
-        f"🏷️ *Gross Revenue (Pre-Discount):* ৳{g_rev:,.0f}",
+        f"💵 *Gross Revenue:* ৳{g_rev:,.0f}",
+        "",
+        f"📦 *Shipped Items:* {today_qty:,.0f}",
+        f"🛍️ *Avg Basket Value:* ৳{gross_aov:,.0f}",
     ]
-
-    if cb_disc > 0:
-        report_lines.append(
-            f"💸 *Total Cashback & Fee Discounts:* -৳{cb_disc:,.0f} ({loss_pct:.1f}% revenue lost)"
-        )
-
-    report_lines.extend(
-        [
-            "",
-            f"📦 *Shipped Items:* {today_qty:,.0f}",
-            f"🛍️ *Net Basket Value (Post-Cashback):* ৳{net_aov:,.0f}",
-        ]
-    )
-
-    if cb_disc > 0:
-        report_lines.extend(
-            [
-                f"🛒 *Gross Basket Value (Pre-Discount):* ৳{gross_aov:,.0f}",
-                f"📉 *Cashback Lost per Basket:* -৳{cb_per_basket:,.0f} ({pct_basket_lost:.1f}% lost/basket)",
-            ]
-        )
 
     report_lines.extend(
         [
