@@ -5,10 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DEEN-OPS React Toolbar</title>
     <script>
-      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        document.documentElement.classList.add('dark');
+      try {
+        var pDoc = window.parent.document;
+        var pTheme = pDoc.documentElement.getAttribute('data-theme') || (pDoc.body && pDoc.body.getAttribute('data-theme'));
+        if (pTheme === 'dark') {
+          document.documentElement.classList.add('dark');
+          document.documentElement.classList.remove('light');
+        } else if (pTheme === 'light') {
+          document.documentElement.classList.remove('dark');
+          document.documentElement.classList.add('light');
+        } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.classList.add('dark');
+        }
       }
     </script>
+
     <style>
       body {
         margin: 0;
@@ -18,7 +33,7 @@
         overflow-y: hidden;
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-BiVvW53Y.js"></script>
+    <script type="module" crossorigin src="./assets/index-CVes8BUd.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-DVjbcSsD.css">
   </head>
   <body>

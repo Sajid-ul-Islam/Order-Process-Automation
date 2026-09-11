@@ -61,7 +61,25 @@ export function useStreamlitBridge() {
         }
         if (data.theme) {
           setTheme(data.theme);
-          const isDark = data.theme.base === "dark";
+          let isDark = data.theme.base === "dark";
+          if (data.theme.backgroundColor) {
+            const hex = data.theme.backgroundColor.replace('#', '');
+            if (hex.length === 6) {
+              const r = parseInt(hex.substring(0, 2), 16);
+              const g = parseInt(hex.substring(2, 4), 16);
+              const b = parseInt(hex.substring(4, 6), 16);
+              const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+              isDark = lum < 128;
+            }
+          }
+          try {
+            const pDoc = window.parent.document;
+            const pTheme = pDoc.documentElement.getAttribute('data-theme') || (pDoc.body && pDoc.body.getAttribute('data-theme'));
+            if (pTheme === 'light') isDark = false;
+            else if (pTheme === 'dark') isDark = true;
+          } catch (e) {
+            // cross-origin fallback
+          }
           if (isDark) {
             document.documentElement.classList.add("dark");
             document.documentElement.classList.remove("light");
@@ -70,6 +88,7 @@ export function useStreamlitBridge() {
             document.documentElement.classList.add("light");
           }
         }
+
         setDisabled(!!data.disabled);
       }
     };

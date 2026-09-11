@@ -50,3 +50,65 @@ def inject_base_styles():
             f"<style data-version='{file_version}'>\n{css_content}\n{extra_styles}\n</style>",
             unsafe_allow_html=True,
         )
+
+        # Inject dynamic theme synchronization script into main DOM
+        theme_sync_script = """
+        <script>
+        (function() {
+          function syncDeenTheme() {
+            var app = document.querySelector('.stApp') || document.body;
+            if (!app) return;
+            var bg = window.getComputedStyle(app).backgroundColor;
+            var isDark = false;
+            if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
+              var rgb = bg.match(/\\d+/g);
+              if (rgb && rgb.length >= 3) {
+                var r = parseInt(rgb[0], 10);
+                var g = parseInt(rgb[1], 10);
+                var b = parseInt(rgb[2], 10);
+                var lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                isDark = lum < 128;
+              }
+            } else {
+              isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            }
+            var theme = isDark ? 'dark' : 'light';
+            var doc = document.documentElement;
+            if (doc.getAttribute('data-theme') !== theme) {
+              doc.setAttribute('data-theme', theme);
+              doc.classList.toggle('dark', isDark);
+              doc.classList.toggle('light', !isDark);
+            }
+            if (document.body && document.body.getAttribute('data-theme') !== theme) {
+              document.body.setAttribute('data-theme', theme);
+              document.body.classList.toggle('dark', isDark);
+              document.body.classList.toggle('light', !isDark);
+            }
+            if (app && app.getAttribute('data-theme') !== theme) {
+              app.setAttribute('data-theme', theme);
+              app.classList.toggle('dark', isDark);
+              app.classList.toggle('light', !isDark);
+            }
+          }
+          syncDeenTheme();
+          requestAnimationFrame(syncDeenTheme);
+          setTimeout(syncDeenTheme, 100);
+          setTimeout(syncDeenTheme, 400);
+
+          if (!window.__deen_theme_observer_installed) {
+            window.__deen_theme_observer_installed = true;
+            var observer = new MutationObserver(function() {
+              syncDeenTheme();
+            });
+            observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'class'] });
+            var appEl = document.querySelector('.stApp');
+            if (appEl) {
+              observer.observe(appEl, { attributes: true, attributeFilter: ['style', 'class'] });
+            }
+          }
+        })();
+        </script>
+        """
+        if hasattr(st, "html"):
+            st.html(theme_sync_script, unsafe_allow_javascript=True)
+

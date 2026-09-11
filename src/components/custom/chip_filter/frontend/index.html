@@ -181,12 +181,39 @@
       notifyFrameHeight();
     }
 
+    // Immediate check of parent window theme
+    try {
+      const pDoc = window.parent.document;
+      const pTheme = pDoc.documentElement.getAttribute("data-theme") || (pDoc.body && pDoc.body.getAttribute("data-theme"));
+      if (pTheme === "light") {
+        document.body.classList.add("light");
+      } else if (pTheme === "dark") {
+        document.body.classList.remove("light");
+      }
+    } catch (e) {}
+
     window.addEventListener("message", (event) => {
       if (event.data && event.data.type === "streamlit:render") {
         if (event.data.theme) {
-          const isLight = event.data.theme.base === "light";
+          let isLight = event.data.theme.base === "light";
+          if (event.data.theme.backgroundColor) {
+            const hex = event.data.theme.backgroundColor.replace('#', '');
+            if (hex.length === 6) {
+              const r = parseInt(hex.substring(0, 2), 16);
+              const g = parseInt(hex.substring(2, 4), 16);
+              const b = parseInt(hex.substring(4, 6), 16);
+              isLight = (0.299 * r + 0.587 * g + 0.114 * b) >= 128;
+            }
+          }
+          try {
+            const pDoc = window.parent.document;
+            const pTheme = pDoc.documentElement.getAttribute("data-theme") || (pDoc.body && pDoc.body.getAttribute("data-theme"));
+            if (pTheme === "light") isLight = true;
+            else if (pTheme === "dark") isLight = false;
+          } catch (e) {}
           document.body.classList.toggle("light", isLight);
         }
+
         const args = event.data.args || {};
         currentOptions = args.options || [];
         isMulti = args.multi !== undefined ? args.multi : true;
