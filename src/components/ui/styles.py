@@ -55,23 +55,50 @@ def inject_base_styles():
         theme_sync_script = """
         <script>
         (function() {
-          function syncDeenTheme() {
-            var app = document.querySelector('.stApp') || document.body;
-            if (!app) return;
-            var bg = window.getComputedStyle(app).backgroundColor;
-            var isDark = false;
-            if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
-              var rgb = bg.match(/\\d+/g);
-              if (rgb && rgb.length >= 3) {
-                var r = parseInt(rgb[0], 10);
-                var g = parseInt(rgb[1], 10);
-                var b = parseInt(rgb[2], 10);
-                var lum = 0.299 * r + 0.587 * g + 0.114 * b;
-                isDark = lum < 128;
+          function detectIsDark() {
+            // 1. Inspect Streamlit header (Emotion styles this; never overridden by custom CSS)
+            var header = document.querySelector('header[data-testid="stHeader"]') || document.querySelector('header');
+            if (header) {
+              var hStyle = window.getComputedStyle(header);
+              if (hStyle.colorScheme === 'dark') return true;
+              if (hStyle.colorScheme === 'light') return false;
+              var hBg = hStyle.backgroundColor;
+              if (hBg && hBg !== 'transparent' && hBg !== 'rgba(0, 0, 0, 0)') {
+                var hRgb = hBg.match(/\\d+/g);
+                if (hRgb && hRgb.length >= 3) {
+                  var hLum = 0.299 * parseInt(hRgb[0], 10) + 0.587 * parseInt(hRgb[1], 10) + 0.114 * parseInt(hRgb[2], 10);
+                  return hLum < 128;
+                }
               }
-            } else {
-              isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
             }
+
+            // 2. Inspect Streamlit sidebar (Emotion styles this: #262730 in dark, #f0f2f6 in light)
+            var sidebar = document.querySelector('section[data-testid="stSidebar"]');
+            if (sidebar) {
+              var sStyle = window.getComputedStyle(sidebar);
+              if (sStyle.colorScheme === 'dark') return true;
+              if (sStyle.colorScheme === 'light') return false;
+              var sBg = sStyle.backgroundColor;
+              if (sBg && sBg !== 'transparent' && sBg !== 'rgba(0, 0, 0, 0)') {
+                var sRgb = sBg.match(/\\d+/g);
+                if (sRgb && sRgb.length >= 3) {
+                  var sLum = 0.299 * parseInt(sRgb[0], 10) + 0.587 * parseInt(sRgb[1], 10) + 0.114 * parseInt(sRgb[2], 10);
+                  return sLum < 128;
+                }
+              }
+            }
+
+            // 3. Fallback to OS/browser preference
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+              return true;
+            }
+
+            // Default: DEEN-OPS is a dark cyberpunk operational terminal
+            return true;
+          }
+
+          function syncDeenTheme() {
+            var isDark = detectIsDark();
             var theme = isDark ? 'dark' : 'light';
             var doc = document.documentElement;
             if (doc.getAttribute('data-theme') !== theme) {
@@ -84,12 +111,14 @@ def inject_base_styles():
               document.body.classList.toggle('dark', isDark);
               document.body.classList.toggle('light', !isDark);
             }
+            var app = document.querySelector('.stApp');
             if (app && app.getAttribute('data-theme') !== theme) {
               app.setAttribute('data-theme', theme);
               app.classList.toggle('dark', isDark);
               app.classList.toggle('light', !isDark);
             }
           }
+
           syncDeenTheme();
           requestAnimationFrame(syncDeenTheme);
           setTimeout(syncDeenTheme, 100);
@@ -104,6 +133,19 @@ def inject_base_styles():
             var appEl = document.querySelector('.stApp');
             if (appEl) {
               observer.observe(appEl, { attributes: true, attributeFilter: ['style', 'class'] });
+            }
+            var headerEl = document.querySelector('header[data-testid="stHeader"]');
+            if (headerEl) {
+              observer.observe(headerEl, { attributes: true, attributeFilter: ['style', 'class'] });
+            }
+            var sidebarEl = document.querySelector('section[data-testid="stSidebar"]');
+            if (sidebarEl) {
+              observer.observe(sidebarEl, { attributes: true, attributeFilter: ['style', 'class'] });
+            }
+            if (window.matchMedia) {
+              window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+                syncDeenTheme();
+              });
             }
           }
         })();

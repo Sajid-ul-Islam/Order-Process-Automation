@@ -36,6 +36,10 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1 }, "*");
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
+

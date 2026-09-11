@@ -1,17 +1,17 @@
-/* --- BASE THEME VARIABLES (Default: Adaptive Light Theme) --- */
+/* --- BASE THEME VARIABLES (Default: Dark Cyberpunk Operations Theme) --- */
 :root {
     --primary: var(--primary-color, #10b981);
-    --primary-glow: rgba(16, 185, 129, 0.12);
-    --border: #e2e8f0;
-    --text-color: #0f172a;
-    --text-muted: #475569;
-    --text-main: #0f172a;
-    --surface: #ffffff;
-    --card-bg: #ffffff;
-    --card-border: #e2e8f0;
-    --background-color: #ffffff;
-    --background-secondary: #f8fafc;
-    --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    --primary-glow: rgba(16, 185, 129, 0.22);
+    --border: rgba(255, 255, 255, 0.1);
+    --text-color: #f8fafc;
+    --text-muted: #94a3b8;
+    --text-main: #ffffff;
+    --surface: rgba(255, 255, 255, 0.05);
+    --card-bg: rgba(255, 255, 255, 0.05);
+    --card-border: rgba(255, 255, 255, 0.1);
+    --background-color: #0b0f19;
+    --background-secondary: rgba(255, 255, 255, 0.04);
+    --card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35);
 }
 
 /* Theme variables override when Dark Mode is active */
@@ -33,20 +33,20 @@ body[data-theme="dark"],
     --card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35);
 }
 
-@media (prefers-color-scheme: dark) {
-    html:not([data-theme="light"]):not(.light) {
+@media (prefers-color-scheme: light) {
+    html:not([data-theme="dark"]):not(.dark) {
         --primary: var(--primary-color, #10b981);
-        --primary-glow: rgba(16, 185, 129, 0.22);
-        --border: rgba(255, 255, 255, 0.1);
-        --text-color: #f8fafc;
-        --text-muted: #94a3b8;
-        --text-main: #ffffff;
-        --surface: rgba(255, 255, 255, 0.05);
-        --card-bg: rgba(255, 255, 255, 0.05);
-        --card-border: rgba(255, 255, 255, 0.1);
-        --background-color: #0b0f19;
-        --background-secondary: rgba(255, 255, 255, 0.04);
-        --card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35);
+        --primary-glow: rgba(16, 185, 129, 0.12);
+        --border: #e2e8f0;
+        --text-color: #0f172a;
+        --text-muted: #475569;
+        --text-main: #0f172a;
+        --surface: #ffffff;
+        --card-bg: #ffffff;
+        --card-border: #e2e8f0;
+        --background-color: #ffffff;
+        --background-secondary: #f8fafc;
+        --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
     }
 }
 
@@ -111,8 +111,14 @@ div[role="tabpanel"],
     background: #94a3b8;
 }
 
-.stApp {
-    background: var(--background-color);
+html[data-theme="dark"] .stApp,
+body[data-theme="dark"] .stApp {
+    background: #0b0f19;
+}
+
+html[data-theme="light"] .stApp,
+body[data-theme="light"] .stApp {
+    background: #ffffff;
 }
 
 .hub-footer {
@@ -1326,12 +1332,7 @@ div[data-testid="stDataFrame"]:hover::before {
 }
 
 .app-banner-overlay::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: var(--background-color);
-    opacity: 0.75;
-    z-index: -1;
+    display: none !important;
 }
 
 .app-banner-title-area {

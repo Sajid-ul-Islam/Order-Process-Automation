@@ -96,7 +96,10 @@ export function useStreamlitBridge() {
     window.addEventListener("message", handleMessage);
 
     // Notify Streamlit that component is ready to receive data
-    window.parent.postMessage({ type: "streamlit:componentReady", apiVersion: 1 }, "*");
+    window.parent.postMessage(
+      { isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1 },
+      "*"
+    );
 
     return () => {
       window.removeEventListener("message", handleMessage);
@@ -106,8 +109,9 @@ export function useStreamlitBridge() {
   const sendValue = useCallback((value: unknown) => {
     window.parent.postMessage(
       {
+        isStreamlitMessage: true,
         type: "streamlit:setComponentValue",
-        value: value
+        value: value,
       },
       "*"
     );
@@ -117,12 +121,14 @@ export function useStreamlitBridge() {
     const h = height ?? Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
     window.parent.postMessage(
       {
+        isStreamlitMessage: true,
         type: "streamlit:setFrameHeight",
-        height: h + 16
+        height: h + 16,
       },
       "*"
     );
   }, []);
+
 
   return { args, disabled, theme, sendValue, updateHeight };
 }
