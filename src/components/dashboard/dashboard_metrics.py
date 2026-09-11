@@ -664,7 +664,92 @@ def render_operational_metrics(
         "</div>"
     )
 
-    st.markdown(card_html, unsafe_allow_html=True)
+    rendered_react = False
+    from src.components.react_kpi import is_react_kpi_available, render_react_kpi_toolbar
+
+    if is_react_kpi_available() and st.session_state.get("use_react_kpi", True):
+        try:
+            from src.components.dashboard.live_components import (
+                _get_live_combined_source,
+                apply_dashboard_view_selection,
+            )
+            from src.processing.data_processing import compute_live_filter_counts
+
+            views = ["All Orders", "Today Shipped", "Last Day Shipped", "Queue"]
+            source_df = _get_live_combined_source()
+            view_counts = compute_live_filter_counts(source_df)
+            sync_time = st.session_state.get("live_sync_time")
+
+            def _clean_delta(pct_val, delta_str):
+                if pct_val is not None:
+                    return {
+                        "value": delta_str or "",
+                        "pct": round(float(pct_val), 1),
+                        "positive": pct_val >= 0,
+                        "text": f"{pct_val:+.1f}% vs prev",
+                    }
+                if delta_str:
+                    return {
+                        "value": delta_str,
+                        "positive": not str(delta_str).startswith("-"),
+                        "text": f"{delta_str} vs prev",
+                    }
+                return None
+
+            react_metrics = {
+                "revenue": {
+                    "label": l2,
+                    "value": f"{int(m_gross_rev):,}",
+                    "prefix": "৳",
+                    "delta": _clean_delta(pct_r, dr_str),
+                    "sparkline": [float(x) for x in t_rev_vals] if t_rev_vals else None,
+                },
+                "orders": {
+                    "label": l3,
+                    "value": f"{int(m_ord):,}",
+                    "delta": _clean_delta(pct_o, do_str),
+                    "sparkline": [float(x) for x in t_ord_vals] if t_ord_vals else None,
+                },
+                "units": {
+                    "label": l1,
+                    "value": f"{int(m_qty):,}",
+                    "subtext": "Units fulfilled",
+                    "sparkline": [float(x) for x in t_qty_vals] if t_qty_vals else None,
+                },
+                "aov": {
+                    "label": extra_metric_label,
+                    "value": f"{int(m_bv):,}",
+                    "prefix": "৳",
+                    "delta": _clean_delta(pct_b, db_str),
+                    "sparkline": [float(x) for x in t_bv_vals] if t_bv_vals else None,
+                },
+            }
+
+            customer_mix_data = {
+                "newCount": int(m_new_cnt),
+                "returningCount": int(m_ret_cnt),
+                "returningRatio": float(round(pct_ret, 1)),
+            }
+
+            selected_new = render_react_kpi_toolbar(
+                views=views,
+                selected_view=dashboard_view or "All Orders",
+                view_counts=view_counts,
+                metrics=react_metrics,
+                customer_mix=customer_mix_data,
+                sync_time=sync_time,
+            )
+
+            if selected_new and selected_new != dashboard_view and selected_new in views:
+                apply_dashboard_view_selection(selected_new)
+                st.rerun()
+
+            rendered_react = True
+        except Exception:
+            rendered_react = False
+
+    if not rendered_react:
+        st.markdown(card_html, unsafe_allow_html=True)
 
     # ── Feature #5: Auto-Save Shift Snapshot ───────────────────────────────────
     # Only save once per render cycle, silently — keyed by data fingerprint

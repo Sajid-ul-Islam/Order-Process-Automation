@@ -47,6 +47,7 @@ MODULES = [
     "src.components.ui.empty_state",
     "src.components.ui.ui_components",
     "src.components.dashboard.svg",
+    "src.components.react_kpi",
     "src.pages.live_dashboard",
     "src.pages.sales_ingestion",
     "src.pages.stock_analytics",

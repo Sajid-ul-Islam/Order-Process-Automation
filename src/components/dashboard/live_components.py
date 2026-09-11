@@ -290,8 +290,37 @@ def _get_live_combined_source():
         return combined.drop_duplicates(subset=subset) if subset else combined
 
 
+def apply_dashboard_view_selection(selected: str) -> None:
+    """Synchronize session state when the active dashboard view changes."""
+    nav_modes = {
+        "All Orders": "Today",
+        "Today Shipped": "Today",
+        "Last Day Shipped": "Prev",
+        "Queue": "Backlog",
+    }
+    order_filters = {
+        "All Orders": "All Orders",
+        "Today Shipped": "Shipped",
+        "Last Day Shipped": "Shipped",
+        "Queue": "Queue",
+    }
+    st.session_state["live_dashboard_view"] = selected
+    st.session_state["wc_nav_mode"] = nav_modes.get(selected, "Today")
+    st.session_state["live_order_filter"] = order_filters.get(selected, "All Orders")
+    today = bd_today()
+    st.session_state["live_custom_range"] = (today, today)
+    st.session_state.pop("wc_sync_start_date", None)
+    st.session_state.pop("wc_sync_end_date", None)
+
+
 def _render_dashboard_view_selector():
     """Render the dashboard's single, mutually exclusive scope selector with real-time count badges."""
+    from src.components.react_kpi import is_react_kpi_available
+
+    if is_react_kpi_available() and st.session_state.get("use_react_kpi", True):
+        # View switcher is rendered directly inside the interactive React KPI Toolbar
+        return
+
     options = ["All Orders", "Today Shipped", "Last Day Shipped", "Queue"]
     icons = {
         "All Orders": "📋",
@@ -347,25 +376,7 @@ def _render_dashboard_view_selector():
     st.caption(f"ℹ️ {descriptions.get(selected, '')}")
 
     if selected != current:
-        nav_modes = {
-            "All Orders": "Today",
-            "Today Shipped": "Today",
-            "Last Day Shipped": "Prev",
-            "Queue": "Backlog",
-        }
-        order_filters = {
-            "All Orders": "All Orders",
-            "Today Shipped": "Shipped",
-            "Last Day Shipped": "Shipped",
-            "Queue": "Queue",
-        }
-        st.session_state["live_dashboard_view"] = selected
-        st.session_state["wc_nav_mode"] = nav_modes[selected]
-        st.session_state["live_order_filter"] = order_filters[selected]
-        today = bd_today()
-        st.session_state["live_custom_range"] = (today, today)
-        st.session_state.pop("wc_sync_start_date", None)
-        st.session_state.pop("wc_sync_end_date", None)
+        apply_dashboard_view_selection(selected)
         st.rerun()
 
 

@@ -201,6 +201,15 @@ def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> N
             value=st.session_state.get("show_animation", False),
         )
 
+        from src.components.react_kpi import is_react_kpi_available
+
+        if is_react_kpi_available():
+            st.session_state.use_react_kpi = st.toggle(
+                "⚡ React UI (Modern Toolbar)",
+                value=st.session_state.get("use_react_kpi", True),
+                help="Interactive React-powered KPI cards and view switcher",
+            )
+
         # ── Auto-refresh interval ──────────────────────────────────────────
         st.caption("Data Sync")
         refresh_opts = {
