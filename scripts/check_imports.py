@@ -46,6 +46,7 @@ MODULES = [
     "src.components.ui.dataframe_search",
     "src.components.ui.empty_state",
     "src.components.ui.ui_components",
+    "src.components.ui.mobile_navbar",
     "src.components.dashboard.svg",
     "src.components.react_kpi",
     "src.pages.live_dashboard",

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from typing import Callable, Optional
 
 import streamlit as st
 
@@ -94,24 +95,37 @@ def _format_nav_item(item: str) -> str:
     return nav_icons.get(item, item)
 
 
-def _render_nav_pills(nav_items: list[str], default: str) -> str:
+def _render_nav_pills(
+    nav_items: list[str],
+    default: str,
+    key: str = "sidebar_nav",
+    on_change: Optional[Callable[[], None]] = None,
+) -> str:
     """Render sidebar navigation pills (or radio fallback)."""
+    if key not in st.session_state:
+        st.session_state[key] = default
+
     if hasattr(st, "pills"):
         selected = st.sidebar.pills(
             "Select Workspace",
             options=nav_items,
-            default=default,
             selection_mode="single",
             format_func=_format_nav_item,
             label_visibility="collapsed",
+            key=key,
+            on_change=on_change,
         )
-        return selected or default
+        return selected or st.session_state.get(key, default)
+    current_val = st.session_state.get(key, default)
+    idx = nav_items.index(current_val) if current_val in nav_items else 0
     return st.sidebar.radio(
         "Select Workspace",
         nav_items,
         label_visibility="collapsed",
         format_func=_format_nav_item,
-        index=nav_items.index(default),
+        index=idx,
+        key=key,
+        on_change=on_change,
     )
 
 
@@ -311,7 +325,11 @@ def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> N
 
 
 def _render_sidebar(
-    is_auth_on: bool, config_issues: list[str], nav_items: list[str], default_nav: str
+    is_auth_on: bool,
+    config_issues: list[str],
+    nav_items: list[str],
+    default_nav: str,
+    on_change: Optional[Callable[[], None]] = None,
 ) -> str:
     """Render a clean, streamlined, and intuitive sidebar."""
     with st.sidebar:
@@ -326,7 +344,9 @@ def _render_sidebar(
 
         st.caption("🧭 WORKSPACE NAVIGATION")
 
-        selected_nav = _render_nav_pills(nav_items, default_nav)
+        selected_nav = _render_nav_pills(
+            nav_items, default_nav, key="sidebar_nav", on_change=on_change
+        )
 
         st.divider()
 
@@ -601,42 +621,88 @@ def run_app() -> None:
     if "header_status_banner" not in st.session_state:
         st.session_state.header_status_banner = ""
 
-    # ── Sidebar ─────────────────────────────────────────────────────────────
+    # ── Sidebar & Mobile Navigation State ───────────────────────────────────
     default_nav = (
         "\U0001f4c8 Live Dashboard"
         if "\U0001f4c8 Live Dashboard" in PRIMARY_NAV
         else PRIMARY_NAV[0]
     )
-    selected_nav = _render_sidebar(is_auth_on, config_issues, PRIMARY_NAV, default_nav)
+
+    if "selected_nav" not in st.session_state:
+        st.session_state["selected_nav"] = default_nav
+    if "sidebar_nav" not in st.session_state:
+        st.session_state["sidebar_nav"] = st.session_state["selected_nav"]
+    if "mobile_bottom_nav" not in st.session_state:
+        st.session_state["mobile_bottom_nav"] = st.session_state["selected_nav"]
+
+    def _sync_from_sidebar() -> None:
+        chosen = st.session_state.get("sidebar_nav")
+        if chosen:
+            st.session_state["selected_nav"] = chosen
+            st.session_state["mobile_bottom_nav"] = chosen
+
+    def _sync_from_mobile() -> None:
+        chosen = st.session_state.get("mobile_bottom_nav")
+        if chosen:
+            st.session_state["selected_nav"] = chosen
+            st.session_state["sidebar_nav"] = chosen
+
+    # Handle nav override from sidebar shortcut buttons or pages
+    if st.session_state.get("_nav_override"):
+        override_target = st.session_state.pop("_nav_override")
+        from src.config.ui_config import LEGACY_NAV_MAPPING
+
+        mapped_target = LEGACY_NAV_MAPPING.get(override_target, override_target)
+        if mapped_target in PRIMARY_NAV:
+            st.session_state["selected_nav"] = mapped_target
+            st.session_state["sidebar_nav"] = mapped_target
+            st.session_state["mobile_bottom_nav"] = mapped_target
+
+    selected_nav = _render_sidebar(
+        is_auth_on,
+        config_issues,
+        PRIMARY_NAV,
+        st.session_state["selected_nav"],
+        on_change=_sync_from_sidebar,
+    )
+    if selected_nav:
+        st.session_state["selected_nav"] = selected_nav
+        st.session_state["mobile_bottom_nav"] = selected_nav
 
     # ── Header placeholder ──────────────────────────────────────────────────
     header_container = st.empty()
-
-    # Handle nav override from sidebar shortcut buttons
-    if st.session_state.get("_nav_override"):
-        selected_nav = st.session_state.pop("_nav_override")
 
     if st.session_state.get("show_animation"):
         render_bike_animation()
 
     # ── Page routing with smooth transition wrapper ──────────────────────
+    current_page = st.session_state["selected_nav"]
     st.markdown(
-        f'<div class="page-view-wrapper page-nav-{abs(hash(selected_nav))}">',
+        f'<div class="page-view-wrapper page-nav-{abs(hash(current_page))}">',
         unsafe_allow_html=True,
     )
-    _route_page(selected_nav)
+    _route_page(current_page)
     st.markdown("</div>", unsafe_allow_html=True)
 
     # ── Re-render header with any injected content ─────────────────────────
     with header_container:
         # On Live Dashboard the banner already contains the title — skip full header
-        if selected_nav != "\U0001f4c8 Live Dashboard":
-            render_header(lambda: _render_header(selected_nav))
+        if current_page != "\U0001f4c8 Live Dashboard":
+            render_header(lambda: _render_header(current_page))
         else:
-            _render_header(selected_nav)
+            _render_header(current_page)
 
     # Reset banner for next run to avoid bleeding into other pages
     st.session_state.header_status_banner = ""
+
+    # ── Mobile Bottom Navigation Bar (Fixed on mobile viewports) ───────────
+    from src.components.ui.mobile_navbar import render_mobile_navbar
+
+    render_mobile_navbar(
+        PRIMARY_NAV,
+        current_nav=current_page,
+        on_change=_sync_from_mobile,
+    )
 
     # ── Footer ──────────────────────────────────────────────────────────────
     render_footer()
