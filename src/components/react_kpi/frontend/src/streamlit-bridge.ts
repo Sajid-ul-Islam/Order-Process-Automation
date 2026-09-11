@@ -50,6 +50,7 @@ export const DEFAULT_MOCK_ARGS: ComponentArgs = {
 export function useStreamlitBridge() {
   const [args, setArgs] = useState<ComponentArgs>(DEFAULT_MOCK_ARGS);
   const [disabled, setDisabled] = useState<boolean>(false);
+  const [theme, setTheme] = useState<StreamlitRenderMessage["theme"] | undefined>();
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -57,6 +58,17 @@ export function useStreamlitBridge() {
       if (data && data.type === "streamlit:render") {
         if (data.args) {
           setArgs(data.args);
+        }
+        if (data.theme) {
+          setTheme(data.theme);
+          const isDark = data.theme.base === "dark";
+          if (isDark) {
+            document.documentElement.classList.add("dark");
+            document.documentElement.classList.remove("light");
+          } else {
+            document.documentElement.classList.remove("dark");
+            document.documentElement.classList.add("light");
+          }
         }
         setDisabled(!!data.disabled);
       }
@@ -93,5 +105,5 @@ export function useStreamlitBridge() {
     );
   }, []);
 
-  return { args, disabled, sendValue, updateHeight };
+  return { args, disabled, theme, sendValue, updateHeight };
 }

@@ -1,10 +1,60 @@
-/* --- BASE THEME VARIABLES --- */
+/* --- BASE THEME VARIABLES (Default: Adaptive Light Theme) --- */
 :root {
-    --primary: var(--primary-color, #1d4ed8);
-    --primary-glow: rgba(29, 78, 216, 0.1);
-    --border: rgba(128, 128, 128, 0.15);
-    --text-muted: #64748b;
-    --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --primary: var(--primary-color, #10b981);
+    --primary-glow: rgba(16, 185, 129, 0.12);
+    --border: #e2e8f0;
+    --text-color: #0f172a;
+    --text-muted: #475569;
+    --text-main: #0f172a;
+    --surface: #ffffff;
+    --card-bg: #ffffff;
+    --card-border: #e2e8f0;
+    --background-color: #ffffff;
+    --background-secondary: #f8fafc;
+    --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+}
+
+/* Theme variables override when Dark Mode is active */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --primary: var(--primary-color, #10b981);
+        --primary-glow: rgba(16, 185, 129, 0.22);
+        --border: rgba(255, 255, 255, 0.1);
+        --text-color: #f8fafc;
+        --text-muted: #94a3b8;
+        --text-main: #ffffff;
+        --surface: rgba(255, 255, 255, 0.05);
+        --card-bg: rgba(255, 255, 255, 0.05);
+        --card-border: rgba(255, 255, 255, 0.1);
+        --background-color: #0b0f19;
+        --background-secondary: rgba(255, 255, 255, 0.04);
+        --card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35);
+    }
+}
+
+/* Streamlit Theme Overrides (when user toggles inside Streamlit Settings) */
+.stApp[style*="color-scheme: dark"],
+.stApp[data-theme="dark"] {
+    --text-color: #f8fafc !important;
+    --text-muted: #94a3b8 !important;
+    --text-main: #ffffff !important;
+    --surface: rgba(255, 255, 255, 0.05) !important;
+    --card-bg: rgba(255, 255, 255, 0.05) !important;
+    --card-border: rgba(255, 255, 255, 0.1) !important;
+    --background-color: #0b0f19 !important;
+    --background-secondary: rgba(255, 255, 255, 0.04) !important;
+}
+
+.stApp[style*="color-scheme: light"],
+.stApp[data-theme="light"] {
+    --text-color: #0f172a !important;
+    --text-muted: #475569 !important;
+    --text-main: #0f172a !important;
+    --surface: #ffffff !important;
+    --card-bg: #ffffff !important;
+    --card-border: #e2e8f0 !important;
+    --background-color: #ffffff !important;
+    --background-secondary: #f8fafc !important;
 }
 
 /* --- GLOBAL FADE-IN & PAGE TRANSITION ANIMATIONS --- */
@@ -319,9 +369,17 @@ div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stSegmente
     text-transform: uppercase;
     letter-spacing: 0.08em;
     font-weight: 700 !important;
-    color: rgba(255, 255, 255, 0.7) !important;
+    color: var(--text-muted, #475569) !important;
     margin-bottom: 6px;
     padding-left: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+    div[data-testid="stColumn"]:has(.align-left-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+    div[data-testid="stColumn"]:has(.align-center-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+    div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"] {
+        color: rgba(255, 255, 255, 0.7) !important;
+    }
 }
 
 /* --- ST.PILLS GLASSMORPHISM (SIDEBAR & MAIN) --- */
@@ -734,16 +792,16 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
     transform: translateY(-1px);
 }
 
-/* Chat UI Enhancements (Terminal Theme) */
+/* Chat UI Enhancements (Adaptive Theme) */
 .stChatMessage {
-    background-color: rgba(15, 23, 42, 0.85) !important;
-    border: 1px solid rgba(59, 130, 246, 0.3) !important;
+    background-color: var(--surface, #ffffff) !important;
+    border: 1px solid var(--border, #e2e8f0) !important;
     border-radius: 8px !important;
     padding: 1.2rem !important;
     margin-bottom: 1rem !important;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
     transition: border-color 0.3s ease, box-shadow 0.3s ease !important;
-    color: #e2e8f0 !important;
+    color: var(--text-color, #0f172a) !important;
 }
 
 .stChatMessage:hover {
@@ -756,7 +814,7 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
     font-family: 'Courier New', Courier, monospace !important;
     font-size: 0.9rem !important;
     line-height: 1.6 !important;
-    color: #e2e8f0 !important;
+    color: var(--text-color, #0f172a) !important;
 }
 
 .stChatMessage [data-testid="stChatMessageContent"],
@@ -764,19 +822,38 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
     font-size: 1rem !important;
     line-height: 1.6 !important;
-    color: #e2e8f0 !important;
+    color: var(--text-color, #0f172a) !important;
 }
 
 /* Assistant Message Terminal Glow */
 .stChatMessage[data-testid="stChatMessageAssistant"] {
     border-left: 4px solid #10b981 !important;
-    background: linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, rgba(15, 23, 42, 0.85) 100%) !important;
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, var(--surface, #ffffff) 100%) !important;
 }
 
 /* User Message Terminal Style */
 .stChatMessage[data-testid="stChatMessageUser"] {
     border-left: 4px solid #3b82f6 !important;
-    background: linear-gradient(90deg, rgba(59, 130, 246, 0.05) 0%, rgba(15, 23, 42, 0.85) 100%) !important;
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.05) 0%, var(--surface, #ffffff) 100%) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+    .stChatMessage {
+        background-color: rgba(15, 23, 42, 0.85) !important;
+        border: 1px solid rgba(59, 130, 246, 0.3) !important;
+        color: #e2e8f0 !important;
+    }
+    .stChatMessage [data-testid="stChatMessageContent"] code,
+    .stChatMessage [data-testid="stChatMessageContent"],
+    .stChatMessage [data-testid="stChatMessageContent"] p {
+        color: #e2e8f0 !important;
+    }
+    .stChatMessage[data-testid="stChatMessageAssistant"] {
+        background: linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, rgba(15, 23, 42, 0.85) 100%) !important;
+    }
+    .stChatMessage[data-testid="stChatMessageUser"] {
+        background: linear-gradient(90deg, rgba(59, 130, 246, 0.05) 0%, rgba(15, 23, 42, 0.85) 100%) !important;
+    }
 }
 
 /* --- MODERN METRIC CARDS --- */
@@ -797,18 +874,18 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
 }
 
 .metric-card {
-    background: rgba(128, 128, 128, 0.05);
+    background: var(--card-bg, #ffffff);
     backdrop-filter: blur(16px);
     border-radius: 16px;
     padding: 22px;
-    border: 1px solid rgba(128, 128, 128, 0.15);
+    border: 1px solid var(--card-border, #e2e8f0);
     display: flex;
     align-items: center;
     justify-content: space-between;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
-    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--card-shadow, 0 4px 20px -2px rgba(0, 0, 0, 0.05));
 }
 
 .metric-card::before {
@@ -861,10 +938,10 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
 }
 
 .metric-label {
-    color: var(--text-muted) !important;
-    opacity: 0.8;
+    color: var(--text-muted, #475569) !important;
+    opacity: 1 !important;
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin-bottom: 4px;
@@ -874,7 +951,7 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
 }
 
 .metric-value {
-    color: var(--text-color) !important;
+    color: var(--text-color, #0f172a) !important;
     font-size: 1.8rem;
     font-weight: 800;
     letter-spacing: -0.03em;
@@ -1649,6 +1726,179 @@ div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stElementC
         background: rgba(29, 78, 216, 0.1) !important;
         border-bottom-color: rgba(255, 255, 255, 0.1) !important;
     }
+}
+
+/* High Contrast Light Mode Enforcement */
+@media (prefers-color-scheme: light) {
+    .command-nav-header,
+    .hub-title,
+    .metric-value,
+    .kpi-value,
+    div[data-testid="stMetricValue"] {
+        color: #0f172a !important;
+    }
+
+    .hub-subtitle,
+    .metric-label,
+    .kpi-label,
+    div[data-testid="stMetricLabel"] {
+        color: #475569 !important;
+    }
+
+    .hub-card,
+    .metric-card {
+        background: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+    }
+
+    .metric-detail-row {
+        color: #0f172a !important;
+    }
+
+    .delta-prev {
+        color: #475569 !important;
+    }
+
+    .stChatMessage {
+        background-color: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        color: #0f172a !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+    }
+
+    .stChatMessage [data-testid="stChatMessageContent"],
+    .stChatMessage [data-testid="stChatMessageContent"] p,
+    .stChatMessage [data-testid="stChatMessageContent"] code {
+        color: #0f172a !important;
+    }
+
+    .stChatMessage[data-testid="stChatMessageAssistant"] {
+        background: linear-gradient(90deg, rgba(16, 185, 129, 0.06) 0%, #ffffff 100%) !important;
+        border-left: 4px solid #10b981 !important;
+    }
+
+    .stChatMessage[data-testid="stChatMessageUser"] {
+        background: linear-gradient(90deg, rgba(59, 130, 246, 0.05) 0%, #ffffff 100%) !important;
+        border-left: 4px solid #3b82f6 !important;
+    }
+
+    div[data-testid="stColumn"]:has(.align-left-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+    div[data-testid="stColumn"]:has(.align-center-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+    div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"] {
+        color: #334155 !important;
+    }
+
+    div[data-testid="stPills"] button:not([aria-checked="true"]):not([aria-pressed="true"]):not([data-pressed="true"]),
+    div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([aria-pressed="true"]) {
+        color: #334155 !important;
+    }
+
+    .hub-footer {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border-top: 1px solid #e2e8f0 !important;
+    }
+
+    .hub-title-row {
+        background: rgba(16, 185, 129, 0.05) !important;
+        border-bottom-color: #e2e8f0 !important;
+    }
+
+    .mobile-bottom-navbar-container,
+    .st-key-mobile_bottom_navbar_container {
+        background: rgba(255, 255, 255, 0.95) !important;
+        border-top: 1px solid #e2e8f0 !important;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08) !important;
+    }
+
+    .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button,
+    .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] div[role="radio"],
+    .st-key-mobile_bottom_nav [data-testid="stButtonGroup"] button,
+    .st-key-mobile_bottom_nav [data-testid="stButtonGroup"] div[role="radio"] {
+        background: rgba(0, 0, 0, 0.03) !important;
+        color: #475569 !important;
+    }
+}
+
+/* Explicit Streamlit light theme attribute overrides */
+.stApp[style*="color-scheme: light"] .metric-value,
+.stApp[style*="color-scheme: light"] div[data-testid="stMetricValue"],
+.stApp[style*="color-scheme: light"] .hub-title,
+.stApp[style*="color-scheme: light"] .kpi-value,
+.stApp[data-theme="light"] .metric-value,
+.stApp[data-theme="light"] div[data-testid="stMetricValue"],
+.stApp[data-theme="light"] .hub-title,
+.stApp[data-theme="light"] .kpi-value {
+    color: #0f172a !important;
+}
+
+.stApp[style*="color-scheme: light"] .metric-label,
+.stApp[style*="color-scheme: light"] div[data-testid="stMetricLabel"],
+.stApp[style*="color-scheme: light"] .hub-subtitle,
+.stApp[style*="color-scheme: light"] .kpi-label,
+.stApp[data-theme="light"] .metric-label,
+.stApp[data-theme="light"] div[data-testid="stMetricLabel"],
+.stApp[data-theme="light"] .hub-subtitle,
+.stApp[data-theme="light"] .kpi-label {
+    color: #475569 !important;
+}
+
+.stApp[style*="color-scheme: light"] .metric-card,
+.stApp[style*="color-scheme: light"] .hub-card,
+.stApp[data-theme="light"] .metric-card,
+.stApp[data-theme="light"] .hub-card {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+}
+
+.stApp[style*="color-scheme: light"] .metric-detail-row,
+.stApp[data-theme="light"] .metric-detail-row {
+    color: #0f172a !important;
+}
+
+.stApp[style*="color-scheme: light"] .delta-prev,
+.stApp[data-theme="light"] .delta-prev {
+    color: #475569 !important;
+}
+
+.stApp[style*="color-scheme: light"] .hub-footer,
+.stApp[data-theme="light"] .hub-footer {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border-top: 1px solid #e2e8f0 !important;
+}
+
+/* Explicit Streamlit dark theme attribute overrides */
+.stApp[style*="color-scheme: dark"] .metric-value,
+.stApp[style*="color-scheme: dark"] div[data-testid="stMetricValue"],
+.stApp[style*="color-scheme: dark"] .hub-title,
+.stApp[style*="color-scheme: dark"] .kpi-value,
+.stApp[data-theme="dark"] .metric-value,
+.stApp[data-theme="dark"] div[data-testid="stMetricValue"],
+.stApp[data-theme="dark"] .hub-title,
+.stApp[data-theme="dark"] .kpi-value {
+    color: #ffffff !important;
+}
+
+.stApp[style*="color-scheme: dark"] .metric-label,
+.stApp[style*="color-scheme: dark"] div[data-testid="stMetricLabel"],
+.stApp[style*="color-scheme: dark"] .hub-subtitle,
+.stApp[style*="color-scheme: dark"] .kpi-label,
+.stApp[data-theme="dark"] .metric-label,
+.stApp[data-theme="dark"] div[data-testid="stMetricLabel"],
+.stApp[data-theme="dark"] .hub-subtitle,
+.stApp[data-theme="dark"] .kpi-label {
+    color: #cbd5e1 !important;
+}
+
+.stApp[style*="color-scheme: dark"] .metric-card,
+.stApp[style*="color-scheme: dark"] .hub-card,
+.stApp[data-theme="dark"] .metric-card,
+.stApp[data-theme="dark"] .hub-card {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* ============================================================

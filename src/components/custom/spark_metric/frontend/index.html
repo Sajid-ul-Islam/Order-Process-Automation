@@ -107,6 +107,44 @@
       display: none;
       z-index: 10;
     }
+    @media (prefers-color-scheme: light) {
+      .metric-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+      }
+      .metric-card:hover {
+        border-color: rgba(16, 185, 129, 0.5);
+        box-shadow: 0 4px 14px rgba(16, 185, 129, 0.15);
+      }
+      .metric-label {
+        color: #475569;
+      }
+      .metric-value {
+        color: #0f172a;
+      }
+      .scrub-info {
+        color: #0284c7;
+      }
+    }
+    body.light .metric-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    body.light .metric-card:hover {
+      border-color: rgba(16, 185, 129, 0.5);
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.15);
+    }
+    body.light .metric-label {
+      color: #475569;
+    }
+    body.light .metric-value {
+      color: #0f172a;
+    }
+    body.light .scrub-info {
+      color: #0284c7;
+    }
   </style>
 </head>
 <body>
@@ -258,6 +296,10 @@
 
     window.addEventListener("message", (event) => {
       if (event.data && event.data.type === "streamlit:render") {
+        if (event.data.theme) {
+          const isLight = event.data.theme.base === "light";
+          document.body.classList.toggle("light", isLight);
+        }
         const args = event.data.args || {};
         document.getElementById("label").innerText = args.label || "Metric";
         origValue = args.value || "—";

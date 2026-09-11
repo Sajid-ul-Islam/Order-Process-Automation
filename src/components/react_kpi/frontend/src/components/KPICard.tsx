@@ -52,10 +52,10 @@ export const KPICard: React.FC<KPICardProps> = ({ metric, accent = 'emerald' }) 
   const isPositive = delta ? (delta.positive ?? (typeof delta.value === 'number' ? delta.value >= 0 : !String(delta.value).startsWith('-'))) : null;
 
   return (
-    <div className="glass-card rounded-xl p-4 flex flex-col justify-between transition-all duration-300 hover:border-emerald-500/30 hover:bg-slate-900/80 group relative overflow-hidden">
+    <div className="glass-card rounded-xl p-4 flex flex-col justify-between transition-all duration-300 hover:border-emerald-500/40 hover:bg-slate-50 dark:hover:bg-slate-900/80 group relative overflow-hidden">
       {/* Top row: Label & Delta */}
       <div className="flex items-start justify-between gap-2">
-        <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+        <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
           {metric.label}
         </span>
         {delta && (
@@ -63,8 +63,8 @@ export const KPICard: React.FC<KPICardProps> = ({ metric, accent = 'emerald' }) 
             className={`
               flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full
               ${isPositive
-                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
-                : 'bg-rose-500/15 text-rose-400 border border-rose-500/20'
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/20'
+                : 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-500/15 dark:text-rose-400 dark:border-rose-500/20'
               }
             `}
           >
@@ -83,13 +83,13 @@ export const KPICard: React.FC<KPICardProps> = ({ metric, accent = 'emerald' }) 
       {/* Main Value */}
       <div className="my-2.5 flex items-baseline gap-1">
         {metric.prefix && (
-          <span className="text-base font-semibold text-slate-400">{metric.prefix}</span>
+          <span className="text-base font-semibold text-slate-500 dark:text-slate-400">{metric.prefix}</span>
         )}
-        <span className="text-2xl sm:text-3xl font-bold tracking-tight text-white group-hover:text-emerald-300 transition-colors">
+        <span className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-300 transition-colors tabular-nums">
           {typeof metric.value === 'number' ? metric.value.toLocaleString() : metric.value}
         </span>
         {metric.suffix && (
-          <span className="text-xs text-slate-400 ml-1">{metric.suffix}</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">{metric.suffix}</span>
         )}
       </div>
 
@@ -98,7 +98,7 @@ export const KPICard: React.FC<KPICardProps> = ({ metric, accent = 'emerald' }) 
         {metric.sparkline && metric.sparkline.length > 1 ? (
           renderSparklineSvg(metric.sparkline, color)
         ) : metric.subtext ? (
-          <span className="text-[11px] text-slate-400">{metric.subtext}</span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{metric.subtext}</span>
         ) : (
           <div className="h-4" />
         )}

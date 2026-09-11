@@ -39,13 +39,13 @@ export const ViewSwitcher: React.FC<ViewSwitcherProps> = ({
             className={`
               relative flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 select-none
               ${isSelected
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-glow-emerald font-semibold'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                ? 'bg-emerald-100/90 text-emerald-900 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/50 shadow-sm dark:shadow-glow-emerald font-semibold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-800/60 border border-transparent'
               }
               ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
             `}
           >
-            <span className={isSelected ? 'text-emerald-400' : 'text-slate-500'}>
+            <span className={isSelected ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}>
               {icon}
             </span>
             <span>{view}</span>
@@ -53,8 +53,8 @@ export const ViewSwitcher: React.FC<ViewSwitcherProps> = ({
               className={`
                 px-1.5 py-0.5 rounded-full text-[10px] font-bold transition-colors
                 ${isSelected
-                  ? 'bg-emerald-500/30 text-emerald-200'
-                  : 'bg-slate-800 text-slate-400'
+                  ? 'bg-emerald-200/90 text-emerald-950 dark:bg-emerald-500/30 dark:text-emerald-200'
+                  : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
                 }
               `}
             >
