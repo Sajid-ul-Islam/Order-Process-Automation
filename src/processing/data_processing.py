@@ -633,7 +633,14 @@ def prepare_granular_data(df, selected_cols):
 def aggregate_data(df, selected_cols):
     """Generates dashboard aggregates from granular standardized data using Polars."""
     try:
+        cols_to_fill = [
+            pl.col(c).fill_nan(0).fill_null(0)
+            for c in ["Quantity", "Total Amount"]
+            if c in df.columns
+        ]
         lazy_df = pl.from_pandas(df).lazy()
+        if cols_to_fill:
+            lazy_df = lazy_df.with_columns(cols_to_fill)
 
         # 1. Summary
         group_keys = ["Category"]

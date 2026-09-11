@@ -143,3 +143,30 @@ def test_product_listing_column_auto_detection():
     assert (
         detect_column(custom_df, DATE_COL_CANDIDATES) or det_custom.get("date")
     ) == "created_date"
+
+
+def test_aggregate_data_and_donut_chart_handles_nan_quantity():
+    """Verify that aggregate_data and category charts handle NaNs in Quantity and Total Amount without producing NaN Total Qty."""
+    import numpy as np
+    from src.processing.data_processing import aggregate_data
+
+    df = pd.DataFrame(
+        {
+            "Product Name": ["Item A", "Item A", "Item B"],
+            "SKU": ["A-1", "A-1", "B-1"],
+            "Category": ["Shirt", "Shirt", "Panjabi"],
+            "Sub-Category": ["Formal", "Formal", "Panjabi"],
+            "Quantity": [2.0, np.nan, 3.0],
+            "Total Amount": [2000.0, np.nan, 3500.0],
+            "Item Cost": [1000.0, 1000.0, 1166.67],
+            "Clean_Product": ["Item A", "Item A", "Item B"],
+            "Is_Bundle_Combo": [False, False, False],
+        }
+    )
+
+    drill, summ, top, basket = aggregate_data(df, {})
+    assert summ is not None
+    assert not summ["Total Qty"].isna().any(), "Total Qty in summ must not contain any NaN"
+    assert not summ["Total Amount"].isna().any(), "Total Amount in summ must not contain any NaN"
+    assert summ.loc[summ["Category"] == "Shirt", "Total Qty"].iloc[0] == 2.0
+    assert summ.loc[summ["Category"] == "Shirt", "Total Amount"].iloc[0] == 2000.0
