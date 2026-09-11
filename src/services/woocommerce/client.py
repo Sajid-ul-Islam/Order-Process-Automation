@@ -551,24 +551,17 @@ def _partition_operational_data(df_full):
     is_hold = status_lower.isin(["on-hold", "wc-on-hold", "hold", "wc-hold"])
     is_waiting = status_lower.isin(["pending", "waiting", "wc-pending", "wc-waiting"])
 
-    # Any order created or modified in today's shift (status changes, newly placed, dispatches)
     modified_recent = df_full["mod_dt_parsed"] >= prev_cutoff
     created_recent = df_full["dt_parsed"] >= prev_cutoff
-
-    # For the "Today" view, include ANY order created or modified within the current operational shift.
-    # This is more inclusive and catches old orders that were shipped today.
-    # Also keep orders that are still open in `processing` even if they were placed before the
-    # shift start — otherwise they would be invisible in every view (Prev only keeps shipped,
-    # Backlog only keeps on-hold/pending/waiting).
     df_live = df_full[created_recent | modified_recent | is_processing].copy()
-
     df_prev = df_full[
         (df_full["mod_dt_parsed"] >= day_before_prev)
         & (df_full["mod_dt_parsed"] < prev_cutoff)
         & is_shipped
     ].copy()
 
-    df_backlog = df_full[is_hold | is_waiting].copy()
+    # Queue is date-independent and includes all unresolved workflow states.
+    df_backlog = df_full[is_processing | is_hold | is_waiting].copy()
 
     slot_label = "Today"
 

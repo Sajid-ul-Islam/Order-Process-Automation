@@ -6,9 +6,11 @@ Each function now has a single responsibility and follows progressive disclosure
 
 import hashlib
 
+import pandas as pd
 import streamlit as st
 
 from src.config.constants import bd_today
+from src.processing.data_processing import compute_live_filter_counts
 from src.services.woocommerce.client import load_live_source as _load_live_source
 
 
@@ -229,14 +231,16 @@ def _render_refresh_controls(nav_mode: str, load_live_source):
 
     Hick's Law: Secondary action demoted visually with icon-only button.
     """
-    order_view_mode = (
-        st.session_state.get("live_order_filter", "Shipped")
-        if nav_mode == "Today"
-        else "All Orders"
-    )
+    dashboard_view = st.session_state.get("live_dashboard_view", "All Orders")
 
     # Auto-sync fragment runs based on mode
-    if nav_mode == "Today" and order_view_mode == "Shipped":
+    if dashboard_view in {
+        "All Orders",
+        "Today",
+        "Today Shipped",
+        "Last Day",
+        "Last Day Shipped",
+    }:
         _sync_60s()
     else:
         _sync_180s()
@@ -251,6 +255,101 @@ def _render_refresh_controls(nav_mode: str, load_live_source):
     ):
         load_live_source(force_refresh=True)
         st.toast("⚡ Data refreshed!")
+        st.rerun()
+
+
+def _get_live_combined_source():
+    """Combine operational partitions for dashboard view filtering and badge counts."""
+    frames = [
+        frame
+        for frame in (
+            st.session_state.get("wc_curr_df"),
+            st.session_state.get("wc_prev_df"),
+            st.session_state.get("wc_backlog_df"),
+        )
+        if frame is not None and not frame.empty
+    ]
+    if not frames:
+        return None
+    return pd.concat(frames, ignore_index=True).drop_duplicates()
+
+
+def _render_dashboard_view_selector():
+    """Render the dashboard's single, mutually exclusive scope selector with real-time count badges."""
+    options = ["All Orders", "Today Shipped", "Last Day Shipped", "Queue"]
+    icons = {
+        "All Orders": "📋",
+        "Today Shipped": "🚚",
+        "Last Day Shipped": "🕘",
+        "Queue": "📥",
+    }
+    descriptions = {
+        "All Orders": "Today's placed orders + backlog unfulfilled queue (excluding hold & waiting)",
+        "Today Shipped": "Only orders shipped or completed today (00:00–23:59 BD time)",
+        "Last Day Shipped": "Only orders shipped or completed yesterday (previous BD calendar day)",
+        "Queue": "All unfulfilled orders currently in processing, hold, or waiting status across all dates",
+    }
+
+    current = st.session_state.get("live_dashboard_view", "All Orders")
+    if current not in options:
+        if current == "Today":
+            current = "Today Shipped"
+        elif current == "Last Day":
+            current = "Last Day Shipped"
+        else:
+            current = "All Orders"
+
+    # Compute dynamic real-time counts from combined operational data
+    source_df = _get_live_combined_source()
+    counts = compute_live_filter_counts(source_df)
+
+    def _format_label(opt: str) -> str:
+        count = counts.get(opt, 0)
+        return f"{icons[opt]} {opt} ({count})"
+
+    if hasattr(st, "pills"):
+        selected = st.pills(
+            "Dashboard View",
+            options,
+            default=current,
+            format_func=_format_label,
+            key="live_dashboard_view_pills",
+            label_visibility="collapsed",
+        )
+    else:
+        selected = st.radio(
+            "Dashboard View",
+            options,
+            index=options.index(current),
+            horizontal=True,
+            format_func=_format_label,
+            key="live_dashboard_view_radio",
+            label_visibility="collapsed",
+        )
+
+    selected = selected or current
+    st.caption(f"ℹ️ {descriptions.get(selected, '')}")
+
+    if selected != current:
+        nav_modes = {
+            "All Orders": "Today",
+            "Today Shipped": "Today",
+            "Last Day Shipped": "Prev",
+            "Queue": "Backlog",
+        }
+        order_filters = {
+            "All Orders": "All Orders",
+            "Today Shipped": "Shipped",
+            "Last Day Shipped": "Shipped",
+            "Queue": "Processing",
+        }
+        st.session_state["live_dashboard_view"] = selected
+        st.session_state["wc_nav_mode"] = nav_modes[selected]
+        st.session_state["live_order_filter"] = order_filters[selected]
+        today = bd_today()
+        st.session_state["live_custom_range"] = (today, today)
+        st.session_state.pop("wc_sync_start_date", None)
+        st.session_state.pop("wc_sync_end_date", None)
         st.rerun()
 
 
@@ -407,17 +506,10 @@ def render_dashboard_banner(load_live_source):
     """
     nav_mode = st.session_state.get("wc_nav_mode", "Today")
 
-    st.caption("Choose a scope once; KPIs and analysis update together.")
-    c1, c2, c3, c4 = st.columns([2.4, 1.8, 2.2, 0.5], vertical_alignment="center")
-
+    st.caption("One view controls the KPI cards, order list, and analysis.")
+    c1, c2 = st.columns([6, 0.5], vertical_alignment="center")
     with c1:
-        _render_date_range_selector()
+        _render_dashboard_view_selector()
 
     with c2:
-        _render_operation_mode_selector(nav_mode)
-
-    with c3:
-        _render_order_filter_selector(nav_mode)
-
-    with c4:
         _render_refresh_controls(nav_mode, load_live_source)

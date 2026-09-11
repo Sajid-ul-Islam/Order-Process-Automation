@@ -365,6 +365,124 @@ def filter_actual_sales(df):
     return df[status_lower.isin(actual_statuses)].copy()
 
 
+def filter_live_dashboard_view(df, view: str, reference_date=None):
+    """Apply the four mutually exclusive Live Dashboard visibility rules.
+
+    - "All Orders" (Default): All orders placed today (any non-cancelled status)
+      PLUS all orders from previous days that are not yet shipped (queue/processing/hold).
+    - "Today Shipped" / "Today": Only orders shipped or completed today (00:00-23:59 BD).
+    - "Last Day Shipped" / "Last Day": Only orders shipped or completed yesterday (previous BD calendar day).
+    - "Queue": All orders currently in processing, hold, or waiting status regardless of date placed.
+    """
+    if df is None or df.empty:
+        return df
+
+    from src.config.constants import (
+        ACTIVE_STATUSES,
+        CANCELLED_STATUSES,
+        HOLD_WAITING_STATUSES,
+        SHIPPED_STATUSES,
+    )
+
+    status_col = (
+        "Order Status"
+        if "Order Status" in df.columns
+        else "Status"
+        if "Status" in df.columns
+        else None
+    )
+    if status_col is None:
+        return df.iloc[0:0]
+
+    created_col = (
+        "dt_parsed"
+        if "dt_parsed" in df.columns
+        else "Order Date"
+        if "Order Date" in df.columns
+        else None
+    )
+    modified_col = (
+        "mod_dt_parsed"
+        if "mod_dt_parsed" in df.columns
+        else "Order Date Modified"
+        if "Order Date Modified" in df.columns
+        else None
+    )
+    created = (
+        safe_coerce_datetime_naive(df[created_col])
+        if created_col
+        else pd.Series(pd.NaT, index=df.index)
+    )
+    modified = (
+        safe_coerce_datetime_naive(df[modified_col])
+        if modified_col
+        else pd.Series(pd.NaT, index=df.index)
+    )
+
+    today = reference_date or bd_today()
+    previous_day = today - timedelta(days=1)
+    statuses = df[status_col].astype(str).str.lower().str.strip()
+    sale_statuses = {status.lower() for status in SHIPPED_STATUSES}
+    queue_statuses = {status.lower() for status in ACTIVE_STATUSES}
+    hold_waiting_statuses = {status.lower() for status in HOLD_WAITING_STATUSES}
+    is_sale = statuses.isin(sale_statuses)
+    is_queue = statuses.isin(queue_statuses)
+    is_cancelled = statuses.isin(CANCELLED_STATUSES)
+    is_hold_waiting = statuses.isin(hold_waiting_statuses) | statuses.str.contains(
+        r"hold|waiting", case=False, na=False
+    )
+    sale_date = modified.fillna(created).dt.date
+    created_date = created.dt.date
+
+    v = str(view).strip()
+    if v in {"Today Shipped", "Today"}:
+        mask = is_sale & (sale_date == today)
+    elif v in {"Last Day Shipped", "Last Day"}:
+        mask = is_sale & (sale_date == previous_day)
+    elif v == "Queue":
+        mask = is_queue
+    elif v == "All Orders":
+        mask = (
+            ~is_cancelled
+            & ~is_hold_waiting
+            & ((created_date == today) | ((created_date < today) & is_queue))
+        )
+    else:
+        mask = pd.Series(False, index=df.index)
+
+    return df[mask].copy()
+
+
+def compute_live_filter_counts(df, reference_date=None) -> dict[str, int]:
+    """Compute distinct order counts for each of the 4 live dashboard filter views."""
+    counts = {
+        "All Orders": 0,
+        "Today Shipped": 0,
+        "Last Day Shipped": 0,
+        "Queue": 0,
+    }
+    if df is None or df.empty:
+        return counts
+
+    id_col = (
+        "Order ID"
+        if "Order ID" in df.columns
+        else "order_id"
+        if "order_id" in df.columns
+        else None
+    )
+
+    for view_key in counts:
+        sub_df = filter_live_dashboard_view(df, view_key, reference_date)
+        if sub_df is not None and not sub_df.empty:
+            if id_col and id_col in sub_df.columns:
+                counts[view_key] = int(sub_df[id_col].nunique())
+            else:
+                counts[view_key] = len(sub_df)
+
+    return counts
+
+
 def apply_order_view(df, nav_mode, order_view):
     """Filter an orders DataFrame to the selected order view within its slot.
 

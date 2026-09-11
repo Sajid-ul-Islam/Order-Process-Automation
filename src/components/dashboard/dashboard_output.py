@@ -56,15 +56,18 @@ def _render_operational_cycle_metrics(
             else None
         )
 
-    if order_view_mode == "All Orders" and nav_mode == "Today":
+    dashboard_view = st.session_state.get("live_dashboard_view")
+    is_pre_scoped = dashboard_view in {"Today", "Last Day", "Queue", "All Orders"}
+
+    if not is_pre_scoped and order_view_mode == "All Orders" and nav_mode == "Today":
         m_df = filter_all_orders_to_slot(m_df, nav_mode)
         if c_df is not None and not c_df.empty:
             c_df = filter_all_orders_to_slot(c_df, "Prev")
-    elif order_view_mode == "Shipped":
+    elif not is_pre_scoped and order_view_mode == "Shipped":
         m_df = filter_shipped_by_slot(m_df, nav_mode, is_comparison=False)
         if c_df is not None:
             c_df = filter_shipped_by_slot(c_df, nav_mode, is_comparison=True)
-    elif order_view_mode == "Processing":
+    elif not is_pre_scoped and order_view_mode == "Processing":
         if status_col_m:
             m_df = m_df[m_df[status_col_m].astype(str).str.lower() == "processing"]
         if c_df is not None and status_col_c:

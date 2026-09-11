@@ -539,13 +539,30 @@ def render_operational_metrics(
         _total_ord = max(1, int(m_ord))
     m_cb_orders_pct = (_cb_ord_cnt / _total_ord * 100) if _cb_ord_cnt > 0 else 0.0
 
-    order_view_mode = (
-        st.session_state.get("live_order_filter", "Shipped")
-        if nav_mode == "Today"
-        else "All Orders"
-    )
+    order_view_mode = st.session_state.get("live_order_filter", "Shipped")
+    dashboard_view = st.session_state.get("live_dashboard_view")
 
-    if nav_mode == "Backlog":
+    if dashboard_view == "Queue":
+        l1 = "Queue Items"
+        l2 = "Pipeline Value"
+        l3 = "Queue Orders"
+        icon_l3 = "🛒"
+    elif dashboard_view == "Today":
+        l1 = "Shipped Items · Today"
+        l2 = "Sales Revenue · Today"
+        l3 = "Shipped Orders · Today"
+        icon_l3 = "🚚"
+    elif dashboard_view == "Last Day":
+        l1 = "Shipped Items · Last Day"
+        l2 = "Sales Revenue · Last Day"
+        l3 = "Shipped Orders · Last Day"
+        icon_l3 = "🕘"
+    elif dashboard_view == "All Orders":
+        l1 = "Actual Sale Items"
+        l2 = "Actual Sales Revenue"
+        l3 = "Actual Sale Orders"
+        icon_l3 = "🚚"
+    elif nav_mode == "Backlog":
         l1 = "Backlog Items"
         l2 = "Backlog Rev"
         l3 = "Backlog Orders"

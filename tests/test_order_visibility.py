@@ -48,8 +48,8 @@ def test_partition_keeps_processing_orders_placed_before_cutoff(op_state):
     assert 102 in set(df_live["Order ID"])
     # Cancelled before the shift, not processing → excluded from Today.
     assert 106 not in set(df_live["Order ID"])
-    # Backlog only holds on-hold/pending/waiting.
-    assert set(df_backlog["Order ID"]) == {104, 105}
+    # Queue includes processing, on-hold, pending, and waiting regardless of date.
+    assert set(df_backlog["Order ID"]) == {101, 102, 104, 105}
     # The old shipped order is not in Today (it belongs to the shipped/prev history).
     assert 103 not in set(df_live["Order ID"])
     assert 103 not in set(df_backlog["Order ID"])

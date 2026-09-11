@@ -56,6 +56,18 @@ ACTIVE_STATUSES = [
     "wc-process",
 ]
 
+# Held / waiting statuses to exclude from active operational All Orders view
+HOLD_WAITING_STATUSES = {
+    "on-hold",
+    "hold",
+    "pending",
+    "waiting",
+    "wc-on-hold",
+    "wc-hold",
+    "wc-pending",
+    "wc-waiting",
+}
+
 # Non-shipped statuses (active / held / terminal unfulfilled)
 NON_SHIPPED_STATUSES = set(ACTIVE_STATUSES) | {
     "cancelled",

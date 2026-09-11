@@ -20,7 +20,9 @@ from datetime import date
 from src.processing.data_processing import (
     apply_order_view,
     apply_order_view_comparison,
+    compute_live_filter_counts,
     filter_all_orders_to_slot,
+    filter_live_dashboard_view,
     filter_shipped_by_slot,
 )
 
@@ -103,6 +105,96 @@ def test_filter_actual_sales_excludes_transitional_statuses(fake_session):
     )
 
     assert set(filter_actual_sales(df)["Order ID"]) == {1, 2}
+
+
+def test_live_dashboard_today_and_last_day_are_sales_only():
+    reference = date(2026, 9, 11)
+    df = _orders(
+        [
+            (1, "shipped", "2026-09-08 09:00:00", "2026-09-11 10:00:00"),
+            (2, "completed", "2026-09-10 09:00:00", "2026-09-10 12:00:00"),
+            (3, "processing", "2026-09-11 09:00:00", "2026-09-11 10:00:00"),
+            (4, "cancelled", "2026-09-11 09:00:00", "2026-09-11 10:00:00"),
+        ]
+    )
+
+    assert set(
+        filter_live_dashboard_view(df, "Today Shipped", reference)["Order ID"]
+    ) == {1}
+    assert set(filter_live_dashboard_view(df, "Today", reference)["Order ID"]) == {1}
+    assert set(
+        filter_live_dashboard_view(df, "Last Day Shipped", reference)["Order ID"]
+    ) == {2}
+    assert set(
+        filter_live_dashboard_view(df, "Last Day", reference)["Order ID"]
+    ) == {2}
+
+
+def test_live_dashboard_queue_is_date_independent():
+    reference = date(2026, 9, 11)
+    df = _orders(
+        [
+            (1, "processing", "2026-08-01", "2026-08-01"),
+            (2, "on-hold", "2026-08-02", "2026-08-02"),
+            (3, "waiting", "2026-08-03", "2026-08-03"),
+            (4, "pending", "2026-08-04", "2026-08-04"),
+            (5, "completed", "2026-09-11", "2026-09-11"),
+            (6, "cancelled", "2026-09-11", "2026-09-11"),
+        ]
+    )
+
+    assert set(filter_live_dashboard_view(df, "Queue", reference)["Order ID"]) == {
+        1,
+        2,
+        3,
+        4,
+    }
+
+
+def test_live_dashboard_all_orders_excludes_hold_waiting_and_cancelled():
+    reference = date(2026, 9, 11)
+    df = _orders(
+        [
+            (1, "completed", "2026-09-11 09:00:00", "2026-09-11 10:00:00"),
+            (2, "processing", "2026-09-11 09:00:00", "2026-09-11 10:00:00"),
+            (3, "cancelled", "2026-09-11 09:00:00", "2026-09-11 10:00:00"),
+            (4, "processing", "2026-09-10 09:00:00", "2026-09-10 10:00:00"),
+            (5, "on-hold", "2026-09-10 09:00:00", "2026-09-10 10:00:00"),
+            (6, "completed", "2026-09-10 09:00:00", "2026-09-10 10:00:00"),
+            (7, "waiting", "2026-09-09 09:00:00", "2026-09-09 10:00:00"),
+            (8, "on-hold", "2026-09-11 09:00:00", "2026-09-11 10:00:00"),
+            (9, "waiting", "2026-09-11 09:00:00", "2026-09-11 10:00:00"),
+            (10, "pending", "2026-09-11 09:00:00", "2026-09-11 10:00:00"),
+        ]
+    )
+
+    # IDs 1 (today completed), 2 (today processing), 4 (prior unfulfilled queue processing) are kept.
+    # Cancelled (3) and hold/waiting/pending (5, 7, 8, 9, 10) are excluded.
+    assert set(
+        filter_live_dashboard_view(df, "All Orders", reference)["Order ID"]
+    ) == {1, 2, 4}
+
+
+def test_compute_live_filter_counts_matches_filter_views():
+    reference = date(2026, 9, 11)
+    df = _orders(
+        [
+            (1, "completed", "2026-09-11 09:00:00", "2026-09-11 10:00:00"),
+            (2, "processing", "2026-09-11 09:00:00", "2026-09-11 10:00:00"),
+            (3, "cancelled", "2026-09-11 09:00:00", "2026-09-11 10:00:00"),
+            (4, "processing", "2026-09-10 09:00:00", "2026-09-10 10:00:00"),
+            (5, "on-hold", "2026-09-10 09:00:00", "2026-09-10 10:00:00"),
+            (6, "completed", "2026-09-10 09:00:00", "2026-09-10 10:00:00"),
+            (7, "waiting", "2026-09-09 09:00:00", "2026-09-09 10:00:00"),
+        ]
+    )
+    counts = compute_live_filter_counts(df, reference)
+    assert counts == {
+        "All Orders": 3,
+        "Today Shipped": 1,
+        "Last Day Shipped": 1,
+        "Queue": 4,
+    }
 
 
 def test_apply_order_view_shipped_delegates_to_shipped_filter(fake_session):

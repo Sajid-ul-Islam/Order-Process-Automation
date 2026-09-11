@@ -24,6 +24,7 @@ from src.processing.data_processing import (
     apply_order_view,
     apply_order_view_comparison,
     filter_actual_sales,
+    filter_live_dashboard_view,
     filter_shipped_by_slot,
     prepare_granular_data,
 )
@@ -43,11 +44,8 @@ def _refresh_core_metrics():
     filtering pass). Falls back to recomputing only when the stash is missing.
     """
     nav_mode = st.session_state.get("wc_nav_mode", "Today")
-    order_view_mode = (
-        st.session_state.get("live_order_filter", "Shipped")
-        if nav_mode == "Today"
-        else "All Orders"
-    )
+    selected_view = st.session_state.get("live_dashboard_view", "All Orders")
+    order_view_mode = st.session_state.get("live_order_filter", "All Orders")
 
     m_df = st.session_state.get("live_df_standard")
     c_df = st.session_state.get("live_cmp_standard")
@@ -71,7 +69,9 @@ def _refresh_core_metrics():
             m_df, find_columns(m_df) if not m_df.empty else {}
         )
 
-    if c_df is None or c_df.empty:
+    if selected_view not in {"Today", "Today Shipped"}:
+        c_df = None
+    elif c_df is None or c_df.empty:
         if nav_mode == "Today" and order_view_mode == "Shipped":
             _cmp_raw = _get_day_comparison_source()
         else:
@@ -143,6 +143,22 @@ def _get_day_comparison_source():
     ]
     if not frames:
         return None
+    return pd.concat(frames, ignore_index=True).drop_duplicates()
+
+
+def _get_dashboard_source(fallback=None):
+    """Combine dashboard partitions so view rules operate on one source."""
+    frames = [
+        frame
+        for frame in (
+            st.session_state.get("wc_curr_df"),
+            st.session_state.get("wc_prev_df"),
+            st.session_state.get("wc_backlog_df"),
+        )
+        if frame is not None and not frame.empty
+    ]
+    if not frames:
+        return fallback
     return pd.concat(frames, ignore_index=True).drop_duplicates()
 
 
@@ -360,15 +376,20 @@ def _render_order_pipeline_summary(df):
     )
     other_mask = ~(sales_mask | processing_mask | held_mask)
 
-    st.caption(
-        "Operational workload · "
-        f"🚚 Actual sales **{count_orders(sales_mask)}** · "
-        f"⚙️ Processing **{count_orders(processing_mask)}** · "
-        f"⏸ Hold / waiting **{count_orders(held_mask)}** · "
-        f"Other **{count_orders(other_mask)}**"
-    )
+    summary_parts = [
+        f"🚚 Actual sales **{count_orders(sales_mask)}**",
+        f"⚙️ Processing **{count_orders(processing_mask)}**",
+    ]
+    held_count = count_orders(held_mask)
+    if held_count > 0:
+        summary_parts.append(f"⏸ Hold / waiting **{held_count}**")
+    other_count = count_orders(other_mask)
+    if other_count > 0:
+        summary_parts.append(f"Other **{other_count}**")
 
-    with st.expander("View all non-cancelled orders", expanded=False):
+    st.caption("Operational workload · " + " · ".join(summary_parts))
+
+    with st.expander("View operational orders", expanded=False):
         visible_columns = [
             column
             for column in (
@@ -387,8 +408,13 @@ def _render_order_pipeline_summary(df):
         st.dataframe(workload, width="stretch", hide_index=True)
 
 
-def _render_empty_sales_kpis():
-    """Keep the day-over-day sales headline visible when today is still zero."""
+def _render_empty_sales_kpis(selected_view="All Orders"):
+    """Keep the selected sales headline visible when its result is zero."""
+    if selected_view in {"Last Day Shipped", "Last Day"}:
+        st.metric("Actual Sales · Last Day", "0 orders")
+        st.caption("Actual sale = WooCommerce status `shipped` or `completed` only.")
+        return
+
     previous_df = _get_day_comparison_source()
     previous_df = filter_shipped_by_slot(previous_df, "Today", is_comparison=True)
     if previous_df is None or previous_df.empty:
@@ -415,11 +441,31 @@ def render_live_tab():
         st.session_state.live_sync_time = None
         st.session_state.wc_view_historical = False
         st.session_state.wc_sync_mode = "Operational Cycle"
+        st.session_state.live_dashboard_view = "All Orders"
         st.session_state.wc_nav_mode = "Today"
-        st.session_state.live_order_filter = "Shipped"
+        st.session_state.live_order_filter = "All Orders"
 
     render_reset_confirm("Live Dashboard", "live", _reset_live_state)
     st.session_state.manual_tab_active = False
+
+    if "live_dashboard_view" not in st.session_state:
+        st.session_state.live_dashboard_view = "All Orders"
+
+    view_state = {
+        "All Orders": ("Today", "All Orders"),
+        "Today Shipped": ("Today", "Shipped"),
+        "Last Day Shipped": ("Prev", "Shipped"),
+        "Queue": ("Backlog", "Processing"),
+        # Backward-compatible aliases:
+        "Today": ("Today", "Shipped"),
+        "Last Day": ("Prev", "Shipped"),
+    }
+    selected_view = st.session_state.get("live_dashboard_view", "All Orders")
+    nav_state, order_state = view_state.get(selected_view, view_state["All Orders"])
+    st.session_state.wc_nav_mode = nav_state
+    st.session_state.live_order_filter = order_state
+    today = bd_today()
+    st.session_state["live_custom_range"] = (today, today)
 
     if "wc_nav_mode" not in st.session_state:
         st.session_state.wc_nav_mode = "Today"
@@ -559,11 +605,10 @@ def render_live_tab():
 
     st.markdown("---")
 
-    # ── Final Data Filtering & Sanity Checks ──────────────────────────────────
-    order_view_mode = (
-        st.session_state.get("live_order_filter", "Shipped")
-        if nav_mode == "Today"
-        else "All Orders"
+    selected_view = st.session_state.get("live_dashboard_view", "All Orders")
+    nav_mode, order_view_mode = view_state.get(selected_view, view_state["All Orders"])
+    df_live = filter_live_dashboard_view(
+        _get_dashboard_source(fallback=df_live), selected_view
     )
 
     if df_live is None or df_live.empty:
@@ -573,7 +618,6 @@ def render_live_tab():
             st.rerun()
         return
 
-    # ── Apply Order View Filter (single shared helper) ──────────────────────────
     status_col = (
         "Order Status"
         if "Order Status" in df_live.columns
@@ -585,34 +629,22 @@ def render_live_tab():
         st.warning("⚠️ 'Order Status' column not found — cannot apply filter.")
         return
 
-    df_live = apply_order_view(df_live, nav_mode, order_view_mode)
-
-    if order_view_mode == "All Orders":
+    if selected_view == "All Orders":
         _render_order_pipeline_summary(df_live)
         # The operational summary includes every non-cancelled status, but all
         # monetary KPIs and product analytics use recognized sales only.
         df_live = filter_actual_sales(df_live)
 
-    # Apply Online Only filter when Shipped + Online Only toggle is on
-    if order_view_mode == "Shipped" and st.session_state.get(
-        "shipped_online_only", False
-    ):
-        from src.processing.completed_analytics import (
-            classify_order_source,
-            detect_source_column,
-        )
-
-        source_col = detect_source_column(df_live)
-        df_live["_order_source"] = df_live.apply(
-            lambda row: classify_order_source(row, source_col), axis=1
-        )
-        df_live = df_live[df_live["_order_source"] == "Online"]
-
     if df_live is None or df_live.empty:
-        if order_view_mode == "Shipped":
-            _render_empty_sales_kpis()
-        elif order_view_mode == "Processing":
-            st.info(f"📋 No processing orders found in the **{nav_mode}** slot.")
+        if selected_view in {
+            "Today Shipped",
+            "Today",
+            "Last Day Shipped",
+            "Last Day",
+        }:
+            _render_empty_sales_kpis(selected_view)
+        elif selected_view == "Queue":
+            st.info("📋 No processing, hold, or waiting orders in the queue.")
         else:
             st.info(f"📦 No active orders found in the **{nav_mode}** slot.")
         return
@@ -633,31 +665,11 @@ def render_live_tab():
     # Stash the granular frames so the auto-refresh KPI fragment renders the
     # exact same data as the charts below (no second, divergent filtering pass).
     st.session_state["live_df_standard"] = df_standard
-    if nav_mode == "Today" and order_view_mode == "Shipped":
-        _cmp_raw = _get_day_comparison_source()
-    else:
-        _cmp_raw = (
-            st.session_state.get("wc_prev_df")
-            if nav_mode == "Today"
-            else st.session_state.get("wc_curr_df")
-            if nav_mode in ["Backlog", "Prev"]
-            else None
-        )
-    if (_cmp_raw is None or _cmp_raw.empty) and nav_mode == "Today":
-        full_raw = st.session_state.get("wc_full_df")
-        if full_raw is not None and not full_raw.empty:
-            try:
-                from src.services.woocommerce.client import _partition_operational_data
-
-                _, df_prev_ext, _, _, _ = _partition_operational_data(full_raw)
-                _cmp_raw = df_prev_ext
-            except Exception:
-                pass
     _cmp_standard = None
-    if _cmp_raw is not None and not _cmp_raw.empty:
-        _cmp_f = apply_order_view_comparison(_cmp_raw, nav_mode, order_view_mode)
-        if order_view_mode == "All Orders":
-            _cmp_f = filter_actual_sales(_cmp_f)
+    if selected_view in {"Today Shipped", "Today"}:
+        _cmp_f = filter_live_dashboard_view(
+            _get_dashboard_source(), "Last Day Shipped"
+        )
         if _cmp_f is not None and not _cmp_f.empty:
             _cmp_standard, _ = prepare_granular_data(
                 _cmp_f, find_columns(_cmp_f) if not _cmp_f.empty else live_mapping
@@ -715,7 +727,7 @@ def render_live_tab():
         )
 
         # ── Dispatch Export (Shipped Only mode only) ─────────────────────────
-        if nav_mode == "Today" and order_view_mode == "Shipped":
+        if selected_view == "Today":
             _render_dispatch_export()
     else:
         # ── Market Basket & Cross-Selling Intelligence ───────────────────────
