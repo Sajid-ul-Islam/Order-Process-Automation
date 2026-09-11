@@ -567,15 +567,24 @@ def run_app() -> None:
     # the baseline after every restart. Merge the last persisted sales snapshot
     # (the app's own recent-order cache) into the full registry at startup so the
     # new/returning metric is as fresh as the last sync, not just the git baseline.
-    try:
-        from src.utils.customer_registry_full import update_full_registry_from_df
-        from src.utils.snapshots import load_sales_snapshot
+    # Seeded in a background thread once per session to eliminate cold-start lag.
+    if not st.session_state.get("_customer_registry_seeded"):
+        st.session_state["_customer_registry_seeded"] = True
 
-        _snap = load_sales_snapshot()
-        if _snap is not None and not _snap.empty:
-            update_full_registry_from_df(_snap)
-    except Exception:
-        pass
+        def _seed_registry_bg():
+            try:
+                from src.utils.customer_registry_full import update_full_registry_from_df
+                from src.utils.snapshots import load_sales_snapshot
+
+                _snap = load_sales_snapshot()
+                if _snap is not None and not _snap.empty:
+                    update_full_registry_from_df(_snap)
+            except Exception:
+                pass
+
+        import threading
+
+        threading.Thread(target=_seed_registry_bg, daemon=True, name="CustomerRegistrySeed").start()
     inject_base_styles()
     _rotate_error_logs()
 

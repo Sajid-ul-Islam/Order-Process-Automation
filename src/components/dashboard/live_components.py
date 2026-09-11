@@ -59,9 +59,12 @@ def _check_and_trigger_ui_rerun():
         st.rerun()
 
 
-@st.fragment(run_every=30)
+@st.fragment(run_every=60)
 def _sync_60s():
     """Run the higher-frequency sync used by the active shipped view."""
+    if st.session_state.get("_initial_page_load", True):
+        st.session_state["_initial_page_load"] = False
+        return
     try:
         _load_live_source()
         _check_and_trigger_ui_rerun()
@@ -69,9 +72,12 @@ def _sync_60s():
         pass
 
 
-@st.fragment(run_every=60)
+@st.fragment(run_every=180)
 def _sync_180s():
     """Run the background sync used by other dashboard views."""
+    if st.session_state.get("_initial_page_load", True):
+        st.session_state["_initial_page_load"] = False
+        return
     try:
         _load_live_source()
         _check_and_trigger_ui_rerun()

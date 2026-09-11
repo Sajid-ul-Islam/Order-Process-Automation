@@ -23,7 +23,6 @@ from src.processing.data_processing import (
     aggregate_data,
     apply_order_view,
     apply_order_view_comparison,
-    filter_actual_sales,
     filter_live_dashboard_view,
     filter_shipped_by_slot,
     prepare_granular_data,
@@ -629,12 +628,6 @@ def render_live_tab():
         st.warning("⚠️ 'Order Status' column not found — cannot apply filter.")
         return
 
-    if selected_view == "All Orders":
-        _render_order_pipeline_summary(df_live)
-        # The operational summary includes every non-cancelled status, but all
-        # monetary KPIs and product analytics use recognized sales only.
-        df_live = filter_actual_sales(df_live)
-
     if df_live is None or df_live.empty:
         if selected_view in {
             "Today Shipped",
@@ -689,6 +682,10 @@ def render_live_tab():
 
     # ── KPI Cards (30s auto-refresh) ─────────────────────────────────────────
     _refresh_core_metrics()
+
+    # ── Operational Pipeline Summary (for All Orders view) ────────────────────
+    if selected_view == "All Orders":
+        _render_order_pipeline_summary(df_live)
 
     # A conditional view selector avoids executing hidden tab content on every
     # Streamlit rerun.

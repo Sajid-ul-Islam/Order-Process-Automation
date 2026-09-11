@@ -546,22 +546,22 @@ def render_operational_metrics(
         l1 = "Queue Items"
         l2 = "Pipeline Value"
         l3 = "Queue Orders"
-        icon_l3 = "🛒"
-    elif dashboard_view == "Today":
+        icon_l3 = "📥"
+    elif dashboard_view in {"Today Shipped", "Today"}:
         l1 = "Shipped Items · Today"
         l2 = "Sales Revenue · Today"
         l3 = "Shipped Orders · Today"
         icon_l3 = "🚚"
-    elif dashboard_view == "Last Day":
+    elif dashboard_view in {"Last Day Shipped", "Last Day"}:
         l1 = "Shipped Items · Last Day"
         l2 = "Sales Revenue · Last Day"
         l3 = "Shipped Orders · Last Day"
         icon_l3 = "🕘"
     elif dashboard_view == "All Orders":
-        l1 = "Actual Sale Items"
-        l2 = "Actual Sales Revenue"
-        l3 = "Actual Sale Orders"
-        icon_l3 = "🚚"
+        l1 = "Total Items"
+        l2 = "Total Order Value"
+        l3 = "All Orders"
+        icon_l3 = "📋"
     elif nav_mode == "Backlog":
         l1 = "Backlog Items"
         l2 = "Backlog Rev"

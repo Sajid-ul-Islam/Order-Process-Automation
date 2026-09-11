@@ -4,7 +4,14 @@ import pandas as pd
 import polars as pl
 from src.utils.streamlit_runtime import get_session_state
 
-from src.config.constants import bd_now, bd_today
+from src.config.constants import (
+    ACTIVE_STATUSES,
+    CANCELLED_STATUSES,
+    HOLD_WAITING_STATUSES,
+    SHIPPED_STATUSES,
+    bd_now,
+    bd_today,
+)
 from src.processing.categorization import (
     get_category_for_sales,
     get_sub_category_for_sales,
@@ -474,21 +481,87 @@ def compute_live_filter_counts(df, reference_date=None) -> dict[str, int]:
     if df is None or df.empty:
         return counts
 
-    id_col = (
-        "Order ID"
-        if "Order ID" in df.columns
-        else "order_id"
-        if "order_id" in df.columns
+    status_col = (
+        "Order Status"
+        if "Order Status" in df.columns
+        else "Status"
+        if "Status" in df.columns
         else None
     )
+    if status_col is None:
+        return counts
 
-    for view_key in counts:
-        sub_df = filter_live_dashboard_view(df, view_key, reference_date)
-        if sub_df is not None and not sub_df.empty:
-            if id_col and id_col in sub_df.columns:
-                counts[view_key] = int(sub_df[id_col].nunique())
-            else:
-                counts[view_key] = len(sub_df)
+    created_col = (
+        "dt_parsed"
+        if "dt_parsed" in df.columns
+        else "Order Date"
+        if "Order Date" in df.columns
+        else None
+    )
+    modified_col = (
+        "mod_dt_parsed"
+        if "mod_dt_parsed" in df.columns
+        else "Order Date Modified"
+        if "Order Date Modified" in df.columns
+        else None
+    )
+    id_col = next(
+        (c for c in ["Order ID", "order_id", "ID", "id"] if c in df.columns),
+        None,
+    )
+
+    created = (
+        safe_coerce_datetime_naive(df[created_col])
+        if created_col
+        else pd.Series(pd.NaT, index=df.index)
+    )
+    modified = (
+        safe_coerce_datetime_naive(df[modified_col])
+        if modified_col
+        else pd.Series(pd.NaT, index=df.index)
+    )
+
+    today = reference_date or bd_today()
+    previous_day = today - timedelta(days=1)
+    statuses = df[status_col].astype(str).str.lower().str.strip()
+    sale_statuses = {status.lower() for status in SHIPPED_STATUSES}
+    queue_statuses = {status.lower() for status in ACTIVE_STATUSES}
+    hold_waiting_statuses = {status.lower() for status in HOLD_WAITING_STATUSES}
+    is_sale = statuses.isin(sale_statuses)
+    is_queue = statuses.isin(queue_statuses)
+    is_cancelled = statuses.isin(CANCELLED_STATUSES)
+    is_hold_waiting = statuses.isin(hold_waiting_statuses) | statuses.str.contains(
+        r"hold|waiting", case=False, na=False
+    )
+    sale_date = modified.fillna(created).dt.date
+    created_date = created.dt.date
+
+    processing_statuses = {
+        "processing",
+        "process",
+        "wc-processing",
+        "wc-process",
+    }
+    is_processing = statuses.isin(processing_statuses) | statuses.str.contains(
+        r"process", case=False, na=False
+    )
+
+    masks = {
+        "Today Shipped": is_sale & (sale_date == today),
+        "Last Day Shipped": is_sale & (sale_date == previous_day),
+        "Queue": is_queue & ~is_processing,
+        "All Orders": (
+            ~is_cancelled
+            & ~is_hold_waiting
+            & ((created_date == today) | ((created_date < today) & is_queue))
+        ),
+    }
+
+    for view_key, mask in masks.items():
+        if id_col and id_col in df.columns:
+            counts[view_key] = int(df.loc[mask, id_col].nunique())
+        else:
+            counts[view_key] = int(mask.sum())
 
     return counts
 

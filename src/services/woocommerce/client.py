@@ -201,7 +201,7 @@ def _fetch_wc_batch(url: str, params: dict, auth: HTTPBasicAuth) -> list:
     # Fetch remaining pages concurrently
     from concurrent.futures import ThreadPoolExecutor
 
-    with ThreadPoolExecutor(max_workers=min(total_pages, 8)) as executor:
+    with ThreadPoolExecutor(max_workers=min(total_pages, 4)) as executor:
         futures = [
             executor.submit(_fetch_wc_page, url, params, auth, pg)
             for pg in range(2, total_pages + 1)
@@ -801,6 +801,8 @@ def _response_regressed(df) -> bool:
 
 def _should_autorefresh() -> bool:
     """Check if the refresh interval has elapsed since last sync."""
+    if st.session_state.get("_needs_background_sync"):
+        return True
     interval = st.session_state.get("wc_refresh_interval", 30)
     if interval <= 0:
         return False  # Manual mode
@@ -820,6 +822,33 @@ def load_live_source(force_refresh=False):
     the refresh interval, the last fetched data is reused without an extra
     REST call — and never via an un-busted URL that could be served stale.
     """
+    # Cold-start instant bootstrap: if not force_refresh and no cached operational data in session state,
+    # load local sales snapshot immediately so UI renders in <0.3s without waiting for network.
+    if not force_refresh and st.session_state.get("wc_curr_df") is None:
+        try:
+            from src.utils.snapshots import load_sales_snapshot
+
+            df_snap = load_sales_snapshot()
+            if df_snap is not None and not df_snap.empty:
+                df_live, df_prev, df_backlog, slot_label, slots = (
+                    _partition_operational_data(df_snap)
+                )
+                st.session_state["wc_curr_df"] = scrub_raw_dataframe(df_live)
+                st.session_state["wc_prev_df"] = scrub_raw_dataframe(df_prev)
+                st.session_state["wc_backlog_df"] = scrub_raw_dataframe(df_backlog)
+                for key, val in slots.items():
+                    if val is not None:
+                        st.session_state[key] = val
+                st.session_state["wc_full_df"] = df_snap
+                desc = f"Instant_Snapshot_{len(df_snap)}_Orders"
+                st.session_state["_wc_last_sync_desc"] = desc
+                st.session_state["_wc_last_modified_at"] = "Loaded from snapshot"
+                st.session_state["_needs_background_sync"] = True
+                df_to_return = df_backlog if slot_label == "Backlog" else df_live
+                return scrub_raw_dataframe(df_to_return), desc, "Loaded from snapshot"
+        except Exception as snap_err:
+            log_system_event("WC_COLD_START_SNAPSHOT_ERROR", str(snap_err))
+
     should_fetch = force_refresh or _should_autorefresh()
     if should_fetch:
         load_from_woocommerce.clear()
@@ -929,28 +958,31 @@ def load_live_source(force_refresh=False):
                 st.session_state[key] = val
 
         # 3. Update Sync Metadata
-        st.session_state.live_sync_time = bd_now().replace(tzinfo=None)
+        st.session_state["live_sync_time"] = bd_now().replace(tzinfo=None)
+        if should_fetch:
+            st.session_state.pop("_needs_background_sync", None)
 
         # 4. Update Full Context for Forecasting
         st.session_state["wc_full_df"] = df_new
         st.session_state["_wc_last_sync_desc"] = results.get("sync_desc", "")
         st.session_state["_wc_last_modified_at"] = results.get("modified_at", "")
 
-        # 5. Silent Autosave for Offline Mode Fallback
-        try:
-            from src.utils.snapshots import save_sales_snapshot
+        # 5. Silent Autosave for Offline Mode Fallback (only on fresh network fetch)
+        if should_fetch:
+            try:
+                from src.utils.snapshots import save_sales_snapshot
 
-            if df_new is not None and not df_new.empty:
-                save_sales_snapshot(df_new)
-        except Exception:
-            pass
+                if df_new is not None and not df_new.empty:
+                    save_sales_snapshot(df_new)
+            except Exception:
+                pass
 
         # 6. Return tuple for legacy unpacking
         return df_new, results["sync_desc"], results["modified_at"]
 
     # Handle legacy return if any
     if results:
-        st.session_state.live_sync_time = bd_now().replace(tzinfo=None)
+        st.session_state["live_sync_time"] = bd_now().replace(tzinfo=None)
         return results
 
     # Automatic Fallback: Load last saved snapshot when API is not working
@@ -958,9 +990,23 @@ def load_live_source(force_refresh=False):
 
     df_snap = load_sales_snapshot()
     if df_snap is not None and not df_snap.empty:
-        st.session_state.live_sync_time = bd_now().replace(tzinfo=None)
+        df_live, df_prev, df_backlog, slot_label, slots = (
+            _partition_operational_data(df_snap)
+        )
+        st.session_state["wc_curr_df"] = scrub_raw_dataframe(df_live)
+        st.session_state["wc_prev_df"] = scrub_raw_dataframe(df_prev)
+        st.session_state["wc_backlog_df"] = scrub_raw_dataframe(df_backlog)
+        for key, val in slots.items():
+            if val is not None:
+                st.session_state[key] = val
+        st.session_state["live_sync_time"] = bd_now().replace(tzinfo=None)
         st.session_state["wc_full_df"] = df_snap
-        return df_snap, "LOCAL_SNAPSHOT_FALLBACK", "API_OFFLINE"
+        df_to_return = df_backlog if slot_label == "Backlog" else df_live
+        return (
+            scrub_raw_dataframe(df_to_return),
+            "LOCAL_SNAPSHOT_FALLBACK",
+            "API_OFFLINE",
+        )
 
     raise ValueError(
         "WooCommerce REST API is offline and no local saved snapshot is available."
