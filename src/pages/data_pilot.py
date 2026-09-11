@@ -249,6 +249,7 @@ document.addEventListener('keydown', function(e) {
             unsafe_allow_html=True,
         )
         # Mobile & Handheld 1-Tap Quick Action Operational Chips
+        prompt: str | None = None
         if hasattr(st, "pills"):
             quick_prompts = [
                 "📊 Top 5 SKUs Today",
