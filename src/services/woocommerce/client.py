@@ -134,6 +134,7 @@ def _flatten_order(order: dict) -> list[dict]:
                 "Order Date": d_val,
                 "Order Date Modified": m_val,
                 "Order Status": status,
+                "Created via": str(order.get("created_via", "")).strip(),
                 "Full Name (Billing)": c_name,
                 "Phone (Billing)": bill.get("phone", ""),
                 "Billing Email": bill.get("email", ""),

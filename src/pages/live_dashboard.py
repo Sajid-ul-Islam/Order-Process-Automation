@@ -25,7 +25,6 @@ from src.processing.data_processing import (
     aggregate_data,
     apply_order_view_comparison,
     filter_live_dashboard_view,
-    filter_shipped_by_slot,
     prepare_granular_data,
 )
 from src.services.woocommerce.client import load_live_source
@@ -689,9 +688,8 @@ def render_live_tab():
             fallback_msg="Dashboard rendering encountered an error.",
         )
 
-        # ── Dispatch Export (Shipped Only mode only) ─────────────────────────
-        if selected_view in {"Today Shipped", "Today"}:
-            _render_dispatch_export()
+        # ── Product-Wise Shipped & Completed Orders Export ───────────────────
+        _render_dispatch_export(selected_view)
     else:
         # ── Market Basket & Cross-Selling Intelligence ───────────────────────
         from src.components.dashboard.market_basket_view import (
@@ -704,171 +702,280 @@ def render_live_tab():
     render_staleness_monitor()
 
 
-def _render_dispatch_export():
-    """Render today's full dispatch export: shipped + confirmed + waiting orders."""
-    import pandas as pd
+def _render_dispatch_export(selected_view: str | None = None):
+    """Render product-wise everyday shipped and completed orders export with date picker, XLSX and CSV."""
+    from src.processing.completed_analytics import (
+        filter_shipped_order_items,
+    )
+    from src.services.exports.excel_exporter import export_to_styled_excel
+    from src.processing.data_processing import safe_coerce_datetime_naive
 
-    raw_df = st.session_state.get("wc_curr_df")
+    raw_df = _get_dashboard_source()
+    if raw_df is None or raw_df.empty:
+        raw_df = st.session_state.get("wc_curr_df")
     if raw_df is None or raw_df.empty:
         return
 
-    raw_df = raw_df.copy()
-
-    # Apply Online Only filter if toggle is on
-    if st.session_state.get("shipped_online_only", False):
-        from src.processing.completed_analytics import (
-            classify_order_source,
-            detect_source_column,
-        )
-
-        source_col = detect_source_column(raw_df)
-        raw_df["_order_source"] = raw_df.apply(
-            lambda row: classify_order_source(row, source_col), axis=1
-        )
-        raw_df = raw_df[raw_df["_order_source"] == "Online"]
-
-    from src.processing.data_processing import safe_coerce_datetime_naive
-
-    if "mod_dt_parsed" in raw_df.columns:
-        raw_df["mod_dt_parsed"] = safe_coerce_datetime_naive(raw_df["mod_dt_parsed"])
-    if "dt_parsed" in raw_df.columns:
-        raw_df["dt_parsed"] = safe_coerce_datetime_naive(raw_df["dt_parsed"])
-
     today_bd = bd_today()
+    yesterday_bd = today_bd - timedelta(days=1)
 
-    status_col = (
-        "Order Status"
-        if "Order Status" in raw_df.columns
-        else "Status"
-        if "Status" in raw_df.columns
-        else None
-    )
-    if status_col is None:
-        return
-
-    shipped_today = filter_shipped_by_slot(
-        raw_df, nav_mode="Today", is_comparison=False
-    )
-
-    if shipped_today is None or shipped_today.empty:
-        return
-
-    keep_cols = [
-        c
-        for c in [
-            "Order ID",
-            "Full Name (Billing)",
-            "Phone (Billing)",
-            status_col,
-            "Pathao Consignment ID",
-            "mod_dt_parsed",
-            "dt_parsed",
-            "Shipping Address 1",
-            "Shipping City",
-        ]
-        if c in raw_df.columns
-    ]
-
-    def _dedup(df, label):
-        if df.empty:
-            return pd.DataFrame()
-        d = df[keep_cols].drop_duplicates(subset=["Order ID"]).copy()
-        d["Export Tag"] = label
-        return d
-
-    shipped_dedup = _dedup(shipped_today, "✅ Shipped Today")
-
-    if shipped_dedup.empty:
-        return
-
-    export_df = shipped_dedup.copy()
-
-    # Sort chronologically by modification date (most recent dispatches first)
-    sort_cols = [c for c in ["mod_dt_parsed", "dt_parsed"] if c in export_df.columns]
-    if sort_cols:
-        export_df = export_df.sort_values(
-            by=sort_cols, ascending=False, na_position="last"
-        ).reset_index(drop=True)
-
-    rename_map = {
-        "Full Name (Billing)": "Customer",
-        "Phone (Billing)": "Phone",
-        status_col: "Status",
-        "mod_dt_parsed": "Last Modified",
-        "dt_parsed": "Order Date",
-    }
-    export_df = export_df.rename(
-        columns={k: v for k, v in rename_map.items() if k in export_df.columns}
-    )
-
-    col_order = [
-        "Export Tag",
-        "Order ID",
-        "Customer",
-        "Phone",
-        "Status",
-        "Pathao Consignment ID",
-        "Last Modified",
-        "Order Date",
-        "Shipping Address 1",
-        "Shipping City",
-    ]
-    export_df = export_df[[c for c in col_order if c in export_df.columns]]
-
-    for dt_col in ["Last Modified", "Order Date"]:
-        if dt_col in export_df.columns:
-            export_df[dt_col] = safe_coerce_datetime_naive(
-                export_df[dt_col]
-            ).dt.strftime("%Y-%m-%d %I:%M %p")
+    # Determine default date based on selected_view
+    if selected_view in {"Last Day Shipped", "Last Day"}:
+        default_preset = "Yesterday"
+    else:
+        default_preset = "Today"
 
     st.divider()
     with st.expander(
-        f"📋 Dispatch Export — {len(export_df)} Shipped Orders",
-        expanded=True,
+        "📦 Daily Shipped & Completed Orders (Product-Wise Export)",
+        expanded=(selected_view in {"Today Shipped", "Today", "Last Day Shipped", "Last Day"}),
     ):
-        st.caption("Orders shipped during today's shift · one row per Order ID.")
+        st.caption(
+            "Export product line items for orders shipped or completed on any selected date. "
+            "Includes SKU, Quantity, Item Price, and Customer details in styled Excel (.xlsx) and CSV."
+        )
 
-        search_q = st.text_input(
-            "🔍 Search by Order ID, Name, or Phone", key="dispatch_export_search"
-        ).strip()
-        display_df = export_df.copy()
-        if search_q:
-            mask = (
-                display_df["Order ID"]
-                .astype(str)
-                .str.contains(search_q, case=False, na=False)
-                | display_df.get("Customer", pd.Series(dtype=str))
-                .astype(str)
-                .str.contains(search_q, case=False, na=False)
-                | display_df.get("Phone", pd.Series(dtype=str))
-                .astype(str)
-                .str.contains(search_q, case=False, na=False)
+        col_preset, col_date, col_source = st.columns([1.5, 2, 1.5])
+        with col_preset:
+            date_preset = st.radio(
+                "Date Selection",
+                ["Today", "Yesterday", "Custom Date"],
+                index=0 if default_preset == "Today" else 1,
+                horizontal=True,
+                key="shipped_export_date_preset",
             )
-            display_df = display_df[mask]
+
+        with col_date:
+            if date_preset == "Today":
+                start_date = today_bd
+                end_date = today_bd
+                st.caption(f"🗓️ Active Day: **{today_bd.strftime('%Y-%m-%d')}**")
+            elif date_preset == "Yesterday":
+                start_date = yesterday_bd
+                end_date = yesterday_bd
+                st.caption(f"🗓️ Active Day: **{yesterday_bd.strftime('%Y-%m-%d')}**")
+            else:
+                custom_range = st.date_input(
+                    "Select Date or Range",
+                    value=(yesterday_bd, today_bd),
+                    max_value=today_bd,
+                    key="shipped_export_custom_range",
+                )
+                if isinstance(custom_range, (list, tuple)):
+                    start_date = custom_range[0]
+                    end_date = custom_range[-1] if len(custom_range) > 1 else custom_range[0]
+                else:
+                    start_date = custom_range
+                    end_date = custom_range
+
+        with col_source:
+            source_filter = st.radio(
+                "Order Source",
+                ["Both", "Online", "Outlet"],
+                horizontal=True,
+                key="shipped_export_source_filter",
+            )
+
+        # Filter items using completed_analytics
+        filtered_items = filter_shipped_order_items(
+            raw_df,
+            start_date=start_date,
+            end_date=end_date,
+            source_filter=source_filter,
+        )
+
+        date_label = (
+            start_date.strftime("%Y-%m-%d")
+            if start_date == end_date
+            else f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
+        )
+
+        if filtered_items.empty:
+            st.info(f"ℹ️ No shipped or completed items found for **{date_label}** ({source_filter} orders).")
+            return
+
+        export_df = filtered_items.copy()
+
+        # Identify columns defensively
+        status_col = (
+            "Order Status"
+            if "Order Status" in export_df.columns
+            else "Status"
+            if "Status" in export_df.columns
+            else None
+        )
+        prod_col = (
+            "Item Name"
+            if "Item Name" in export_df.columns
+            else "Product Name"
+            if "Product Name" in export_df.columns
+            else None
+        )
+        sku_col = "SKU" if "SKU" in export_df.columns else None
+        qty_col = "Quantity" if "Quantity" in export_df.columns else None
+        cost_col = (
+            "Item Cost"
+            if "Item Cost" in export_df.columns
+            else "Price"
+            if "Price" in export_df.columns
+            else None
+        )
+
+        # Ensure numeric Quantity and Cost
+        if qty_col:
+            export_df[qty_col] = pd.to_numeric(export_df[qty_col], errors="coerce").fillna(1).astype(int)
+        else:
+            export_df["Quantity"] = 1
+            qty_col = "Quantity"
+
+        if cost_col:
+            export_df[cost_col] = pd.to_numeric(export_df[cost_col], errors="coerce").fillna(0.0)
+        else:
+            export_df["Item Cost"] = 0.0
+            cost_col = "Item Cost"
+
+        export_df["Line Total"] = (export_df[qty_col] * export_df[cost_col]).round(2)
+
+        # Format dates
+        if "mod_dt_parsed" in export_df.columns:
+            export_df["Shipped Date"] = safe_coerce_datetime_naive(
+                export_df["mod_dt_parsed"]
+            ).dt.strftime("%Y-%m-%d %I:%M %p")
+        elif "Order Date Modified" in export_df.columns:
+            export_df["Shipped Date"] = safe_coerce_datetime_naive(
+                export_df["Order Date Modified"]
+            ).dt.strftime("%Y-%m-%d %I:%M %p")
+        else:
+            export_df["Shipped Date"] = ""
+
+        if "dt_parsed" in export_df.columns:
+            export_df["Order Placed"] = safe_coerce_datetime_naive(
+                export_df["dt_parsed"]
+            ).dt.strftime("%Y-%m-%d %I:%M %p")
+        elif "Order Date" in export_df.columns:
+            export_df["Order Placed"] = safe_coerce_datetime_naive(
+                export_df["Order Date"]
+            ).dt.strftime("%Y-%m-%d %I:%M %p")
+        else:
+            export_df["Order Placed"] = ""
+
+        if "_order_source" in export_df.columns:
+            export_df["Order Source"] = export_df["_order_source"]
+
+        # Map customer and order fields
+        field_mapping = {
+            "Order ID": "Order ID",
+            prod_col: "Product Name",
+            sku_col: "SKU",
+            qty_col: "Quantity",
+            cost_col: "Item Cost",
+            "Line Total": "Line Total",
+            status_col: "Status",
+            "Order Source": "Source",
+            "Shipped Date": "Shipped Date",
+            "Order Placed": "Order Placed",
+            "Full Name (Billing)": "Customer",
+            "Phone (Billing)": "Phone",
+            "Shipping City": "City",
+            "Shipping Address 1": "Address",
+            "Pathao Consignment ID": "Consignment ID",
+        }
+
+        # Build column ordering
+        export_cols = [
+            field_mapping[k]
+            for k in field_mapping
+            if k and k in export_df.columns
+        ]
+
+        # Rename to clean target headers
+        clean_df = export_df.rename(
+            columns={k: v for k, v in field_mapping.items() if k and k in export_df.columns}
+        )
+
+        # Sort chronologically by Order ID / Shipped Date
+        sort_candidates = [c for c in ["Shipped Date", "Order Placed", "Order ID"] if c in clean_df.columns]
+        if sort_candidates:
+            clean_df = clean_df.sort_values(by=sort_candidates, ascending=False, na_position="last").reset_index(drop=True)
+
+        final_cols = [c for c in export_cols if c in clean_df.columns]
+        display_df = clean_df[final_cols].copy()
+
+        # Summary KPIs
+        total_items = int(display_df["Quantity"].sum()) if "Quantity" in display_df.columns else len(display_df)
+        total_orders = int(display_df["Order ID"].nunique()) if "Order ID" in display_df.columns else len(display_df)
+        total_rev = float(display_df["Line Total"].sum()) if "Line Total" in display_df.columns else 0.0
+        unique_skus = int(display_df["SKU"].nunique()) if "SKU" in display_df.columns else 0
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("📦 Units Shipped", f"{total_items:,}")
+        m2.metric("📋 Orders", f"{total_orders:,}")
+        m3.metric("৳ Shipped Revenue", f"৳ {total_rev:,.0f}")
+        m4.metric("🏷️ Unique SKUs", f"{unique_skus:,}")
+
+        # Search box
+        search_q = st.text_input(
+            "🔍 Search items by Order ID, Product Name, SKU, Customer, or Phone",
+            key="shipped_product_export_search",
+        ).strip()
+
+        view_df = display_df.copy()
+        if search_q:
+            mask = pd.Series(False, index=view_df.index)
+            for c in ["Order ID", "Product Name", "SKU", "Customer", "Phone", "City"]:
+                if c in view_df.columns:
+                    mask = mask | view_df[c].astype(str).str.contains(search_q, case=False, na=False)
+            view_df = view_df[mask]
 
         st.dataframe(
-            display_df,
+            view_df,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "Export Tag": st.column_config.TextColumn("Tag", width="small"),
                 "Order ID": st.column_config.NumberColumn("Order ID", format="%d"),
-                "Customer": st.column_config.TextColumn("Customer"),
-                "Phone": st.column_config.TextColumn("Phone"),
-                "Status": st.column_config.TextColumn("Status"),
-                "Pathao Consignment ID": st.column_config.TextColumn("Consignment ID"),
-                "Last Modified": st.column_config.TextColumn("Shipped/Modified At"),
-                "Order Date": st.column_config.TextColumn("Order Placed"),
+                "Quantity": st.column_config.NumberColumn("Qty", format="%d"),
+                "Item Cost": st.column_config.NumberColumn("Price (৳)", format="%.2f"),
+                "Line Total": st.column_config.NumberColumn("Total (৳)", format="%.2f"),
             },
         )
 
-        now_str = bd_now().strftime("%Y%m%d_%H%M")
-        st.download_button(
-            label=f"⬇️ Download Dispatch List ({len(export_df)} orders) — CSV",
-            data=export_df.to_csv(index=False).encode("utf-8"),
-            file_name=f"DEEN_Dispatch_{today_bd.strftime('%Y%m%d')}_{now_str}.csv",
-            mime="text/csv",
-            type="primary",
-            use_container_width=True,
-            key="dispatch_export_download",
+        file_tag = (
+            start_date.strftime("%Y%m%d")
+            if start_date == end_date
+            else f"{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}"
         )
+        now_str = bd_now().strftime("%H%M")
+        base_filename = f"DEEN_Shipped_Products_{file_tag}_{now_str}"
+
+        # Export generators
+        c_down1, c_down2 = st.columns(2)
+        with c_down1:
+            try:
+                excel_bytes = export_to_styled_excel(
+                    {f"Shipped_{file_tag}"[:31]: display_df},
+                    group_by_col="Order ID" if "Order ID" in display_df.columns else None,
+                )
+                st.download_button(
+                    label=f"⬇️ Download Excel (.xlsx) — {len(display_df)} items",
+                    data=excel_bytes,
+                    file_name=f"{base_filename}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary",
+                    use_container_width=True,
+                    key="shipped_product_download_excel",
+                )
+            except Exception as e:
+                log_system_event("EXCEL_EXPORT_ERROR", str(e))
+                st.warning("Excel formatting unavailable, use CSV download.")
+
+        with c_down2:
+            csv_bytes = display_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label=f"⬇️ Download CSV (.csv) — {len(display_df)} items",
+                data=csv_bytes,
+                file_name=f"{base_filename}.csv",
+                mime="text/csv",
+                type="secondary",
+                use_container_width=True,
+                key="shipped_product_download_csv",
+            )
