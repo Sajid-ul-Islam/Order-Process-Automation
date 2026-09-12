@@ -315,12 +315,6 @@ def apply_dashboard_view_selection(selected: str) -> None:
 
 def _render_dashboard_view_selector():
     """Render the dashboard's single, mutually exclusive scope selector with real-time count badges."""
-    from src.components.react_kpi import is_react_kpi_available
-
-    if is_react_kpi_available() and st.session_state.get("use_react_kpi", True):
-        # View switcher is rendered directly inside the interactive React KPI Toolbar
-        return
-
     options = ["All Orders", "Today Shipped", "Last Day Shipped", "Queue"]
     icons = {
         "All Orders": "📋",

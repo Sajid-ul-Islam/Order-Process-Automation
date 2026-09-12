@@ -1,6 +1,7 @@
 """Synthetic-only regressions for the processed parcel/API boundary."""
 
 import json
+import os
 import time
 from unittest.mock import Mock
 from pathlib import Path
@@ -421,7 +422,8 @@ def test_legacy_cache_is_ignored_and_new_cache_is_private(monkeypatch, tmp_path)
     instance = PathaoClient("https://pathao.invalid", "test", "test", "test", "test")
     instance._save_token({"access_token": "synthetic", "expires_in": 3600})
     token_path = Path(instance.token_file)
-    assert token_path.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert token_path.stat().st_mode & 0o777 == 0o600
     original_json_load = json.load
 
     def legacy_cache(file):
