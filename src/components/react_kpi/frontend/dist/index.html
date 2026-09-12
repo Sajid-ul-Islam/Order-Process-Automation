@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DEEN-OPS React Toolbar</title>
+    <script>
+      try {
+        var pDoc = window.parent.document;
+        var pTheme = pDoc.documentElement.getAttribute('data-theme') || (pDoc.body && pDoc.body.getAttribute('data-theme'));
+        if (pTheme === 'dark') {
+          document.documentElement.classList.add('dark');
+          document.documentElement.classList.remove('light');
+        } else if (pTheme === 'light') {
+          document.documentElement.classList.remove('dark');
+          document.documentElement.classList.add('light');
+        } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.classList.add('dark');
+        }
+      }
+    </script>
+
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: transparent !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        overflow-y: hidden;
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-Dj4Kq5Ds.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DVjbcSsD.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1 }, "*");
+    </script>
+  </body>
+</html>
+

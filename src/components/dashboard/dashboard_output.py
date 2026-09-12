@@ -35,32 +35,46 @@ def _render_operational_cycle_metrics(
         )
 
     order_view_mode = (
-        st.session_state.get("live_order_filter", "All Orders")
+        st.session_state.get("live_order_filter", "Shipped")
         if nav_mode == "Today"
         else "All Orders"
     )
     status_col_m = (
         "Order Status"
         if "Order Status" in m_df.columns
-        else "Status" if "Status" in m_df.columns else None
+        else "Status"
+        if "Status" in m_df.columns
+        else None
     )
     status_col_c = None
     if c_df is not None:
         status_col_c = (
             "Order Status"
             if "Order Status" in c_df.columns
-            else "Status" if "Status" in c_df.columns else None
+            else "Status"
+            if "Status" in c_df.columns
+            else None
         )
 
-    if order_view_mode == "All Orders" and nav_mode == "Today":
+    dashboard_view = st.session_state.get("live_dashboard_view")
+    is_pre_scoped = dashboard_view in {
+        "Today",
+        "Today Shipped",
+        "Last Day",
+        "Last Day Shipped",
+        "Queue",
+        "All Orders",
+    }
+
+    if not is_pre_scoped and order_view_mode == "All Orders" and nav_mode == "Today":
         m_df = filter_all_orders_to_slot(m_df, nav_mode)
         if c_df is not None and not c_df.empty:
             c_df = filter_all_orders_to_slot(c_df, "Prev")
-    elif order_view_mode == "Shipped":
+    elif not is_pre_scoped and order_view_mode == "Shipped":
         m_df = filter_shipped_by_slot(m_df, nav_mode, is_comparison=False)
         if c_df is not None:
             c_df = filter_shipped_by_slot(c_df, nav_mode, is_comparison=True)
-    elif order_view_mode == "Processing":
+    elif not is_pre_scoped and order_view_mode == "Processing":
         if status_col_m:
             m_df = m_df[m_df[status_col_m].astype(str).str.lower() == "processing"]
         if c_df is not None and status_col_c:
@@ -226,35 +240,6 @@ def _render_charts(summ, total_rev=None):
     return color_map
 
 
-def _render_spotlight_and_sku_report(top, color_map, wc_raw_mapping):
-    """Render the Products Spotlight chart and SKU-Wise report."""
-    if top is None or top.empty:
-        return
-
-    prev_top = None
-    if st.session_state.get("wc_sync_mode") == "Operational Cycle":
-        nav_mode = st.session_state.get("wc_nav_mode", "Today")
-        comp_df = (
-            st.session_state.get("wc_prev_df")
-            if nav_mode == "Today"
-            else st.session_state.get("wc_curr_df") if nav_mode == "Prev" else None
-        )
-
-        if comp_df is not None and not comp_df.empty:
-            from src.processing.data_processing import (
-                aggregate_data,
-                prepare_granular_data,
-            )
-
-            comp_df_std, _ = prepare_granular_data(comp_df, wc_raw_mapping)
-            if not comp_df_std.empty:
-                _, _, prev_top, _ = aggregate_data(comp_df_std, wc_raw_mapping)
-
-    render_spotlight(top, color_map, prev_top=prev_top)
-    st.divider()
-    _render_sku_report(top)
-
-
 def _render_sku_report(top):
     """Render the Master SKU-Wise Product Sales Report table."""
     if top is None or top.empty:
@@ -297,7 +282,7 @@ def _render_sku_report(top):
             | display_df["SKU"].astype(str).str.contains(search_q, case=False, na=False)
         ]
         st.caption(
-            f"Showing **{len(display_df)}** of **{len(report_df)}** products matching `\"{search_q}\"`"
+            f'Showing **{len(display_df)}** of **{len(report_df)}** products matching `"{search_q}"`'
         )
 
     st.dataframe(
@@ -419,27 +404,13 @@ def _stream_ai_briefing(
         if (active_df is not None and "Gross Amount" in active_df.columns)
         else today_rev
     )
-    cashback_disc = (
-        active_df["Cashback Discount"].sum()
-        if (active_df is not None and "Cashback Discount" in active_df.columns)
-        else max(0.0, gross_rev - today_rev)
-    )
-    loss_pct = (cashback_disc / gross_rev * 100) if gross_rev > 0 else 0.0
-
     gross_aov = (gross_rev / today_orders) if today_orders > 0 else today_aov
-    net_aov = (today_rev / today_orders) if today_orders > 0 else today_aov
-    cb_per_basket = (cashback_disc / today_orders) if today_orders > 0 else 0.0
-    pct_basket_lost = (cb_per_basket / gross_aov * 100) if gross_aov > 0 else 0.0
 
     prompt = (
         f"Generate an executive briefing for today's e-commerce operations.\n"
         f"Today's key metrics:\n"
-        f"- Net Realized Revenue (After Cashback): ৳{today_rev:,.0f}\n"
-        f"- Gross Revenue (Pre-Discount): ৳{gross_rev:,.0f}\n"
-        f"- Total Cashback / Discount Fee Given: ৳{cashback_disc:,.0f} ({loss_pct:.1f}% revenue lost)\n"
-        f"- Net Basket Size: ৳{net_aov:,.0f}\n"
-        f"- Gross Basket Size: ৳{gross_aov:,.0f}\n"
-        f"- Basket Cashback Impact: -৳{cb_per_basket:,.0f} per basket ({pct_basket_lost:.1f}% lost/basket)\n"
+        f"- Gross Revenue: ৳{gross_rev:,.0f}\n"
+        f"- Basket Size (AOV): ৳{gross_aov:,.0f}\n"
         f"- Shift Orders: {today_orders}\n"
         f"- Items Sold: {today_qty}\n"
         f"- Customer Breakdown: {new_customers or 0} New Customers | {returning_customers or 0} Returning Customers\n\n"
@@ -451,7 +422,7 @@ def _stream_ai_briefing(
         f"- Ecom Orders: {dm.get('ecom_dispatch', 0)} | Outlet: {dm.get('outlet_dispatch', 0)} | Exchange: {dm.get('exchange_dispatch', 0)}\n"
         f"{top_spotlight_str}\n\n"
         f"Based on the provided context data (sales_summary, top_products), write a concise, professional, and insightful narrative.\n"
-        f'Highlight Net Realized Revenue as the primary headline figure, explicitly analyze actual shipped status counts (total dispatched orders, Pathao vs other courier breakdown, pending fulfillment status, and dispatch rate), analyze customer acquisition mix (New vs Returning customer count and ratio), analyze cashback/fee discount impact on overall revenue & basket size, summarize the "Product Spotlight" to point out what is driving revenue, and provide a concluding remark on the day\'s performance.\n'
+        f'Highlight Gross Revenue as the primary headline figure, explicitly analyze actual shipped status counts (total dispatched orders, Pathao vs other courier breakdown, pending fulfillment status, and dispatch rate), analyze customer acquisition mix (New vs Returning customer count and ratio), summarize the "Product Spotlight" to point out what is driving revenue, and provide a concluding remark on the day\'s performance.\n'
         f"The entire response should be a single block of text formatted for WhatsApp (using markdown like *bold* and _italic_)."
     )
 
@@ -593,54 +564,15 @@ def _render_ai_briefing_section(
 
 
 def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, today_aov):
-    """Render the bottom tabbed section: Goals, History, Handover."""
+    """Render the bottom tabbed section: History, Handover."""
     bottom_tabs = st.tabs(
         [
-            "🎯 Shift Goals",
             "📅 30-Day History",
             "📝 Shift Handover",
         ]
     )
 
     with bottom_tabs[0]:
-        st.markdown("#### 🎯 Set Shift Targets")
-        st.caption(
-            "Targets appear as progress bars on the Core Metrics KPI cards above."
-        )
-        goals = st.session_state.get("shift_goals", {})
-        gc1, gc2, gc3 = st.columns(3)
-        with gc1:
-            rev_g = st.number_input(
-                "💰 Revenue Goal (৳)",
-                min_value=0,
-                max_value=5_000_000,
-                value=int(goals.get("revenue", 0)),
-                step=5000,
-                key="goal_revenue_input",
-            )
-        with gc2:
-            ord_g = st.number_input(
-                "🛒 Order Goal",
-                min_value=0,
-                max_value=5000,
-                value=int(goals.get("orders", 0)),
-                step=10,
-                key="goal_orders_input",
-            )
-        with gc3:
-            st.markdown('<div style="padding-top:28px;"></div>', unsafe_allow_html=True)
-            if st.button(
-                "✅ Apply Goals",
-                use_container_width=True,
-                type="primary",
-                key="apply_goals_btn",
-            ):
-                st.session_state["shift_goals"] = {"revenue": rev_g, "orders": ord_g}
-                st.session_state["_last_snap_key"] = ""
-                st.toast(f"🎯 Goals set — Revenue: ৳{rev_g:,} | Orders: {ord_g}")
-                st.rerun()
-
-    with bottom_tabs[1]:
         st.markdown("#### 📈 30-Day Revenue & Order Trend")
         hist_df = load_snapshot_history(30)
         if hist_df.empty or len(hist_df) < 2:
@@ -704,7 +636,7 @@ def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, toda
                     hide_index=True,
                 )
 
-    with bottom_tabs[2]:
+    with bottom_tabs[1]:
         st.markdown("#### 📝 Shift Handover Report")
         st.caption(
             "Generate a formatted summary ready to share with the next shift or management."
@@ -735,20 +667,12 @@ def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, toda
                 ):
                     top_lines += f"  • {row.get(name_col_h, 'Unknown')} — {row.get(qty_col_h, 0):.0f} units | ৳{row.get(amt_col_h, 0):,.0f}\n"
 
-            goals_h = st.session_state.get("shift_goals", {})
-            rev_goal_h = goals_h.get("revenue", 0)
-            rev_pct_h = (
-                f"{today_rev / rev_goal_h * 100:.0f}%"
-                if rev_goal_h > 0
-                else "No target set"
-            )
-
             now_bd = bd_now()
             handover_text = (
                 f"*🛡️ DEEN OPS — Shift Handover Report*\n"
                 f"Generated: {now_bd.strftime('%d %b %Y, %I:%M %p')} (BD)\n\n"
                 f"*📊 Shift Summary*\n"
-                f"  Revenue: ৳{today_rev:,.0f}{f' ({rev_pct_h} of target)' if rev_goal_h else ''}\n"
+                f"  Revenue: ৳{today_rev:,.0f}\n"
                 f"  Orders: {today_orders}\n"
                 f"  Units Sold: {today_qty:.0f}\n"
                 f"  Basket Size: ৳{today_aov:,.0f}\n\n"
@@ -770,17 +694,37 @@ def _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, toda
             st.code(st.session_state["shift_handover_text"], language="text")
 
 
-def _render_export_buttons(excel_report_bytes, export_date_str, active_df):
-    """Render the Excel and CSV download buttons."""
+def _render_export_buttons(export_data, export_date_str, active_df):
+    """Render exports without generating the Excel workbook on every rerun."""
     c1, c2 = st.columns(2)
     with c1:
-        st.download_button(
-            label="💾 Export Full Analytics (Excel)",
-            data=excel_report_bytes,
-            file_name=f"DEEN_Analytics_Report_{export_date_str}.xlsx",
-            type="primary",
-            use_container_width=True,
-        )
+        row_count = len(active_df) if active_df is not None else 0
+        metric_signature = export_data.get("Core Metrics", pd.DataFrame()).to_json()
+        export_key = f"{export_date_str}:{row_count}:{metric_signature}"
+        if st.session_state.get("_prepared_export_key") != export_key:
+            st.session_state.pop("_prepared_excel_report", None)
+
+        if "_prepared_excel_report" not in st.session_state:
+            if st.button(
+                "💾 Prepare Excel Export",
+                key="prepare_dashboard_excel",
+                type="primary",
+                width="stretch",
+            ):
+                with st.spinner("Preparing workbook..."):
+                    st.session_state["_prepared_excel_report"] = export_to_styled_excel(
+                        export_data
+                    )
+                    st.session_state["_prepared_export_key"] = export_key
+
+        if excel_report_bytes := st.session_state.get("_prepared_excel_report"):
+            st.download_button(
+                label="⬇️ Download Excel",
+                data=excel_report_bytes,
+                file_name=f"DEEN_Analytics_Report_{export_date_str}.xlsx",
+                type="primary",
+                width="stretch",
+            )
     with c2:
         if active_df is not None and not active_df.empty:
             st.download_button(
@@ -788,7 +732,7 @@ def _render_export_buttons(excel_report_bytes, export_date_str, active_df):
                 data=active_df.to_csv(index=False).encode("utf-8"),
                 file_name=f"DEEN_Filtered_Data_{export_date_str}.csv",
                 type="secondary",
-                use_container_width=True,
+                width="stretch",
             )
 
 
@@ -843,7 +787,9 @@ def render_dashboard_output(
                 m_df = st.session_state.get("wc_prev_df")
 
             c_df = (
-                st.session_state.get("wc_prev_df" if nav_mode == "Today" else "wc_curr_df")
+                st.session_state.get(
+                    "wc_prev_df" if nav_mode == "Today" else "wc_curr_df"
+                )
                 if nav_mode != "Backlog"
                 else None
             )
@@ -917,23 +863,24 @@ def render_dashboard_output(
             else:
                 gross_rev = today_rev + cashback_disc
 
-    # ── Performance Hub: Category Share | Spotlight | SKU Report ─────────────
-    tab_cat, tab_spot, tab_sku = st.tabs(
-        [
-            "Category Share",
-            "Spotlight",
-            "SKU Report",
-        ]
+    # Conditional rendering avoids building hidden Plotly charts and tables.
+    hub_view = st.segmented_control(
+        "Performance view",
+        ["Category Share", "Spotlight", "SKU Report"],
+        default="Category Share",
+        key="dashboard_performance_view",
+        label_visibility="collapsed",
     )
+    color_map = {}
 
-    with tab_cat:
-        color_map = _render_charts(summ, total_rev=today_rev)
+    if hub_view == "Category Share":
+        color_map = _render_charts(summ, total_rev=gross_rev)
 
     if is_operational:
-        net_aov = float(
+        gross_aov = float(
             hero.get(
-                "net_aov",
-                (today_rev / today_orders) if today_orders > 0 else float(today_aov),
+                "gross_aov",
+                (gross_rev / today_orders) if today_orders > 0 else float(today_aov),
             )
         )
 
@@ -949,19 +896,19 @@ def render_dashboard_output(
             )
 
         report_text = generate_executive_briefing(
-            today_rev,
+            gross_rev,
             today_qty,
             today_orders,
-            net_aov,
+            gross_aov,
             dm,
             top,
             gross_rev=gross_rev,
-            cashback_disc=cashback_disc,
+            cashback_disc=0.0,
             new_customers=new_cust_cnt,
             returning_customers=ret_cust_cnt,
         )
 
-        current_data_fingerprint = f"{today_rev}_{today_orders}_{dm.get('pathao_count', 0)}_{dm.get('other_count', 0)}_{new_cust_cnt}_{ret_cust_cnt}"
+        current_data_fingerprint = f"{gross_rev}_{today_orders}_{dm.get('pathao_count', 0)}_{dm.get('other_count', 0)}_{new_cust_cnt}_{ret_cust_cnt}"
 
         if (
             st.session_state.get("last_ai_data_fingerprint", "")
@@ -979,7 +926,7 @@ def render_dashboard_output(
             today_rev,
             today_qty,
             today_orders,
-            net_aov,
+            gross_aov,
             dm,
             current_data_fingerprint,
             final_report_text,
@@ -987,14 +934,16 @@ def render_dashboard_output(
             returning_customers=ret_cust_cnt,
         )
 
-    with tab_spot:
+    if hub_view == "Spotlight":
         prev_top = None
         if st.session_state.get("wc_sync_mode") == "Operational Cycle":
             nav_mode = st.session_state.get("wc_nav_mode", "Today")
             comp_df = (
                 st.session_state.get("wc_prev_df")
                 if nav_mode == "Today"
-                else st.session_state.get("wc_curr_df") if nav_mode == "Prev" else None
+                else st.session_state.get("wc_curr_df")
+                if nav_mode == "Prev"
+                else None
             )
 
             if comp_df is not None and not comp_df.empty:
@@ -1009,28 +958,23 @@ def render_dashboard_output(
 
         render_spotlight(top, color_map, prev_top=prev_top)
 
-    with tab_sku:
+    if hub_view == "SKU Report":
         _render_sku_report(top)
 
-    # ── Revenue & Cashback Impact Analysis (Ingestion mode) ──────────────────
+    # ── Market Basket & Cross-Selling Analysis (Ingestion mode) ──────────────
     if not is_operational and active_df is not None and not active_df.empty:
-        has_cashback = (
-            "Cashback Discount" in active_df.columns
-            and (active_df["Cashback Discount"] > 0).any()
+        st.divider()
+        show_mba = st.toggle(
+            "🛒 Market Basket & Cross-Sell Analysis",
+            value=st.session_state.get("ingest_show_mba", False),
+            key="ingest_show_mba",
         )
-        if has_cashback:
-            st.divider()
-            compare_cb = st.toggle(
-                "⚖️ Compare Revenue vs Cashback/Fee",
-                value=st.session_state.get("ingest_compare_cashback", True),
-                key="ingest_compare_cashback",
+        if show_mba:
+            from src.components.dashboard.market_basket_view import (
+                render_market_basket_analysis_section,
             )
-            if compare_cb:
-                from src.components.dashboard.dashboard_metrics import (
-                    render_revenue_cashback_comparison_section,
-                )
 
-                render_revenue_cashback_comparison_section(active_df, raw_df=active_df)
+            render_market_basket_analysis_section(active_df, raw_df=active_df)
 
     # ── Export Preparation ──
     export_data = _build_export_data(
@@ -1045,8 +989,6 @@ def render_dashboard_output(
         dm,
         final_report_text,
     )
-    excel_report_bytes = export_to_styled_excel(export_data)
-
     export_date_str = datetime.now().strftime("%Y%m%d")
     if not is_operational:
         if (
@@ -1068,10 +1010,10 @@ def render_dashboard_output(
 
     st.divider()
 
-    # ── BOTTOM SECTION: Goals | History | Handover | WhatsApp ──
+    # ── BOTTOM SECTION: History | Handover ──
     _render_bottom_tabs(active_df, top, today_rev, today_qty, today_orders, today_aov)
 
     st.divider()
 
     # ── Export Buttons ──
-    _render_export_buttons(excel_report_bytes, export_date_str, active_df)
+    _render_export_buttons(export_data, export_date_str, active_df)

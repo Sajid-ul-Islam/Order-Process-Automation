@@ -5,12 +5,17 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-COPY requirements.txt .
+COPY requirements.txt requirements.lock ./
 
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.lock
 
 COPY . .
+
+RUN addgroup --system app && adduser --system --ingroup app app && \
+    chown -R app:app /app
+
+USER app
 
 EXPOSE 8501
 

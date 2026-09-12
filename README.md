@@ -41,11 +41,14 @@ git clone https://github.com/Sajid-ul-Islam/DEEN-OPS.git
 cd DEEN-OPS
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt
-pip install -r requirements_dev.txt
+pip install -r requirements-dev.lock
 pre-commit install
 streamlit run app.py
 ```
+
+Authentication fails closed by default. Configure the `[auth]` secrets block
+for shared or production deployments. For local development only, explicitly
+set `DEEN_OPS_ALLOW_UNAUTHENTICATED=true` in the shell before starting the app.
 
 ## ⚙️ Configuration
 
@@ -87,6 +90,22 @@ Supported Environment Variables:
 - **Pathao:** `PATHAO_BASE_URL`, `PATHAO_CLIENT_ID`, `PATHAO_CLIENT_SECRET`, `PATHAO_USERNAME`, `PATHAO_PASSWORD`
 - **LLM APIs:** `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `HF_API_KEY`
 - **Resilience:** `API_RETRY_MAX_ATTEMPTS`, `API_BACKOFF_FACTOR_SECONDS`, `API_BACKOFF_MAX_SECONDS`
+
+## Pathao bulk order creation
+
+Open **Orders & Fulfillment → Select Feature → Pathao Processor**.
+
+1. In **Order Processing**, choose **WooCommerce Processing** and click **Pull Processing Orders**, or upload an Excel/CSV export. For uploads, map the columns and click **Confirm & Process**; this processes immediately, and the confirmed mapping remains available on subsequent clicks.
+2. Review the processed parcel rows, especially recipient phone, complete address, COD, quantity, and split-parcel instructions. Correct problems in the source and process again. **Download repaired file** remains available for manual portal upload.
+3. In **Auto-Dispatch**, click **Load pickup stores** and select a Pathao store for each warehouse/outlet. The stores come from the configured merchant account; no store ID needs to be added to secrets.
+4. Choose parcel/document, delivery type, and any additional instructions. Review whether to update matching WooCommerce orders to `confirmed`; this is enabled by default only for a WooCommerce source. Imported merchant references must belong to the connected WooCommerce store before enabling it.
+5. Click **Push to Pathao API**, then **Download dispatch results** to save the consignments and per-parcel outcomes. WooCommerce updates wait for all parcels of an order to succeed; a WooCommerce failure does not undo a Pathao creation.
+
+Auto-Dispatch uses the processor's actual export fields and includes the selected pickup `store_id`. Following [Pathao's auto-address guidance](https://pathao.com/bn/blog/api-merchant-auto-address-feature/), it sends the complete recipient address without fabricated city/zone/area IDs.
+
+Confirmed creations are saved in `data/pathao_dispatch.sqlite3` and skipped on subsequent attempts on this installation. A definite API rejection can be retried after correction. A timeout, interrupted request, or response without a consignment ID is marked **Check Pathao** and blocked from automatic resubmission: search the merchant order ID in **Order Tracking** or the merchant portal to reconcile it. Keep the ledger on persistent storage. It cannot detect orders created outside this application, on another installation, or before the ledger existed; review those in Pathao before submitting. Do not change merged order membership or warehouse assignments to bypass a recorded attempt.
+
+Pathao API tests use synthetic data and mocked responses; passing them verifies the application flow, not the credentials or availability of a live merchant account.
 
 ## 📂 Project Structure
 

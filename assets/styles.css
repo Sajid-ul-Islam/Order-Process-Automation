@@ -1,11 +1,75 @@
-/* --- BASE THEME VARIABLES --- */
+/* --- BASE THEME VARIABLES (Default: Dark Cyberpunk Operations Theme) --- */
 :root {
-    --primary: var(--primary-color, #1d4ed8);
-    --primary-glow: rgba(29, 78, 216, 0.1);
-    --border: rgba(128, 128, 128, 0.15);
-    --text-muted: #64748b;
-    --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --primary: var(--primary-color, #10b981);
+    --primary-glow: rgba(16, 185, 129, 0.22);
+    --border: rgba(255, 255, 255, 0.1);
+    --text-color: #f8fafc;
+    --text-muted: #94a3b8;
+    --text-main: #ffffff;
+    --surface: rgba(255, 255, 255, 0.05);
+    --card-bg: rgba(255, 255, 255, 0.05);
+    --card-border: rgba(255, 255, 255, 0.1);
+    --background-color: #0b0f19;
+    --background-secondary: rgba(255, 255, 255, 0.04);
+    --card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35);
 }
+
+/* Theme variables override when Dark Mode is active */
+html[data-theme="dark"],
+html.dark,
+body[data-theme="dark"],
+.stApp[data-theme="dark"] {
+    --primary: var(--primary-color, #10b981);
+    --primary-glow: rgba(16, 185, 129, 0.22);
+    --border: rgba(255, 255, 255, 0.1);
+    --text-color: #f8fafc;
+    --text-muted: #94a3b8;
+    --text-main: #ffffff;
+    --surface: rgba(255, 255, 255, 0.05);
+    --card-bg: rgba(255, 255, 255, 0.05);
+    --card-border: rgba(255, 255, 255, 0.1);
+    --background-color: #0b0f19;
+    --background-secondary: rgba(255, 255, 255, 0.04);
+    --card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-color-scheme: light) {
+    html:not([data-theme="dark"]):not(.dark) {
+        --primary: var(--primary-color, #10b981);
+        --primary-glow: rgba(16, 185, 129, 0.12);
+        --border: #e2e8f0;
+        --text-color: #0f172a;
+        --text-muted: #475569;
+        --text-main: #0f172a;
+        --surface: #ffffff;
+        --card-bg: #ffffff;
+        --card-border: #e2e8f0;
+        --background-color: #ffffff;
+        --background-secondary: #f8fafc;
+        --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    }
+}
+
+/* Explicit Light Theme Overrides (when app is in Light Mode) */
+html[data-theme="light"],
+html.light,
+body[data-theme="light"],
+.stApp[data-theme="light"],
+.stApp[style*="color-scheme: light"] {
+    --primary: var(--primary-color, #10b981);
+    --primary-glow: rgba(16, 185, 129, 0.12);
+    --border: #e2e8f0;
+    --text-color: #0f172a !important;
+    --text-muted: #475569 !important;
+    --text-main: #0f172a !important;
+    --surface: #ffffff !important;
+    --card-bg: #ffffff !important;
+    --card-border: #e2e8f0 !important;
+    --background-color: #ffffff !important;
+    --background-secondary: #f8fafc !important;
+    --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+}
+
 
 /* --- GLOBAL FADE-IN & PAGE TRANSITION ANIMATIONS --- */
 @keyframes pageSlideFadeIn {
@@ -47,8 +111,14 @@ div[role="tabpanel"],
     background: #94a3b8;
 }
 
-.stApp {
-    background: var(--background-color);
+html[data-theme="dark"] .stApp,
+body[data-theme="dark"] .stApp {
+    background: #0b0f19;
+}
+
+html[data-theme="light"] .stApp,
+body[data-theme="light"] .stApp {
+    background: #ffffff;
 }
 
 .hub-footer {
@@ -319,10 +389,28 @@ div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stSegmente
     text-transform: uppercase;
     letter-spacing: 0.08em;
     font-weight: 700 !important;
-    color: rgba(255, 255, 255, 0.7) !important;
+    color: var(--text-muted, #475569) !important;
     margin-bottom: 6px;
     padding-left: 10px;
 }
+
+html[data-theme="dark"] div[data-testid="stColumn"]:has(.align-left-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+html[data-theme="dark"] div[data-testid="stColumn"]:has(.align-center-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+html[data-theme="dark"] div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+html.dark div[data-testid="stColumn"]:has(.align-left-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+html.dark div[data-testid="stColumn"]:has(.align-center-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+html.dark div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"] {
+    color: rgba(255, 255, 255, 0.7) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]):not(.light) div[data-testid="stColumn"]:has(.align-left-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+    html:not([data-theme="light"]):not(.light) div[data-testid="stColumn"]:has(.align-center-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+    html:not([data-theme="light"]):not(.light) div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"] {
+        color: rgba(255, 255, 255, 0.7) !important;
+    }
+}
+
 
 /* --- ST.PILLS GLASSMORPHISM (SIDEBAR & MAIN) --- */
 div[data-testid="stPills"] {
@@ -719,8 +807,13 @@ div[data-testid="stSegmentedControl"] button[aria-pressed="true"] {
     margin-top: -8px;
 }
 
+html[data-theme="dark"] .sticky-action-bar,
+html.dark .sticky-action-bar {
+    background: linear-gradient(180deg, transparent 0%, #0f172a 20%);
+}
+
 @media (prefers-color-scheme: dark) {
-    .sticky-action-bar {
+    html:not([data-theme="light"]):not(.light) .sticky-action-bar {
         background: linear-gradient(180deg, transparent 0%, #0f172a 20%);
     }
 }
@@ -734,16 +827,16 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
     transform: translateY(-1px);
 }
 
-/* Chat UI Enhancements (Terminal Theme) */
+/* Chat UI Enhancements (Adaptive Theme) */
 .stChatMessage {
-    background-color: rgba(15, 23, 42, 0.85) !important;
-    border: 1px solid rgba(59, 130, 246, 0.3) !important;
+    background-color: var(--surface, #ffffff) !important;
+    border: 1px solid var(--border, #e2e8f0) !important;
     border-radius: 8px !important;
     padding: 1.2rem !important;
     margin-bottom: 1rem !important;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
     transition: border-color 0.3s ease, box-shadow 0.3s ease !important;
-    color: #e2e8f0 !important;
+    color: var(--text-color, #0f172a) !important;
 }
 
 .stChatMessage:hover {
@@ -756,7 +849,7 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
     font-family: 'Courier New', Courier, monospace !important;
     font-size: 0.9rem !important;
     line-height: 1.6 !important;
-    color: #e2e8f0 !important;
+    color: var(--text-color, #0f172a) !important;
 }
 
 .stChatMessage [data-testid="stChatMessageContent"],
@@ -764,20 +857,64 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
     font-size: 1rem !important;
     line-height: 1.6 !important;
-    color: #e2e8f0 !important;
+    color: var(--text-color, #0f172a) !important;
 }
 
 /* Assistant Message Terminal Glow */
 .stChatMessage[data-testid="stChatMessageAssistant"] {
     border-left: 4px solid #10b981 !important;
-    background: linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, rgba(15, 23, 42, 0.85) 100%) !important;
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, var(--surface, #ffffff) 100%) !important;
 }
 
 /* User Message Terminal Style */
 .stChatMessage[data-testid="stChatMessageUser"] {
     border-left: 4px solid #3b82f6 !important;
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.05) 0%, var(--surface, #ffffff) 100%) !important;
+}
+
+html[data-theme="dark"] .stChatMessage,
+html.dark .stChatMessage,
+.stApp[data-theme="dark"] .stChatMessage {
+    background-color: rgba(15, 23, 42, 0.85) !important;
+    border: 1px solid rgba(59, 130, 246, 0.3) !important;
+    color: #e2e8f0 !important;
+}
+html[data-theme="dark"] .stChatMessage [data-testid="stChatMessageContent"] code,
+html[data-theme="dark"] .stChatMessage [data-testid="stChatMessageContent"],
+html[data-theme="dark"] .stChatMessage [data-testid="stChatMessageContent"] p,
+html.dark .stChatMessage [data-testid="stChatMessageContent"] code,
+html.dark .stChatMessage [data-testid="stChatMessageContent"],
+html.dark .stChatMessage [data-testid="stChatMessageContent"] p {
+    color: #e2e8f0 !important;
+}
+html[data-theme="dark"] .stChatMessage[data-testid="stChatMessageAssistant"],
+html.dark .stChatMessage[data-testid="stChatMessageAssistant"] {
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, rgba(15, 23, 42, 0.85) 100%) !important;
+}
+html[data-theme="dark"] .stChatMessage[data-testid="stChatMessageUser"],
+html.dark .stChatMessage[data-testid="stChatMessageUser"] {
     background: linear-gradient(90deg, rgba(59, 130, 246, 0.05) 0%, rgba(15, 23, 42, 0.85) 100%) !important;
 }
+
+@media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]):not(.light) .stChatMessage {
+        background-color: rgba(15, 23, 42, 0.85) !important;
+        border: 1px solid rgba(59, 130, 246, 0.3) !important;
+        color: #e2e8f0 !important;
+    }
+    html:not([data-theme="light"]):not(.light) .stChatMessage [data-testid="stChatMessageContent"] code,
+    html:not([data-theme="light"]):not(.light) .stChatMessage [data-testid="stChatMessageContent"],
+    html:not([data-theme="light"]):not(.light) .stChatMessage [data-testid="stChatMessageContent"] p {
+        color: #e2e8f0 !important;
+    }
+    html:not([data-theme="light"]):not(.light) .stChatMessage[data-testid="stChatMessageAssistant"] {
+        background: linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, rgba(15, 23, 42, 0.85) 100%) !important;
+    }
+    html:not([data-theme="light"]):not(.light) .stChatMessage[data-testid="stChatMessageUser"] {
+        background: linear-gradient(90deg, rgba(59, 130, 246, 0.05) 0%, rgba(15, 23, 42, 0.85) 100%) !important;
+    }
+}
+
 
 /* --- MODERN METRIC CARDS --- */
 .metric-container {
@@ -797,18 +934,18 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
 }
 
 .metric-card {
-    background: rgba(128, 128, 128, 0.05);
+    background: var(--card-bg, #ffffff);
     backdrop-filter: blur(16px);
     border-radius: 16px;
     padding: 22px;
-    border: 1px solid rgba(128, 128, 128, 0.15);
+    border: 1px solid var(--card-border, #e2e8f0);
     display: flex;
     align-items: center;
     justify-content: space-between;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
-    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--card-shadow, 0 4px 20px -2px rgba(0, 0, 0, 0.05));
 }
 
 .metric-card::before {
@@ -861,10 +998,10 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
 }
 
 .metric-label {
-    color: var(--text-muted) !important;
-    opacity: 0.8;
+    color: var(--text-muted, #475569) !important;
+    opacity: 1 !important;
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin-bottom: 4px;
@@ -874,7 +1011,7 @@ div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([ari
 }
 
 .metric-value {
-    color: var(--text-color) !important;
+    color: var(--text-color, #0f172a) !important;
     font-size: 1.8rem;
     font-weight: 800;
     letter-spacing: -0.03em;
@@ -978,12 +1115,10 @@ div[data-baseweb="select"]:focus-within {
 
 @media (max-width: 768px) {
     .hub-footer {
-        position: static !important;
-        margin-top: 32px !important;
-        padding: 16px 12px !important;
+        display: none !important;
     }
     .main .block-container {
-        padding-bottom: 24px !important;
+        padding-bottom: 96px !important;
     }
 }
 
@@ -1197,12 +1332,7 @@ div[data-testid="stDataFrame"]:hover::before {
 }
 
 .app-banner-overlay::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: var(--background-color);
-    opacity: 0.75;
-    z-index: -1;
+    display: none !important;
 }
 
 .app-banner-title-area {
@@ -1608,29 +1738,71 @@ div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stElementC
     animation-delay: 0.4s;
 }
 
-/* General dark mode enforcement for custom HTML text */
-@media (prefers-color-scheme: dark) {
+/* General dark mode enforcement for custom HTML text (strictly scoped to dark mode) */
+html[data-theme="dark"] .command-nav-header,
+html[data-theme="dark"] .hub-title,
+html[data-theme="dark"] .hub-subtitle,
+html[data-theme="dark"] .metric-value,
+html[data-theme="dark"] div[data-testid="stMetricValue"],
+html[data-theme="dark"] .kpi-value,
+html.dark .command-nav-header,
+html.dark .hub-title,
+html.dark .hub-subtitle,
+html.dark .metric-value,
+html.dark div[data-testid="stMetricValue"],
+html.dark .kpi-value,
+body[data-theme="dark"] .metric-value,
+.stApp[data-theme="dark"] .metric-value,
+.stApp[data-theme="dark"] div[data-testid="stMetricValue"],
+.stApp[data-theme="dark"] .hub-title,
+.stApp[data-theme="dark"] .kpi-value {
+    color: #ffffff !important;
+}
 
-    .command-nav-header,
-    .hub-title,
-    .hub-subtitle,
-    .metric-value,
-    div[data-testid="stMetricValue"] {
+html[data-theme="dark"] .hub-card,
+html[data-theme="dark"] .metric-card,
+html.dark .hub-card,
+html.dark .metric-card,
+.stApp[data-theme="dark"] .hub-card,
+.stApp[data-theme="dark"] .metric-card {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+html[data-theme="dark"] .metric-label,
+html[data-theme="dark"] div[data-testid="stMetricLabel"],
+html[data-theme="dark"] .kpi-label,
+html.dark .metric-label,
+html.dark div[data-testid="stMetricLabel"],
+html.dark .kpi-label,
+.stApp[data-theme="dark"] .metric-label,
+.stApp[data-theme="dark"] div[data-testid="stMetricLabel"] {
+    color: #cbd5e1 !important;
+}
+
+@media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]):not(.light) .command-nav-header,
+    html:not([data-theme="light"]):not(.light) .hub-title,
+    html:not([data-theme="light"]):not(.light) .hub-subtitle,
+    html:not([data-theme="light"]):not(.light) .metric-value,
+    html:not([data-theme="light"]):not(.light) .kpi-value,
+    html:not([data-theme="light"]):not(.light) div[data-testid="stMetricValue"] {
         color: #ffffff !important;
     }
 
-    .hub-card,
-    .metric-card {
+    html:not([data-theme="light"]):not(.light) .hub-card,
+    html:not([data-theme="light"]):not(.light) .metric-card {
         background: rgba(255, 255, 255, 0.05) !important;
         border-color: rgba(255, 255, 255, 0.1) !important;
     }
 
-    .metric-label,
-    div[data-testid="stMetricLabel"] {
+    html:not([data-theme="light"]):not(.light) .metric-label,
+    html:not([data-theme="light"]):not(.light) .kpi-label,
+    html:not([data-theme="light"]):not(.light) div[data-testid="stMetricLabel"] {
         color: #cbd5e1 !important;
     }
 
-    .hub-footer {
+    html:not([data-theme="light"]):not(.light) .hub-footer {
         position: fixed;
         bottom: 0;
         left: 0;
@@ -1647,10 +1819,177 @@ div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stElementC
         scrollbar-gutter: stable;
     }
 
-    .hub-title-row {
+    html:not([data-theme="light"]):not(.light) .hub-title-row {
         background: rgba(29, 78, 216, 0.1) !important;
         border-bottom-color: rgba(255, 255, 255, 0.1) !important;
     }
+}
+
+/* High Contrast Light Mode Enforcement (Always active when in Light Mode or by default) */
+html[data-theme="light"] .command-nav-header,
+html[data-theme="light"] .hub-title,
+html[data-theme="light"] .metric-value,
+html[data-theme="light"] .kpi-value,
+html[data-theme="light"] div[data-testid="stMetricValue"],
+html.light .command-nav-header,
+html.light .hub-title,
+html.light .metric-value,
+html.light .kpi-value,
+html.light div[data-testid="stMetricValue"],
+body[data-theme="light"] .metric-value,
+body[data-theme="light"] .kpi-value,
+body[data-theme="light"] div[data-testid="stMetricValue"],
+.stApp[data-theme="light"] .metric-value,
+.stApp[data-theme="light"] .kpi-value,
+.stApp[data-theme="light"] div[data-testid="stMetricValue"],
+.stApp[data-theme="light"] .hub-title,
+.stApp[style*="color-scheme: light"] .metric-value,
+.stApp[style*="color-scheme: light"] .kpi-value,
+.stApp[style*="color-scheme: light"] div[data-testid="stMetricValue"],
+.stApp[style*="color-scheme: light"] .hub-title {
+    color: #0f172a !important;
+}
+
+html[data-theme="light"] .hub-subtitle,
+html[data-theme="light"] .metric-label,
+html[data-theme="light"] .kpi-label,
+html[data-theme="light"] div[data-testid="stMetricLabel"],
+html.light .hub-subtitle,
+html.light .metric-label,
+html.light .kpi-label,
+html.light div[data-testid="stMetricLabel"],
+body[data-theme="light"] .metric-label,
+body[data-theme="light"] .kpi-label,
+.stApp[data-theme="light"] .metric-label,
+.stApp[data-theme="light"] .kpi-label,
+.stApp[data-theme="light"] div[data-testid="stMetricLabel"],
+.stApp[data-theme="light"] .hub-subtitle,
+.stApp[style*="color-scheme: light"] .metric-label,
+.stApp[style*="color-scheme: light"] .kpi-label,
+.stApp[style*="color-scheme: light"] div[data-testid="stMetricLabel"],
+.stApp[style*="color-scheme: light"] .hub-subtitle {
+    color: #475569 !important;
+}
+
+html[data-theme="light"] .hub-card,
+html[data-theme="light"] .metric-card,
+html.light .hub-card,
+html.light .metric-card,
+body[data-theme="light"] .metric-card,
+.stApp[data-theme="light"] .hub-card,
+.stApp[data-theme="light"] .metric-card,
+.stApp[style*="color-scheme: light"] .metric-card,
+.stApp[style*="color-scheme: light"] .hub-card {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+}
+
+html[data-theme="light"] .metric-detail-row,
+html.light .metric-detail-row,
+.stApp[data-theme="light"] .metric-detail-row,
+.stApp[style*="color-scheme: light"] .metric-detail-row {
+    color: #0f172a !important;
+}
+
+html[data-theme="light"] .delta-prev,
+html.light .delta-prev,
+.stApp[data-theme="light"] .delta-prev,
+.stApp[style*="color-scheme: light"] .delta-prev {
+    color: #475569 !important;
+}
+
+html[data-theme="light"] .stChatMessage,
+html.light .stChatMessage,
+.stApp[data-theme="light"] .stChatMessage {
+    background-color: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #0f172a !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+}
+
+html[data-theme="light"] .stChatMessage [data-testid="stChatMessageContent"],
+html[data-theme="light"] .stChatMessage [data-testid="stChatMessageContent"] p,
+html[data-theme="light"] .stChatMessage [data-testid="stChatMessageContent"] code,
+html.light .stChatMessage [data-testid="stChatMessageContent"],
+html.light .stChatMessage [data-testid="stChatMessageContent"] p,
+html.light .stChatMessage [data-testid="stChatMessageContent"] code {
+    color: #0f172a !important;
+}
+
+html[data-theme="light"] .stChatMessage[data-testid="stChatMessageAssistant"],
+html.light .stChatMessage[data-testid="stChatMessageAssistant"] {
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.06) 0%, #ffffff 100%) !important;
+    border-left: 4px solid #10b981 !important;
+}
+
+html[data-theme="light"] .stChatMessage[data-testid="stChatMessageUser"],
+html.light .stChatMessage[data-testid="stChatMessageUser"] {
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.05) 0%, #ffffff 100%) !important;
+    border-left: 4px solid #3b82f6 !important;
+}
+
+html[data-theme="light"] div[data-testid="stColumn"]:has(.align-left-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+html[data-theme="light"] div[data-testid="stColumn"]:has(.align-center-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+html[data-theme="light"] div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+html.light div[data-testid="stColumn"]:has(.align-left-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+html.light div[data-testid="stColumn"]:has(.align-center-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"],
+html.light div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stSegmentedControl"] label[data-testid="stWidgetLabel"] {
+    color: #334155 !important;
+}
+
+html[data-theme="light"] div[data-testid="stPills"] button:not([aria-checked="true"]):not([aria-pressed="true"]):not([data-pressed="true"]),
+html[data-theme="light"] div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([aria-pressed="true"]),
+html.light div[data-testid="stPills"] button:not([aria-checked="true"]):not([aria-pressed="true"]):not([data-pressed="true"]),
+html.light div[data-testid="stSegmentedControl"] button:not([aria-checked="true"]):not([aria-pressed="true"]) {
+    color: #334155 !important;
+}
+
+html[data-theme="light"] .hub-footer,
+html.light .hub-footer,
+.stApp[data-theme="light"] .hub-footer,
+.stApp[style*="color-scheme: light"] .hub-footer {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border-top: 1px solid #e2e8f0 !important;
+}
+
+html[data-theme="light"] .hub-title-row,
+html.light .hub-title-row {
+    background: rgba(16, 185, 129, 0.05) !important;
+    border-bottom-color: #e2e8f0 !important;
+}
+
+
+/* Explicit Streamlit dark theme attribute overrides */
+.stApp[style*="color-scheme: dark"] .metric-value,
+.stApp[style*="color-scheme: dark"] div[data-testid="stMetricValue"],
+.stApp[style*="color-scheme: dark"] .hub-title,
+.stApp[style*="color-scheme: dark"] .kpi-value,
+.stApp[data-theme="dark"] .metric-value,
+.stApp[data-theme="dark"] div[data-testid="stMetricValue"],
+.stApp[data-theme="dark"] .hub-title,
+.stApp[data-theme="dark"] .kpi-value {
+    color: #ffffff !important;
+}
+
+.stApp[style*="color-scheme: dark"] .metric-label,
+.stApp[style*="color-scheme: dark"] div[data-testid="stMetricLabel"],
+.stApp[style*="color-scheme: dark"] .hub-subtitle,
+.stApp[style*="color-scheme: dark"] .kpi-label,
+.stApp[data-theme="dark"] .metric-label,
+.stApp[data-theme="dark"] div[data-testid="stMetricLabel"],
+.stApp[data-theme="dark"] .hub-subtitle,
+.stApp[data-theme="dark"] .kpi-label {
+    color: #cbd5e1 !important;
+}
+
+.stApp[style*="color-scheme: dark"] .metric-card,
+.stApp[style*="color-scheme: dark"] .hub-card,
+.stApp[data-theme="dark"] .metric-card,
+.stApp[data-theme="dark"] .hub-card {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* ============================================================
@@ -1837,41 +2176,416 @@ div[data-testid="stColumn"]:has(.align-right-helper) div[data-testid="stElementC
     }
 }
 
-/* Dark mode support */
+/* Dark mode support for KPI cards (strictly scoped to dark mode) */
+html[data-theme="dark"] .kpi-card,
+html.dark .kpi-card,
+.stApp[data-theme="dark"] .kpi-card {
+    background: #1e293b;
+    border-color: #334155;
+}
+
+html[data-theme="dark"] .kpi-card-primary,
+html.dark .kpi-card-primary,
+.stApp[data-theme="dark"] .kpi-card-primary {
+    background: #0f172a;
+    border-color: #475569;
+}
+
+html[data-theme="dark"] .kpi-label,
+html.dark .kpi-label,
+.stApp[data-theme="dark"] .kpi-label {
+    color: #94a3b8;
+}
+
+html[data-theme="dark"] .kpi-value,
+html.dark .kpi-value,
+.stApp[data-theme="dark"] .kpi-value {
+    color: #f1f5f9;
+}
+
+html[data-theme="dark"] .kpi-prev,
+html.dark .kpi-prev,
+.stApp[data-theme="dark"] .kpi-prev {
+    background: #334155;
+    color: #cbd5e1;
+}
+
+html[data-theme="dark"] .kpi-delta-up,
+html.dark .kpi-delta-up {
+    background: rgba(5, 150, 105, 0.15);
+}
+
+html[data-theme="dark"] .kpi-delta-down,
+html.dark .kpi-delta-down {
+    background: rgba(220, 38, 38, 0.15);
+}
+
+html[data-theme="dark"] .kpi-card:hover,
+html.dark .kpi-card:hover {
+    border-color: #475569;
+}
+
 @media (prefers-color-scheme: dark) {
-    .kpi-card {
+    html:not([data-theme="light"]):not(.light) .kpi-card {
         background: #1e293b;
         border-color: #334155;
     }
     
-    .kpi-card-primary {
+    html:not([data-theme="light"]):not(.light) .kpi-card-primary {
         background: #0f172a;
         border-color: #475569;
     }
     
-    .kpi-label {
+    html:not([data-theme="light"]):not(.light) .kpi-label {
         color: #94a3b8;
     }
     
-    .kpi-value {
+    html:not([data-theme="light"]):not(.light) .kpi-value {
         color: #f1f5f9;
     }
     
-    .kpi-prev {
+    html:not([data-theme="light"]):not(.light) .kpi-prev {
         background: #334155;
         color: #cbd5e1;
     }
     
-    .kpi-delta-up {
+    html:not([data-theme="light"]):not(.light) .kpi-delta-up {
         background: rgba(5, 150, 105, 0.15);
     }
     
-    .kpi-delta-down {
+    html:not([data-theme="light"]):not(.light) .kpi-delta-down {
         background: rgba(220, 38, 38, 0.15);
     }
     
-    .kpi-card:hover {
+    html:not([data-theme="light"]):not(.light) .kpi-card:hover {
         border-color: #475569;
     }
 }
+
+
+/* ============================================================
+   UI/UX ADVANCEMENTS: TACTILE INTERACTIONS & SWISS TYPOGRAPHY
+   (Inspired by awesome-ai-tools-for-ui Design Skills)
+   ============================================================ */
+
+/* 1. Tactile Button & Interactive Micro-Interactions */
+button[kind="primary"],
+button[kind="secondary"],
+.stButton > button,
+.stDownloadButton > button {
+    transition: transform 0.14s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.14s ease,
+                background-color 0.14s ease,
+                border-color 0.14s ease !important;
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.01em !important;
+}
+
+button[kind="primary"]:hover,
+.stButton > button[kind="primary"]:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.28) !important;
+}
+
+button[kind="primary"]:active,
+button[kind="secondary"]:active,
+.stButton > button:active,
+.stDownloadButton > button:active {
+    transform: scale(0.97) !important;
+}
+
+/* 2. Swiss Tabular Typography for Real-time Financial Data */
+.metric-value,
+div[data-testid="stMetricValue"],
+.stDataFrame,
+table {
+    font-variant-numeric: tabular-nums lining-nums !important;
+    letter-spacing: -0.02em !important;
+}
+
+/* 3. Modern Form Controls & Focus Glow Rings */
+div[data-baseweb="input"] {
+    border-radius: 10px !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+div[data-baseweb="input"]:focus-within {
+    border-color: #10b981 !important;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.20) !important;
+}
+
+div[data-baseweb="select"] > div {
+    border-radius: 10px !important;
+}
+
+/* 4. Refined Glassmorphism Elevation */
+.metric-card,
+.hub-card {
+    backdrop-filter: blur(14px) !important;
+    -webkit-backdrop-filter: blur(14px) !important;
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.20), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+    transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.18s ease !important;
+}
+
+.metric-card:hover,
+.hub-card:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 28px -4px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+    border-color: rgba(16, 185, 129, 0.45) !important;
+}
+
+/* 5. Smooth Tab Transition Bar */
+div[data-testid="stTabs"] button[role="tab"] {
+    transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    border-radius: 8px 8px 0 0 !important;
+    font-weight: 600 !important;
+}
+
+div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+    color: #10b981 !important;
+}
+
+/* ==========================================================================
+   MOBILE BOTTOM NAVIGATION BAR (<= 768px)
+   Jakob's Law compliant thumb navigation for handheld mobile devices.
+   Hidden on desktop (> 768px).
+   ========================================================================== */
+
+/* 1. Desktop: Completely hidden with zero footprint */
+@media (min-width: 769px) {
+    .mobile-bottom-navbar-container,
+    .st-key-mobile_bottom_navbar_container,
+    .st-key-mobile_bottom_nav,
+    div[data-testid="stLayoutWrapper"]:has(> .st-key-mobile_bottom_navbar_container),
+    div[data-testid="stElementContainer"]:has(> .st-key-mobile_bottom_navbar_container),
+    div.element-container:has(.st-key-mobile_bottom_navbar_container) {
+        display: none !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        visibility: hidden !important;
+    }
+}
+
+/* 2. Mobile Viewport (<= 768px): Industry-Grade Docking & Badge Suppression */
+@media (max-width: 768px) {
+    /* Suppress Streamlit Cloud floating badges, account logo, manage app button, deploy button, and viewer badges */
+    [data-testid="manage-app-button"],
+    #manage-app-button,
+    button[data-testid="manage-app-button"],
+    .viewerBadge_container__r5gzq,
+    div[class*="viewerBadge"],
+    a[class*="viewerBadge"],
+    span[class*="viewerBadge"],
+    div[class*="manage-app"],
+    div[class*="manageApp"],
+    button[class*="manageApp"],
+    button[class*="manage-app"],
+    div[class*="ProfileButton"],
+    button[class*="ProfileButton"],
+    div[data-testid="stStatusWidget"],
+    div[class*="stAppDeployButton"],
+    footer:not(.hub-footer),
+    div[data-testid="stDecoration"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        position: absolute !important;
+        z-index: -9999 !important;
+    }
+
+    /* Main content padding clearance so content is never hidden behind bottom bar */
+    .main .block-container {
+        padding-bottom: calc(84px + env(safe-area-inset-bottom, 14px)) !important;
+    }
+
+    .mobile-bottom-navbar-container,
+    .st-key-mobile_bottom_navbar_container {
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100vw !important;
+        max-width: 100vw !important;
+        margin: 0 !important;
+        padding: 6px 10px calc(8px + env(safe-area-inset-bottom, 12px)) 10px !important;
+        background: rgba(255, 255, 255, 0.90) !important;
+        backdrop-filter: blur(24px) saturate(180%) !important;
+        -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+        border-top: 1px solid rgba(226, 232, 240, 0.85) !important;
+        z-index: 9999999 !important;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05), 0 -1px 2px rgba(0, 0, 0, 0.02) !important;
+        box-sizing: border-box !important;
+    }
+
+    html[data-theme="dark"] .mobile-bottom-navbar-container,
+    html[data-theme="dark"] .st-key-mobile_bottom_navbar_container,
+    html.dark .mobile-bottom-navbar-container,
+    html.dark .st-key-mobile_bottom_navbar_container,
+    .stApp[data-theme="dark"] .mobile-bottom-navbar-container,
+    .stApp[data-theme="dark"] .st-key-mobile_bottom_navbar_container {
+        background: rgba(15, 23, 42, 0.92) !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+        box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.45) !important;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        html:not([data-theme="light"]):not(.light) .mobile-bottom-navbar-container,
+        html:not([data-theme="light"]):not(.light) .st-key-mobile_bottom_navbar_container {
+            background: rgba(15, 23, 42, 0.92) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+            box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.45) !important;
+        }
+    }
+
+    /* Container block overrides inside Streamlit's layout engine */
+    div[data-testid="stLayoutWrapper"]:has(> .st-key-mobile_bottom_navbar_container),
+    div[data-testid="stElementContainer"]:has(> .st-key-mobile_bottom_navbar_container) {
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100vw !important;
+        z-index: 9999999 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        pointer-events: none !important;
+    }
+
+    .st-key-mobile_bottom_navbar_container * {
+        pointer-events: auto !important;
+    }
+
+    /* Segmented Control styling within mobile bottom bar */
+    .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"],
+    .st-key-mobile_bottom_nav [data-testid="stButtonGroup"] {
+        display: flex !important;
+        flex-direction: row !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        gap: 6px !important;
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* Individual Nav Segment Buttons - Industry Grade */
+    .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button,
+    .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] div[role="radio"],
+    .st-key-mobile_bottom_nav [data-testid="stButtonGroup"] button,
+    .st-key-mobile_bottom_nav [data-testid="stButtonGroup"] div[role="radio"] {
+        flex: 1 1 0px !important;
+        min-width: 0 !important;
+        min-height: 44px !important;
+        padding: 6px 2px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 0.72rem !important;
+        font-weight: 600 !important;
+        line-height: 1.2 !important;
+        border-radius: 12px !important;
+        border: 1px solid transparent !important;
+        background: rgba(241, 245, 249, 0.7) !important;
+        color: #64748b !important;
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        touch-action: manipulation !important;
+        user-select: none !important;
+        -webkit-tap-highlight-color: transparent !important;
+        cursor: pointer !important;
+    }
+
+    .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button:hover {
+        color: #0f172a !important;
+        background: rgba(226, 232, 240, 0.9) !important;
+    }
+
+    html[data-theme="dark"] .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button,
+    html[data-theme="dark"] .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] div[role="radio"],
+    html.dark .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button,
+    html.dark .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] div[role="radio"],
+    .stApp[data-theme="dark"] .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button,
+    .stApp[data-theme="dark"] .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] div[role="radio"] {
+        background: rgba(255, 255, 255, 0.04) !important;
+        color: #94a3b8 !important;
+    }
+
+    html[data-theme="dark"] .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button:hover,
+    html.dark .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button:hover {
+        color: #f8fafc !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        html:not([data-theme="light"]):not(.light) .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button,
+        html:not([data-theme="light"]):not(.light) .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] div[role="radio"] {
+            background: rgba(255, 255, 255, 0.04) !important;
+            color: #94a3b8 !important;
+        }
+    }
+
+    /* Active Nav Item - High Contrast Emerald Indicator */
+    .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button[aria-checked="true"],
+    .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button[aria-pressed="true"],
+    .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] div[role="radio"][aria-checked="true"],
+    .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] [data-selected="true"],
+    .st-key-mobile_bottom_nav [data-testid="stButtonGroup"] button[aria-checked="true"],
+    .st-key-mobile_bottom_nav [data-testid="stButtonGroup"] button[aria-pressed="true"],
+    .st-key-mobile_bottom_nav [data-testid="stButtonGroup"] div[role="radio"][aria-checked="true"],
+    .st-key-mobile_bottom_nav [data-testid="stButtonGroup"] [data-selected="true"] {
+        background: #ecfdf5 !important;
+        border: 1px solid rgba(16, 185, 129, 0.4) !important;
+        color: #059669 !important;
+        font-weight: 700 !important;
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.18) !important;
+        transform: translateY(-1px) scale(1.02) !important;
+    }
+
+    html[data-theme="dark"] .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button[aria-checked="true"],
+    html[data-theme="dark"] .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button[aria-pressed="true"],
+    html[data-theme="dark"] .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] div[role="radio"][aria-checked="true"],
+    html[data-theme="dark"] .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] [data-selected="true"],
+    html.dark .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button[aria-checked="true"],
+    html.dark .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button[aria-pressed="true"],
+    html.dark .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] div[role="radio"][aria-checked="true"],
+    html.dark .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] [data-selected="true"],
+    .stApp[data-theme="dark"] .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button[aria-checked="true"],
+    .stApp[data-theme="dark"] .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button[aria-pressed="true"] {
+        background: rgba(16, 185, 129, 0.16) !important;
+        border: 1px solid rgba(16, 185, 129, 0.45) !important;
+        color: #10b981 !important;
+        box-shadow: 0 0 12px rgba(16, 185, 129, 0.22) !important;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        html:not([data-theme="light"]):not(.light) .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button[aria-checked="true"],
+        html:not([data-theme="light"]):not(.light) .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button[aria-pressed="true"],
+        html:not([data-theme="light"]):not(.light) .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] div[role="radio"][aria-checked="true"],
+        html:not([data-theme="light"]):not(.light) .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] [data-selected="true"] {
+            background: rgba(16, 185, 129, 0.16) !important;
+            border: 1px solid rgba(16, 185, 129, 0.45) !important;
+            color: #10b981 !important;
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.22) !important;
+        }
+    }
+
+    /* Active Tap Ripple */
+    .st-key-mobile_bottom_navbar_container [data-testid="stButtonGroup"] button:active,
+    .st-key-mobile_bottom_nav [data-testid="stButtonGroup"] button:active {
+        transform: scale(0.96) !important;
+    }
+}
+
+
 

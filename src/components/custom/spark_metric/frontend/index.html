@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Streamlit Interactive Sparkline Metric</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+    }
+    body {
+      background: transparent;
+      overflow: hidden;
+      padding: 4px;
+    }
+    .metric-card {
+      position: relative;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 14px 18px;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 130px;
+    }
+    .metric-card:hover {
+      border-color: rgba(16, 185, 129, 0.45);
+      box-shadow: 0 8px 28px -4px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .metric-label {
+      font-size: 0.76rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #94a3b8;
+    }
+    .delta-badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      letter-spacing: 0.02em;
+    }
+    .delta-pos {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .delta-neg {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .value-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .metric-value {
+      font-size: 1.65rem;
+      font-weight: 800;
+      color: #f8fafc;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums lining-nums;
+    }
+    .scrub-info {
+      font-size: 0.74rem;
+      color: #38bdf8;
+      font-weight: 600;
+      display: none;
+    }
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      height: 48px;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+    }
+    .tooltip-dot {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #38bdf8;
+      box-shadow: 0 0 10px #38bdf8, 0 0 4px #fff;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      display: none;
+      z-index: 10;
+    }
+    @media (prefers-color-scheme: light) {
+      .metric-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+      }
+      .metric-card:hover {
+        border-color: rgba(16, 185, 129, 0.5);
+        box-shadow: 0 4px 14px rgba(16, 185, 129, 0.15);
+      }
+      .metric-label {
+        color: #475569;
+      }
+      .metric-value {
+        color: #0f172a;
+      }
+      .scrub-info {
+        color: #0284c7;
+      }
+    }
+    body.light .metric-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    body.light .metric-card:hover {
+      border-color: rgba(16, 185, 129, 0.5);
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.15);
+    }
+    body.light .metric-label {
+      color: #475569;
+    }
+    body.light .metric-value {
+      color: #0f172a;
+    }
+    body.light .scrub-info {
+      color: #0284c7;
+    }
+  </style>
+</head>
+<body>
+  <div class="metric-card" id="card">
+    <div class="header-row">
+      <span class="metric-label" id="label">KPI Metric</span>
+      <span class="delta-badge" id="delta"></span>
+    </div>
+    <div class="value-row">
+      <span class="metric-value" id="val">—</span>
+      <span class="scrub-info" id="scrub-info"></span>
+    </div>
+    <div class="canvas-container">
+      <canvas id="sparkline"></canvas>
+      <div class="tooltip-dot" id="dot"></div>
+    </div>
+  </div>
+
+  <script>
+    let rawData = [];
+    let labels = [];
+    let origValue = "—";
+    let lineColor = "#10b981";
+    let canvas, ctx;
+    let width = 0, height = 0;
+
+    function sendToStreamlit(type, data = {}) {
+      window.parent.postMessage({
+        isStreamlitMessage: true,
+        type: type,
+        ...data
+      }, "*");
+    }
+
+    function initCanvas() {
+      canvas = document.getElementById("sparkline");
+      ctx = canvas.getContext("2d");
+      resizeCanvas();
+    }
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      width = rect.width;
+      height = rect.height;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      ctx.scale(dpr, dpr);
+      drawSparkline();
+    }
+
+    function drawSparkline(hoverIndex = -1) {
+      if (!ctx || !rawData || rawData.length < 2) return;
+      ctx.clearRect(0, 0, width, height);
+
+      const min = Math.min(...rawData);
+      const max = Math.max(...rawData);
+      const range = (max - min) || 1;
+      const stepX = width / (rawData.length - 1);
+
+      // Points calculation
+      const points = rawData.map((val, i) => {
+        const x = i * stepX;
+        const y = height - ((val - min) / range) * (height - 12) - 6;
+        return { x, y, val };
+      });
+
+      // Area gradient
+      const grad = ctx.createLinearGradient(0, 0, 0, height);
+      grad.addColorStop(0, lineColor + "44");
+      grad.addColorStop(1, lineColor + "00");
+
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) {
+        const prev = points[i - 1];
+        const curr = points[i];
+        const midX = (prev.x + curr.x) / 2;
+        ctx.bezierCurveTo(midX, prev.y, midX, curr.y, curr.x, curr.y);
+      }
+      ctx.lineTo(points[points.length - 1].x, height);
+      ctx.lineTo(points[0].x, height);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Line
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) {
+        const prev = points[i - 1];
+        const curr = points[i];
+        const midX = (prev.x + curr.x) / 2;
+        ctx.bezierCurveTo(midX, prev.y, midX, curr.y, curr.x, curr.y);
+      }
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+
+      // Draw hover line and dot
+      if (hoverIndex >= 0 && hoverIndex < points.length) {
+        const hp = points[hoverIndex];
+        ctx.beginPath();
+        ctx.moveTo(hp.x, 0);
+        ctx.lineTo(hp.x, height);
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.5)";
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([3, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const dot = document.getElementById("dot");
+        dot.style.display = "block";
+        dot.style.left = hp.x + "px";
+        dot.style.top = hp.y + "px";
+      } else {
+        document.getElementById("dot").style.display = "none";
+      }
+    }
+
+    function setupInteractions() {
+      const cvs = document.getElementById("sparkline");
+      const valEl = document.getElementById("val");
+      const scrubEl = document.getElementById("scrub-info");
+
+      cvs.addEventListener("mousemove", (e) => {
+        if (!rawData || rawData.length < 2) return;
+        const rect = cvs.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const stepX = width / (rawData.length - 1);
+        let idx = Math.round(x / stepX);
+        idx = Math.max(0, Math.min(rawData.length - 1, idx));
+
+        drawSparkline(idx);
+        const hoveredVal = rawData[idx];
+        const hoveredLabel = labels[idx] || `Point #${idx + 1}`;
+
+        valEl.innerText = typeof hoveredVal === "number" ? hoveredVal.toLocaleString() : hoveredVal;
+        scrubEl.innerText = `(${hoveredLabel})`;
+        scrubEl.style.display = "inline";
+      });
+
+      cvs.addEventListener("mouseleave", () => {
+        drawSparkline(-1);
+        valEl.innerText = origValue;
+        scrubEl.style.display = "none";
+      });
+    }
+
+    // Immediate check of parent window theme
+    try {
+      const pDoc = window.parent.document;
+      const pTheme = pDoc.documentElement.getAttribute("data-theme") || (pDoc.body && pDoc.body.getAttribute("data-theme"));
+      if (pTheme === "light") {
+        document.body.classList.add("light");
+      } else if (pTheme === "dark") {
+        document.body.classList.remove("light");
+      }
+    } catch (e) {}
+
+    window.addEventListener("message", (event) => {
+      if (event.data && event.data.type === "streamlit:render") {
+        if (event.data.theme) {
+          let isLight = event.data.theme.base === "light";
+          if (event.data.theme.backgroundColor) {
+            const hex = event.data.theme.backgroundColor.replace('#', '');
+            if (hex.length === 6) {
+              const r = parseInt(hex.substring(0, 2), 16);
+              const g = parseInt(hex.substring(2, 4), 16);
+              const b = parseInt(hex.substring(4, 6), 16);
+              isLight = (0.299 * r + 0.587 * g + 0.114 * b) >= 128;
+            }
+          }
+          try {
+            const pDoc = window.parent.document;
+            const pTheme = pDoc.documentElement.getAttribute("data-theme") || (pDoc.body && pDoc.body.getAttribute("data-theme"));
+            if (pTheme === "light") isLight = true;
+            else if (pTheme === "dark") isLight = false;
+          } catch (e) {}
+          document.body.classList.toggle("light", isLight);
+        }
+
+        const args = event.data.args || {};
+        document.getElementById("label").innerText = args.label || "Metric";
+        origValue = args.value || "—";
+        document.getElementById("val").innerText = origValue;
+
+        const deltaEl = document.getElementById("delta");
+        if (args.delta) {
+          deltaEl.innerText = args.delta;
+          deltaEl.className = "delta-badge " + (args.delta_is_neg ? "delta-neg" : "delta-pos");
+          deltaEl.style.display = "inline-block";
+        } else {
+          deltaEl.style.display = "none";
+        }
+
+        lineColor = args.color || "#10b981";
+        rawData = args.data || [10, 15, 8, 22, 19, 30, 25, 40];
+        labels = args.labels || [];
+
+        if (!canvas) {
+          initCanvas();
+          setupInteractions();
+        } else {
+          resizeCanvas();
+        }
+
+        const h = document.body.scrollHeight || 140;
+        sendToStreamlit("streamlit:setFrameHeight", { height: h });
+      }
+    });
+
+    window.addEventListener("resize", () => {
+      if (canvas) resizeCanvas();
+    });
+
+    sendToStreamlit("streamlit:componentReady", { apiVersion: 1 });
+  </script>
+</body>
+</html>

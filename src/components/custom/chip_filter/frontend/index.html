@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Streamlit Interactive Chip Filter</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      background: transparent;
+      overflow: hidden;
+      padding: 4px 2px;
+    }
+    .chip-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+      border: 1px solid rgba(128, 128, 128, 0.25);
+      background: rgba(128, 128, 128, 0.08);
+      color: #94a3b8;
+    }
+    .chip:hover {
+      transform: translateY(-1px);
+      border-color: #10b981;
+      color: #e2e8f0;
+      background: rgba(16, 185, 129, 0.12);
+    }
+    .chip:active {
+      transform: scale(0.96);
+    }
+    .chip.active {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(6, 182, 212, 0.18));
+      border-color: #10b981;
+      color: #10b981;
+      box-shadow: 0 2px 10px rgba(16, 185, 129, 0.22);
+    }
+    .chip .chip-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .chip .chip-count {
+      font-size: 11px;
+      opacity: 0.8;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+    @media (prefers-color-scheme: light) {
+      .chip {
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+        color: #334155;
+      }
+      .chip:hover {
+        border-color: #10b981;
+        color: #0f172a;
+        background: rgba(16, 185, 129, 0.1);
+      }
+      .chip.active {
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(6, 182, 212, 0.12));
+        border-color: #10b981;
+        color: #065f46;
+      }
+      .chip .chip-count {
+        background: rgba(0, 0, 0, 0.07);
+        color: #475569;
+      }
+    }
+    body.light .chip {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+      color: #334155;
+    }
+    body.light .chip:hover {
+      border-color: #10b981;
+      color: #0f172a;
+      background: rgba(16, 185, 129, 0.1);
+    }
+    body.light .chip.active {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(6, 182, 212, 0.12));
+      border-color: #10b981;
+      color: #065f46;
+    }
+    body.light .chip .chip-count {
+      background: rgba(0, 0, 0, 0.07);
+      color: #475569;
+    }
+  </style>
+</head>
+<body>
+  <div id="root" class="chip-container"></div>
+
+  <script>
+    // Streamlit Component Communication Protocol
+    let selectedSet = new Set();
+    let currentOptions = [];
+    let isMulti = true;
+
+    function sendToStreamlit(type, data = {}) {
+      window.parent.postMessage({
+        isStreamlitMessage: true,
+        type: type,
+        ...data
+      }, "*");
+    }
+
+    function setComponentValue(value) {
+      sendToStreamlit("streamlit:setComponentValue", { value: value });
+    }
+
+    function notifyFrameHeight() {
+      const height = document.body.scrollHeight || 42;
+      sendToStreamlit("streamlit:setFrameHeight", { height: height });
+    }
+
+    function renderChips() {
+      const container = document.getElementById("root");
+      container.innerHTML = "";
+
+      currentOptions.forEach(opt => {
+        const val = typeof opt === "object" ? opt.value : opt;
+        const label = typeof opt === "object" ? opt.label : opt;
+        const count = typeof opt === "object" && opt.count !== undefined ? opt.count : null;
+
+        const chip = document.createElement("div");
+        chip.className = "chip" + (selectedSet.has(val) ? " active" : "");
+
+        const dot = document.createElement("span");
+        dot.className = "chip-dot";
+        chip.appendChild(dot);
+
+        const text = document.createElement("span");
+        text.innerText = label;
+        chip.appendChild(text);
+
+        if (count !== null) {
+          const badge = document.createElement("span");
+          badge.className = "chip-count";
+          badge.innerText = count;
+          chip.appendChild(badge);
+        }
+
+        chip.onclick = () => {
+          if (isMulti) {
+            if (selectedSet.has(val)) {
+              selectedSet.delete(val);
+            } else {
+              selectedSet.add(val);
+            }
+          } else {
+            selectedSet.clear();
+            selectedSet.add(val);
+          }
+          renderChips();
+          setComponentValue(Array.from(selectedSet));
+        };
+
+        container.appendChild(chip);
+      });
+
+      notifyFrameHeight();
+    }
+
+    // Immediate check of parent window theme
+    try {
+      const pDoc = window.parent.document;
+      const pTheme = pDoc.documentElement.getAttribute("data-theme") || (pDoc.body && pDoc.body.getAttribute("data-theme"));
+      if (pTheme === "light") {
+        document.body.classList.add("light");
+      } else if (pTheme === "dark") {
+        document.body.classList.remove("light");
+      }
+    } catch (e) {}
+
+    window.addEventListener("message", (event) => {
+      if (event.data && event.data.type === "streamlit:render") {
+        if (event.data.theme) {
+          let isLight = event.data.theme.base === "light";
+          if (event.data.theme.backgroundColor) {
+            const hex = event.data.theme.backgroundColor.replace('#', '');
+            if (hex.length === 6) {
+              const r = parseInt(hex.substring(0, 2), 16);
+              const g = parseInt(hex.substring(2, 4), 16);
+              const b = parseInt(hex.substring(4, 6), 16);
+              isLight = (0.299 * r + 0.587 * g + 0.114 * b) >= 128;
+            }
+          }
+          try {
+            const pDoc = window.parent.document;
+            const pTheme = pDoc.documentElement.getAttribute("data-theme") || (pDoc.body && pDoc.body.getAttribute("data-theme"));
+            if (pTheme === "light") isLight = true;
+            else if (pTheme === "dark") isLight = false;
+          } catch (e) {}
+          document.body.classList.toggle("light", isLight);
+        }
+
+        const args = event.data.args || {};
+        currentOptions = args.options || [];
+        isMulti = args.multi !== undefined ? args.multi : true;
+
+        if (args.default && selectedSet.size === 0) {
+          const defaults = Array.isArray(args.default) ? args.default : [args.default];
+          defaults.forEach(d => selectedSet.add(d));
+        }
+
+        renderChips();
+      }
+    });
+
+    // Announce readiness to Streamlit host
+    sendToStreamlit("streamlit:componentReady", { apiVersion: 1 });
+  </script>
+</body>
+</html>

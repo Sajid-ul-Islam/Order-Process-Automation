@@ -1,4 +1,4 @@
-"""Operational metrics rendering: KPI cards, deltas, status breakdown, and goal tracking."""
+"""Operational metrics rendering: KPI cards, deltas, and status breakdown."""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ def render_operational_metrics(
     m_gross_bv = (m_gross_rev / m_ord) if m_ord > 0 else 0.0
     m_net_bv = (m_net_rev / m_ord) if m_ord > 0 else 0.0
     m_cb_per_basket = (m_cashback_disc / m_ord) if m_ord > 0 else 0.0
-    m_bv = m_net_bv
+    m_bv = m_gross_bv
 
     dq_str, dr_str, do_str, db_str = None, None, None, None
     pct_q, pct_r, pct_o, pct_b = None, None, None, None
@@ -118,25 +118,59 @@ def render_operational_metrics(
             else co_item_r
         )
         co_net_r = max(0.0, co_gross - co_cb)
-        co_b = (co_net_r / co_o) if co_o > 0 else 0.0
+        co_b = (co_gross / co_o) if co_o > 0 else 0.0
 
-        prefix = "Today " if nav_mode == "Prev" else ""
-        suffix = "" if nav_mode == "Prev" else " vs Prev"
-
-        dq = m_qty - co_q
-        dr = m_net_rev - co_net_r
-        d_o = m_ord - co_o
-        db = m_net_bv - co_b
-        if nav_mode == "Prev":
+        dashboard_view = st.session_state.get("live_dashboard_view")
+        if dashboard_view in {"Last Day Shipped", "Last Day"}:
+            prefix = ""
+            suffix = " vs Prior"
+            dq = m_qty - co_q
+            dr = m_gross_rev - co_gross
+            d_o = m_ord - co_o
+            db = m_gross_bv - co_b
+            cmp_label = "Day Prior"
+        elif nav_mode == "Prev":
+            prefix = "Today "
+            suffix = ""
             dq = co_q - m_qty
-            dr = co_net_r - m_net_rev
+            dr = co_gross - m_gross_rev
             d_o = co_o - m_ord
-            db = co_b - m_net_bv
+            db = co_b - m_gross_bv
+            cmp_label = "Today"
+        else:
+            from src.config.constants import bd_today
+            from src.processing.data_processing import get_previous_working_day
 
-        pct_q = ((dq / co_q) * 100) if co_q > 0 else (100.0 if dq > 0 else 0.0 if dq == 0 else -100.0)
-        pct_r = ((dr / co_net_r) * 100) if co_net_r > 0 else (100.0 if dr > 0 else 0.0 if dr == 0 else -100.0)
-        pct_o = ((d_o / co_o) * 100) if co_o > 0 else (100.0 if d_o > 0 else 0.0 if d_o == 0 else -100.0)
-        pct_b = ((db / co_b) * 100) if co_b > 0 else (100.0 if db > 0 else 0.0 if db == 0 else -100.0)
+            prev_w_day = get_previous_working_day(bd_today())
+            prev_abbr = prev_w_day.strftime("%a")
+            prefix = ""
+            suffix = f" vs {prev_abbr}"
+            dq = m_qty - co_q
+            dr = m_gross_rev - co_gross
+            d_o = m_ord - co_o
+            db = m_gross_bv - co_b
+            cmp_label = prev_w_day.strftime("%A")
+
+        pct_q = (
+            ((dq / co_q) * 100)
+            if co_q > 0
+            else (100.0 if dq > 0 else 0.0 if dq == 0 else -100.0)
+        )
+        pct_r = (
+            ((dr / co_gross) * 100)
+            if co_gross > 0
+            else (100.0 if dr > 0 else 0.0 if dr == 0 else -100.0)
+        )
+        pct_o = (
+            ((d_o / co_o) * 100)
+            if co_o > 0
+            else (100.0 if d_o > 0 else 0.0 if d_o == 0 else -100.0)
+        )
+        pct_b = (
+            ((db / co_b) * 100)
+            if co_b > 0
+            else (100.0 if db > 0 else 0.0 if db == 0 else -100.0)
+        )
 
         dq_str = f"{prefix}{dq:+,.0f}{suffix}"
         dr_str = f"{prefix}{'+' if dr >= 0 else '-'}TK {abs(dr):,.0f}{suffix}"
@@ -144,7 +178,7 @@ def render_operational_metrics(
         db_str = f"{prefix}{'+' if db >= 0 else '-'}TK {abs(db):,.0f}{suffix}"
 
         prev_q_str = f"{co_q:,.0f}"
-        prev_r_str = f"TK {co_net_r:,.0f}"
+        prev_r_str = f"TK {co_gross:,.0f}"
         prev_o_str = f"{co_o:,.0f}"
         prev_b_str = f"TK {int(co_b):,}"
 
@@ -167,9 +201,9 @@ def render_operational_metrics(
         return f'<div class="metric-delta {cls}">{arrow} {delta_str}{pct_snippet}{prev_snippet}</div>'
 
     v_qty = f"{m_qty:,.0f}"
-    v_rev = f"TK {m_net_rev:,.0f}"
+    v_rev = f"TK {m_gross_rev:,.0f}"
     v_ord = f"{m_ord:,.0f}"
-    v_bv = f"TK {int(m_net_bv):,}"
+    v_bv = f"TK {int(m_gross_bv):,}"
 
     html_dq = format_delta(dq_str, prev_val_str=prev_q_str, pct_val=pct_q)
     html_dr = format_delta(dr_str, prev_val_str=prev_r_str, pct_val=pct_r)
@@ -179,21 +213,22 @@ def render_operational_metrics(
     # ── "Last Day" Comparison Badges ─────────────────────────────────────
     # Prominent badges showing the previous period's absolute values,
     # placed between the main value and the delta on each KPI card.
-    def _last_day_badge(prev_str, color="#64748b"):
+    def _last_day_badge(prev_str, label="Last Day", color="#64748b"):
         if not prev_str:
             return ""
         return (
             f'<div style="font-size:0.68rem;font-weight:600;color:{color};'
-            f'background:rgba(100,116,139,0.08);padding:2px 7px;'
-            f'border-radius:4px;margin-top:5px;display:inline-block;'
+            f"background:rgba(100,116,139,0.08);padding:2px 7px;"
+            f"border-radius:4px;margin-top:5px;display:inline-block;"
             f'letter-spacing:0.02em;">'
-            f'📅 Last Day: {prev_str}</div>'
+            f"📅 {label}: {prev_str}</div>"
         )
 
-    badge_qty = _last_day_badge(prev_q_str)
-    badge_rev = _last_day_badge(prev_r_str)
-    badge_ord = _last_day_badge(prev_o_str)
-    badge_bv = _last_day_badge(prev_b_str)
+    cmp_badge_label = cmp_label if "cmp_label" in locals() else "Last Day"
+    badge_qty = _last_day_badge(prev_q_str, label=cmp_badge_label)
+    badge_rev = _last_day_badge(prev_r_str, label=cmp_badge_label)
+    badge_ord = _last_day_badge(prev_o_str, label=cmp_badge_label)
+    badge_bv = _last_day_badge(prev_b_str, label=cmp_badge_label)
 
     extra_metric_label = "Basket Size"
     extra_metric_value = v_bv
@@ -275,10 +310,10 @@ def render_operational_metrics(
                     src_df.columns[0],
                 )
 
-            if "Total Amount" in src_df.columns:
-                src_df["_rev"] = src_df["Total Amount"]
-            elif "Gross Amount" in src_df.columns:
+            if "Gross Amount" in src_df.columns:
                 src_df["_rev"] = src_df["Gross Amount"]
+            elif "Total Amount" in src_df.columns:
+                src_df["_rev"] = src_df["Total Amount"]
             else:
                 src_df["_rev"] = src_df["Quantity"] * src_df["Item Cost"]
 
@@ -520,20 +555,37 @@ def render_operational_metrics(
         _total_ord = max(1, int(m_ord))
     m_cb_orders_pct = (_cb_ord_cnt / _total_ord * 100) if _cb_ord_cnt > 0 else 0.0
 
-    order_view_mode = (
-        st.session_state.get("live_order_filter", "All Orders")
-        if nav_mode == "Today"
-        else "All Orders"
-    )
+    order_view_mode = st.session_state.get("live_order_filter", "Shipped")
+    dashboard_view = st.session_state.get("live_dashboard_view")
 
-    if nav_mode == "Backlog":
+    if dashboard_view == "Queue":
+        l1 = "Queue Items"
+        l2 = "Pipeline Value"
+        l3 = "Queue Orders"
+        icon_l3 = "📥"
+    elif dashboard_view in {"Today Shipped", "Today"}:
+        l1 = "Shipped Items · Today"
+        l2 = "Sales Revenue · Today"
+        l3 = "Shipped Orders · Today"
+        icon_l3 = "🚚"
+    elif dashboard_view in {"Last Day Shipped", "Last Day"}:
+        l1 = "Shipped Items · Last Day"
+        l2 = "Sales Revenue · Last Day"
+        l3 = "Shipped Orders · Last Day"
+        icon_l3 = "🕘"
+    elif dashboard_view == "All Orders":
+        l1 = "Total Items"
+        l2 = "Total Order Value"
+        l3 = "All Orders"
+        icon_l3 = "📋"
+    elif nav_mode == "Backlog":
         l1 = "Backlog Items"
         l2 = "Backlog Rev"
         l3 = "Backlog Orders"
         icon_l3 = "🛒"
     elif order_view_mode == "Shipped":
         l1 = "Shipped Items"
-        l2 = "Shipped Net Revenue"
+        l2 = "Shipped Revenue"
         l3 = "Shipped Orders"
         icon_l3 = "🚚"
     elif order_view_mode == "Processing":
@@ -543,7 +595,7 @@ def render_operational_metrics(
         icon_l3 = "⚙️"
     else:
         l1 = "Gross Items"
-        l2 = "Net Realized Revenue"
+        l2 = "Gross Revenue"
         l3 = "Orders"
         icon_l3 = "🛒"
 
@@ -553,24 +605,7 @@ def render_operational_metrics(
         '<div class="metric-icon">📦</div></div>'
     )
 
-    # Override Basket Size card value with net basket value
-    if extra_metric_label == "Basket Size" and m_cashback_disc > 0:
-        extra_metric_value = f"TK {int(m_net_bv):,}"
-
-    # Dynamic Campaign Intelligence (Auto-Detect Flat Sale vs Cashback vs Coupon from WooCommerce REST API)
-    from src.processing.data_processing import detect_active_campaign
-
-    camp_info = detect_active_campaign(m_df)
-    if camp_info["is_active"]:
-        cb_badge = (
-            f'<div style="font-size:0.72rem;color:#f59e0b;font-weight:600;'
-            f"background:rgba(245,158,11,0.10);padding:3px 8px;border-radius:4px;"
-            f'margin-top:4px;display:inline-block;">'
-            f'Gross ৳{int(m_gross_rev):,} · {camp_info["campaign_name"]} −৳{int(camp_info["total_discount"]):,} '
-            f'({camp_info["affected_orders_pct"]:.0f}% of orders)</div>'
-        )
-    else:
-        cb_badge = ""
+    cb_badge = ""
     cb_basket_badge = ""
     cb_orders_badge = ""
 
@@ -634,62 +669,96 @@ def render_operational_metrics(
         "</div>"
     )
 
-    st.markdown(card_html, unsafe_allow_html=True)
+    rendered_react = False
+    from src.components.react_kpi import is_react_kpi_available, render_react_kpi_toolbar
 
-    # ── Feature #3: Goal Threshold Alerts ──────────────────────────────────────
-    goals = st.session_state.get("shift_goals", {})
-    rev_goal = goals.get("revenue", 0)
-    ord_goal = goals.get("orders", 0)
+    if is_react_kpi_available() and st.session_state.get("use_react_kpi", True):
+        try:
+            from src.components.dashboard.live_components import (
+                _get_live_combined_source,
+                apply_dashboard_view_selection,
+            )
+            from src.processing.data_processing import compute_live_filter_counts
 
-    if rev_goal > 0 or ord_goal > 0:
-        st.markdown("###### 🎯 Shift Goal Progress")
-        g1, g2 = st.columns(2)
-        with g1:
-            if rev_goal > 0:
-                pct = min(m_net_rev / rev_goal, 1.0)
-                color = (
-                    "#10b981" if pct >= 1.0 else "#f59e0b" if pct >= 0.7 else "#ef4444"
-                )
-                label = (
-                    "✅ Goal Reached!"
-                    if pct >= 1.0
-                    else f"৳{m_net_rev:,.0f} / ৳{rev_goal:,.0f}"
-                )
-                st.markdown(
-                    f'<div style="margin-bottom:8px;">'
-                    f'<span style="font-size:0.72rem;font-weight:700;color:{color};letter-spacing:0.05em;">'
-                    f"💰 REVENUE — {label}</span>"
-                    f'<div style="background:rgba(255,255,255,0.08);border-radius:6px;height:8px;margin-top:4px;overflow:hidden;">'
-                    f'<div style="background:{color};width:{pct * 100:.1f}%;height:100%;border-radius:6px;'
-                    f'transition:width 0.6s ease;"></div></div></div>',
-                    unsafe_allow_html=True,
-                )
-        with g2:
-            if ord_goal > 0:
-                pct_o = min(m_ord / ord_goal, 1.0)
-                color_o = (
-                    "#10b981"
-                    if pct_o >= 1.0
-                    else "#f59e0b" if pct_o >= 0.7 else "#ef4444"
-                )
-                label_o = (
-                    "✅ Goal Reached!"
-                    if pct_o >= 1.0
-                    else f"{m_ord} / {ord_goal} orders"
-                )
-                st.markdown(
-                    f'<div style="margin-bottom:8px;">'
-                    f'<span style="font-size:0.72rem;font-weight:700;color:{color_o};letter-spacing:0.05em;">'
-                    f"🛒 ORDERS — {label_o}</span>"
-                    f'<div style="background:rgba(255,255,255,0.08);border-radius:6px;height:8px;margin-top:4px;overflow:hidden;">'
-                    f'<div style="background:{color_o};width:{pct_o * 100:.1f}%;height:100%;border-radius:6px;'
-                    f'transition:width 0.6s ease;"></div></div></div>',
-                    unsafe_allow_html=True,
-                )
+            views = ["All Orders", "Today Shipped", "Last Day Shipped", "Queue"]
+            source_df = _get_live_combined_source()
+            view_counts = compute_live_filter_counts(source_df)
+            sync_time = st.session_state.get("live_sync_time")
+
+            def _clean_delta(pct_val, delta_str):
+                if pct_val is not None:
+                    return {
+                        "value": delta_str or "",
+                        "pct": round(float(pct_val), 1),
+                        "positive": pct_val >= 0,
+                        "text": f"{pct_val:+.1f}% vs prev",
+                    }
+                if delta_str:
+                    return {
+                        "value": delta_str,
+                        "positive": not str(delta_str).startswith("-"),
+                        "text": f"{delta_str} vs prev",
+                    }
+                return None
+
+            react_metrics = {
+                "revenue": {
+                    "label": l2,
+                    "value": f"{int(m_gross_rev):,}",
+                    "prefix": "৳",
+                    "delta": _clean_delta(pct_r, dr_str),
+                    "sparkline": [float(x) for x in t_rev_vals] if t_rev_vals else None,
+                },
+                "orders": {
+                    "label": l3,
+                    "value": f"{int(m_ord):,}",
+                    "delta": _clean_delta(pct_o, do_str),
+                    "sparkline": [float(x) for x in t_ord_vals] if t_ord_vals else None,
+                },
+                "units": {
+                    "label": l1,
+                    "value": f"{int(m_qty):,}",
+                    "subtext": "Units fulfilled",
+                    "sparkline": [float(x) for x in t_qty_vals] if t_qty_vals else None,
+                },
+                "aov": {
+                    "label": extra_metric_label,
+                    "value": f"{int(m_bv):,}",
+                    "prefix": "৳",
+                    "delta": _clean_delta(pct_b, db_str),
+                    "sparkline": [float(x) for x in t_bv_vals] if t_bv_vals else None,
+                },
+            }
+
+            customer_mix_data = {
+                "newCount": int(m_new_cnt),
+                "returningCount": int(m_ret_cnt),
+                "returningRatio": float(round(pct_ret, 1)),
+            }
+
+            selected_new = render_react_kpi_toolbar(
+                views=views,
+                selected_view=dashboard_view or "All Orders",
+                view_counts=view_counts,
+                metrics=react_metrics,
+                customer_mix=customer_mix_data,
+                sync_time=sync_time,
+            )
+
+            if selected_new and selected_new != dashboard_view and selected_new in views:
+                apply_dashboard_view_selection(selected_new)
+                st.rerun()
+
+            rendered_react = True
+        except Exception:
+            rendered_react = False
+
+    if not rendered_react:
+        st.markdown(card_html, unsafe_allow_html=True)
 
     # ── Feature #5: Auto-Save Shift Snapshot ───────────────────────────────────
     # Only save once per render cycle, silently — keyed by data fingerprint
-    snap_key = f"{m_net_rev:.0f}_{m_ord}_{m_qty}"
+    snap_key = f"{m_gross_rev:.0f}_{m_ord}_{m_qty}"
     if st.session_state.get("_last_snap_key") != snap_key and m_ord > 0:
         top_list = []
         if top is not None and not top.empty:
@@ -709,7 +778,7 @@ def render_operational_metrics(
                     }
                 )
         save_shift_snapshot(
-            revenue=float(m_net_rev),
+            revenue=float(m_gross_rev),
             orders=int(m_ord),
             qty=int(m_qty),
             aov=float(m_bv),
@@ -734,425 +803,3 @@ def render_operational_metrics(
     }
 
     return drill, summ, top, basket, active_df
-
-
-EXCLUDED_STATUSES = [
-    "pending",
-    "pending payment",
-    "cancelled",
-    "failed",
-    "refunded",
-    "trash",
-]
-
-
-def render_revenue_cashback_comparison_section(
-    m_df: pd.DataFrame, raw_df: pd.DataFrame | None = None
-) -> None:
-    """Render a dedicated metric & breakdown section comparing Total Revenue & Basket Size with Cashback / Discounted Fee.
-
-    Args:
-        m_df:   The analytics-ready (filtered) DataFrame.
-        raw_df: The raw pre-filter DataFrame (before excluded statuses are dropped).
-                When provided, excluded order counts and revenue are shown in the comparison.
-    """
-    if m_df is None or m_df.empty:
-        st.info("No active order data for cashback/fee comparison.")
-        return
-
-    # Source of truth: reuse the Hero Metrics published by render_operational_metrics
-    # so this analysis can never diverge from the KPI cards. Fall back to the granular
-    # DataFrame ONLY if the hero metrics are not yet available (e.g. standalone call).
-    hero = st.session_state.get("hero_metrics", {}) or {}
-
-    if {"gross_rev", "cashback_disc", "net_rev", "orders"} <= set(hero.keys()):
-        gross_rev = float(hero["gross_rev"])
-        total_cashback = float(hero["cashback_disc"])
-        net_rev = float(hero["net_rev"])
-        tot_orders = int(hero["orders"])
-    else:
-        gross_rev = (
-            float(m_df["Gross Amount"].sum())
-            if "Gross Amount" in m_df.columns
-            else float((m_df["Quantity"] * m_df["Item Cost"]).sum())
-        )
-        total_cashback = (
-            float(m_df["Cashback Discount"].sum())
-            if "Cashback Discount" in m_df.columns
-            else 0.0
-        )
-        net_rev = (
-            float(m_df["Total Amount"].sum())
-            if "Total Amount" in m_df.columns
-            else (gross_rev - total_cashback)
-        )
-        id_col = (
-            "Order ID"
-            if "Order ID" in m_df.columns
-            else "Order Number" if "Order Number" in m_df.columns else None
-        )
-        tot_orders = len(m_df.drop_duplicates(subset=[id_col])) if id_col else len(m_df)
-
-    pct_rev_lost = (total_cashback / gross_rev * 100) if gross_rev > 0 else 0.0
-
-    # Basket level metrics (per-order values, consistent with KPI "Basket Size")
-    net_basket = (net_rev / tot_orders) if tot_orders > 0 else 0.0
-    cb_per_basket = (total_cashback / tot_orders) if tot_orders > 0 else 0.0
-
-    # Per-order cashback distribution (used by tier/filler/cashback-orders logic below).
-    # Independent of the hero-metrics branch above — always derived from the granular frame.
-    cb_orders_mask = (
-        (m_df["Cashback Discount"] > 0)
-        if "Cashback Discount" in m_df.columns
-        else pd.Series(False, index=m_df.index)
-    )
-    id_col = (
-        "Order ID"
-        if "Order ID" in m_df.columns
-        else "Order Number" if "Order Number" in m_df.columns else None
-    )
-    if id_col:
-        unique_df = m_df.drop_duplicates(subset=[id_col])
-        cb_orders_cnt = (
-            unique_df[unique_df[id_col].isin(m_df[cb_orders_mask][id_col])][
-                id_col
-            ].nunique()
-            if cb_orders_mask.any()
-            else 0
-        )
-    else:
-        cb_orders_cnt = int(cb_orders_mask.sum())
-
-    # ── Excluded Orders (raw_df-based) ───────────────────────────────────────
-    excl_orders_cnt = 0
-    excl_gross_rev = 0.0
-    excl_statuses_found: list[str] = []
-    if raw_df is not None and not raw_df.empty:
-        raw_status_col = (
-            "Order Status"
-            if "Order Status" in raw_df.columns
-            else "Status" if "Status" in raw_df.columns else None
-        )
-        if raw_status_col:
-            excl_mask = (
-                raw_df[raw_status_col].astype(str).str.lower().isin(EXCLUDED_STATUSES)
-            )
-            excl_df = raw_df[excl_mask]
-            raw_id_col = (
-                "Order ID"
-                if "Order ID" in excl_df.columns
-                else "Order Number" if "Order Number" in excl_df.columns else None
-            )
-            if raw_id_col:
-                excl_orders_cnt = excl_df[raw_id_col].nunique()
-            else:
-                excl_orders_cnt = len(excl_df)
-            # Gross revenue of excluded rows (use Gross Amount if available, else Item Cost * Quantity)
-            if "Gross Amount" in excl_df.columns:
-                excl_gross_rev = float(excl_df["Gross Amount"].sum())
-            elif "Item Cost" in excl_df.columns and "Quantity" in excl_df.columns:
-                excl_gross_rev = float(
-                    (excl_df["Item Cost"] * excl_df["Quantity"]).sum()
-                )
-            elif "Total Amount" in excl_df.columns:
-                excl_gross_rev = float(excl_df["Total Amount"].sum())
-            excl_statuses_found = sorted(
-                excl_df[raw_status_col].astype(str).str.lower().unique().tolist()
-            )
-
-    from src.processing.data_processing import detect_active_campaign
-
-    camp_info = detect_active_campaign(m_df)
-    camp_title = (
-        camp_info["campaign_name"]
-        if camp_info["is_active"]
-        else "Campaign & Discount"
-    )
-
-    st.markdown(f"### ⚖️ Revenue & Basket Size {camp_title} Impact Analysis")
-    if camp_info["is_active"]:
-        st.info(
-            f"💡 **Revenue Equation:** Gross Revenue (**TK {gross_rev:,.0f}**) - {camp_title} (**TK {total_cashback:,.0f}**) = **Actual Net Realized Revenue (TK {net_rev:,.0f})**"
-        )
-    else:
-        st.info(
-            f"💡 **Revenue Equation:** Net Realized Revenue (**TK {net_rev:,.0f}**) — Zero active campaign discounts detected."
-        )
-
-    # Show excluded orders banner when raw data is provided
-    if excl_orders_cnt > 0:
-        status_label = ", ".join(f"`{s}`" for s in excl_statuses_found)
-        st.warning(
-            f"🚫 **Excluded from Analytics:** **{excl_orders_cnt:,} order(s)** · "
-            f"Gross Value: **TK {excl_gross_rev:,.0f}** · "
-            f"Status: {status_label} — these are intentionally excluded from revenue figures above."
-        )
-
-    # Compact summary: the revenue equation box above already carries
-    # gross/cashback/net and the hero KPIs carry basket values
-    c1, c2 = st.columns(2)
-    with c1:
-        st.metric(
-            "🛍️ Net Basket Value",
-            f"TK {net_basket:,.0f}",
-            delta=f"-TK {cb_per_basket:,.0f} discount/order"
-            if total_cashback > 0
-            else None,
-            delta_color="inverse",
-        )
-    with c2:
-        st.metric(
-            f"📉 Revenue Given in {camp_title}",
-            f"{pct_rev_lost:.1f}%",
-            delta=f"-TK {total_cashback:,.0f}" if total_cashback > 0 else None,
-            delta_color="inverse",
-        )
-
-    # ── Category Repetition & Cashback Tier Metrics ───────────────────────────
-    HIGH_VAL_CODES = {"101", "106", "108", "110"}
-    MID_VAL_CODES = {"102"}
-    LOW_VAL_CODES = {"105", "107", "109", "TB"}
-
-    def _classify_row_cat(r):
-        s = str(r.get("SKU", ""))
-        code = s.split("-")[0] if "-" in s else ""
-        if code in HIGH_VAL_CODES:
-            return "High"
-        if code in MID_VAL_CODES:
-            return "Mid"
-        if code in LOW_VAL_CODES:
-            return "Low"
-        comb = f"{str(r.get('Item Name', ''))} {str(r.get('Category', ''))}".lower()
-        if any(
-            kw in comb for kw in ["jeans", "panjabi", "sweatshirt", "trouser", "cargo"]
-        ):
-            return "High"
-        if "shirt" in comb and "t-shirt" not in comb:
-            return "Mid"
-        return "Low"
-
-    cnt_500_tier = 0
-    cnt_700_tier = 0
-    high_rep_cnt = 0
-    mid_rep_cnt = 0
-    low_rep_cnt = 0
-    filler_orders_cnt = 0
-    filler_dict = defaultdict(lambda: {"count": 0, "costs": [], "cat_type": ""})
-
-    if id_col and cb_orders_cnt > 0:
-        cb_df_all = m_df[cb_orders_mask] if cb_orders_mask.any() else m_df.copy()
-        for _, grp in cb_df_all.groupby(id_col):
-            # Order-level cashback: sum across the order's line items (the store
-            # applies cashback as an order-level fee, split per line item by the
-            # flattener). Using iloc[0] would only see one item's split and
-            # undercount multi-item cashback orders.
-            order_cb_amt = 0.0
-            if "Cashback Discount" in grp.columns:
-                order_cb_amt = float(grp["Cashback Discount"].sum())
-            if (
-                order_cb_amt == 0
-                and "Gross Amount" in grp.columns
-                and "Total Amount" in grp.columns
-            ):
-                order_cb_amt = float(
-                    grp["Gross Amount"].sum() - grp["Total Amount"].sum()
-                )
-
-            gross_sum = (
-                float(grp["Gross Amount"].sum())
-                if "Gross Amount" in grp.columns
-                else 0.0
-            )
-            if 400 <= order_cb_amt < 650 or (
-                order_cb_amt == 0
-                and "Gross Amount" in grp.columns
-                and 2300 <= gross_sum < 2900
-            ):
-                cnt_500_tier += 1
-            elif order_cb_amt >= 650 or (
-                order_cb_amt == 0
-                and "Gross Amount" in grp.columns
-                and gross_sum >= 2900
-            ):
-                cnt_700_tier += 1
-
-            cat_counts = {"High": 0, "Mid": 0, "Low": 0}
-            grp_items = []
-            for _, row in grp.iterrows():
-                c_type = _classify_row_cat(row)
-                q = int(row.get("Quantity", 1)) if pd.notna(row.get("Quantity")) else 1
-                c_cost = (
-                    float(row.get("Item Cost", 0))
-                    if pd.notna(row.get("Item Cost"))
-                    else 0.0
-                )
-                p_name = str(row.get("Item Name", row.get("Clean_Product", "")))
-                cat_counts[c_type] += q
-                grp_items.append(
-                    {"name": p_name, "cost": c_cost, "qty": q, "cat_type": c_type}
-                )
-
-            if cat_counts["High"] > 1:
-                high_rep_cnt += 1
-            if cat_counts["Mid"] > 1:
-                mid_rep_cnt += 1
-            if cat_counts["Low"] > 1:
-                low_rep_cnt += 1
-
-            # Detect Filler Item
-            tot_grp_cost = sum(it["cost"] * it["qty"] for it in grp_items)
-            threshold_val = 2500 if order_cb_amt < 650 else 3000
-            sorted_grp = sorted(grp_items, key=lambda x: x["cost"])
-            cheapest_it = sorted_grp[0] if sorted_grp else None
-            rest_grp_cost = (
-                tot_grp_cost - (cheapest_it["cost"] * cheapest_it["qty"])
-                if cheapest_it
-                else 0
-            )
-
-            if (
-                cheapest_it
-                and rest_grp_cost < threshold_val
-                and tot_grp_cost >= threshold_val
-            ):
-                filler_orders_cnt += 1
-                base_name = cheapest_it["name"].split(" - ")[0]
-                filler_dict[base_name]["count"] += 1
-                filler_dict[base_name]["costs"].append(cheapest_it["cost"])
-                filler_dict[base_name]["cat_type"] = cheapest_it["cat_type"]
-
-    pct_500 = (cnt_500_tier / cb_orders_cnt * 100) if cb_orders_cnt > 0 else 0.0
-    pct_700 = (cnt_700_tier / cb_orders_cnt * 100) if cb_orders_cnt > 0 else 0.0
-    pct_high_rep = (high_rep_cnt / cb_orders_cnt * 100) if cb_orders_cnt > 0 else 0.0
-    pct_mid_rep = (mid_rep_cnt / cb_orders_cnt * 100) if cb_orders_cnt > 0 else 0.0
-    pct_low_rep = (low_rep_cnt / cb_orders_cnt * 100) if cb_orders_cnt > 0 else 0.0
-
-    st.markdown("##### 🎯 Cashback Tier & Category Repetition Breakdown")
-    t1, t2, t3, t4, t5 = st.columns(5)
-    with t1:
-        st.metric(
-            "💰 500 Cashback Tier",
-            f"{cnt_500_tier} orders",
-            delta=f"{pct_500:.1f}% of cashback orders",
-        )
-    with t2:
-        st.metric(
-            "💜 700 Cashback Tier",
-            f"{cnt_700_tier} orders",
-            delta=f"{pct_700:.1f}% of cashback orders",
-        )
-    with t3:
-        st.metric(
-            "👖 High Value Repeat %",
-            f"{pct_high_rep:.1f}%",
-            delta=f"{high_rep_cnt} orders (Jeans/Panjabi)",
-        )
-    with t4:
-        st.metric(
-            "👔 Mid Value Repeat %",
-            f"{pct_mid_rep:.1f}%",
-            delta=f"{mid_rep_cnt} orders (Shirts)",
-        )
-    with t5:
-        st.metric(
-            "👕 Low Value Repeat %",
-            f"{pct_low_rep:.1f}%",
-            delta=f"{low_rep_cnt} orders (T-Shirts/Acc)",
-        )
-
-    # Top Filler Products Breakdown Table
-    if filler_dict and cb_orders_cnt > 0:
-        pct_filler_total = (
-            (filler_orders_cnt / cb_orders_cnt * 100) if cb_orders_cnt > 0 else 0
-        )
-        st.markdown(
-            f"##### 🛒 Top Filler Products Added to Avail Cashback Threshold "
-            f"(found in **{filler_orders_cnt}** orders · **{pct_filler_total:.1f}%** of cashback orders)"
-        )
-        filler_rows = []
-        for fname, fdata in sorted(filler_dict.items(), key=lambda x: -x[1]["count"]):
-            cnt = fdata["count"]
-            pct_f = (cnt / cb_orders_cnt) * 100
-            avg_cost = (
-                sum(fdata["costs"]) / len(fdata["costs"]) if fdata["costs"] else 0
-            )
-            filler_rows.append(
-                {
-                    "Product Base Name": fname,
-                    "Category Value": fdata["cat_type"],
-                    "Filler Orders Count": cnt,
-                    "% of Cashback Orders": f"{pct_f:.1f}%",
-                    "Avg Unit Price": f"TK {avg_cost:,.0f}",
-                }
-            )
-        filler_df = pd.DataFrame(filler_rows)
-        st.dataframe(filler_df.head(15), use_container_width=True, hide_index=True)
-
-    from src.components.dashboard.dashboard_charts import (
-        render_revenue_cashback_comparison_chart,
-    )
-
-    render_revenue_cashback_comparison_chart(m_df)
-
-    # Show filtered Cashback / Discount Orders Table
-    if cb_orders_cnt > 0:
-        with st.expander(
-            f"📋 View Orders with Cashback / Discount Applied ({cb_orders_cnt} orders)",
-            expanded=False,
-        ):
-            cb_df = m_df[cb_orders_mask].copy() if cb_orders_mask.any() else m_df.copy()
-            show_cols = [
-                c
-                for c in [
-                    "Order ID",
-                    "Order Status",
-                    "Item Name",
-                    "SKU",
-                    "Subtotal Cost",
-                    "Item Cost",
-                    "Cashback Discount",
-                    "Gross Amount",
-                    "Total Amount",
-                    "Coupons",
-                ]
-                if c in cb_df.columns
-            ]
-            st.dataframe(cb_df[show_cols].head(100), use_container_width=True)
-
-    # Show excluded orders detail table
-    if excl_orders_cnt > 0 and raw_df is not None and not raw_df.empty:
-        raw_status_col = (
-            "Order Status"
-            if "Order Status" in raw_df.columns
-            else "Status" if "Status" in raw_df.columns else None
-        )
-        if raw_status_col:
-            excl_mask = (
-                raw_df[raw_status_col].astype(str).str.lower().isin(EXCLUDED_STATUSES)
-            )
-            excl_detail_df = raw_df[excl_mask].copy()
-            with st.expander(
-                f"🚫 View Excluded Orders ({excl_orders_cnt} orders · TK {excl_gross_rev:,.0f} gross)",
-                expanded=False,
-            ):
-                show_excl_cols = [
-                    c
-                    for c in [
-                        "Order ID",
-                        "Order Status",
-                        "Item Name",
-                        "SKU",
-                        "Item Cost",
-                        "Quantity",
-                        "Gross Amount",
-                        "Total Amount",
-                        "Cashback Discount",
-                    ]
-                    if c in excl_detail_df.columns
-                ]
-                st.caption(
-                    "These orders are excluded from all analytics due to their status (pending, cancelled, failed, refunded, etc.)"
-                )
-                st.dataframe(
-                    excl_detail_df[show_excl_cols].head(200), use_container_width=True
-                )

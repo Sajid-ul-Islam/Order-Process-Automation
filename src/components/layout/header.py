@@ -72,7 +72,7 @@ def render_app_banner():
         try:
             with open(banner_path, "rb") as f:
                 b64 = base64.b64encode(f.read()).decode()
-                img_html = f'<img src="data:image/png;base64,{b64}" class="app-banner-img" style="width: 100%; height: 100%; object-fit: cover; object-position: center 38%; position: absolute; top: 0; left: 0; z-index: 1; opacity: 0.55; filter: saturate(1.3) brightness(0.85);">'
+                img_html = f'<img src="data:image/png;base64,{b64}" class="app-banner-img" style="width: 100%; height: 100%; object-fit: cover; object-position: center center; position: absolute; top: 0; left: 0; z-index: 1; opacity: 0.85; filter: saturate(1.4) brightness(1.05);">'
         except Exception:
             pass
 
@@ -80,7 +80,7 @@ def render_app_banner():
         f"""
 <div class="app-banner-wrapper" style="position: relative; width: 100%; height: 170px; border-radius: 18px; overflow: hidden; background: linear-gradient(135deg, rgba(8,15,30,0.97) 0%, rgba(15,25,50,0.93) 50%, rgba(10,20,40,0.97) 100%); border: 1px solid {p_35}; box-shadow: 0 20px 48px -12px rgba(0,0,0,0.7), 0 4px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08); margin-bottom: 16px;">
 {img_html}
-<div style="position: absolute; inset: 0; z-index: 2; background: linear-gradient(90deg, rgba(8,15,30,0.85) 0%, rgba(8,15,30,0.40) 50%, rgba(8,15,30,0.80) 100%);"></div>
+<div style="position: absolute; inset: 0; z-index: 2; background: linear-gradient(90deg, rgba(8,15,30,0.78) 0%, rgba(8,15,30,0.25) 50%, rgba(8,15,30,0.78) 100%);"></div>
 <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, {p_color}, {s_color}, {p_color}); z-index: 6;"></div>
 <div style="position: absolute; top: 0; left: 0; width: 25%; height: 100%; z-index: 4; background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%); animation: banner-shimmer 4s ease-in-out infinite; pointer-events: none;"></div>
 {holiday_banner_html}

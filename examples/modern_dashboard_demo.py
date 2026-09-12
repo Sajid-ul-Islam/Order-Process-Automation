@@ -4,7 +4,7 @@ This demonstrates how to use the render_modern_kpi_cards function
 in a Streamlit application following the five design principles:
 
 1. Flat Accents, Not Gradients - Single accent color for meaning
-2. Make the Number the Hero - No colored tiles, data is visual focus  
+2. Make the Number the Hero - No colored tiles, data is visual focus
 3. Clear Hierarchy - Primary metric larger, secondary metrics smaller
 4. Refined Shadows/Corners - Hairline borders, 6px radii
 5. Meaningful Data - Explicit time periods, tabular nums, sparkline trends
@@ -19,7 +19,7 @@ from src.components.dashboard.modern_kpi import render_modern_kpi_cards
 def create_sample_data():
     """Create sample order data for demonstration."""
     dates = pd.date_range(end=pd.Timestamp.now(), periods=100, freq="h")
-    
+
     data = {
         "Order ID": [f"ORD-{i:05d}" for i in range(100)],
         "Order Date": dates,
@@ -31,17 +31,18 @@ def create_sample_data():
         "Total Amount": [90, 450, 405, 180, 540] * 20,
         "Customer Phone": [f"017{str(i).zfill(8)}" for i in range(100)],
     }
-    
+
     return pd.DataFrame(data)
 
 
 def main():
     st.set_page_config(layout="wide", page_title="Modern Dashboard Demo")
-    
+
     # Inject custom styles (includes the new KPI card styles)
     from src.components.ui.styles import inject_base_styles
+
     inject_base_styles()
-    
+
     st.title("📊 Modern KPI Dashboard")
     st.markdown("""
     This dashboard demonstrates **five key design principles** for human-centric data visualization:
@@ -52,13 +53,13 @@ def main():
     4. **Refined Shadows/Corners** - 6px border radius, hairline borders, shadows only on floating elements
     5. **Meaningful Data Displays** - Explicit time periods, tabular numbers, sparkline trends
     """)
-    
+
     st.header("Live Metrics")
-    
+
     # Create sample data
     m_df = create_sample_data()
     c_df = create_sample_data().head(50)  # Previous period comparison
-    
+
     # Dummy mappings for demo
     dummy_mapping = {}
     wc_raw_mapping = {
@@ -66,7 +67,7 @@ def main():
         "order_id": "Order ID",
         "status": "Order Status",
     }
-    
+
     # Render the modern KPI cards
     drill, summ, top, basket = render_modern_kpi_cards(
         m_df=m_df,
@@ -75,11 +76,11 @@ def main():
         dummy_mapping=dummy_mapping,
         wc_raw_mapping=wc_raw_mapping,
     )
-    
+
     st.header("Design Details")
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         st.subheader("✅ What We Avoided")
         st.markdown("""
@@ -90,7 +91,7 @@ def main():
         - ❌ Generic "Welcome back!" greetings
         - ❌ Shapeless numbers without context
         """)
-    
+
     with col2:
         st.subheader("✅ What We Implemented")
         st.markdown("""
@@ -101,11 +102,12 @@ def main():
         - ✅ Explicit time period labels
         - ✅ Sparklines showing 36-hour trends
         """)
-    
+
     st.divider()
-    
+
     st.subheader("🎨 CSS Classes Available")
-    st.code("""
+    st.code(
+        """
 /* Container */
 .kpi-container
 
@@ -125,7 +127,9 @@ def main():
 .kpi-delta-up          /* Green positive */
 .kpi-delta-down        /* Red negative */
 .kpi-delta-warning     /* Amber warning */
-""", language="css")
+""",
+        language="css",
+    )
 
 
 if __name__ == "__main__":

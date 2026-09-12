@@ -82,7 +82,9 @@ def render_bundle_inventory_intelligence(sales_df, stock_df):
     stock_col = (
         "Stock"
         if "Stock" in stock_df.columns
-        else "Quantity" if "Quantity" in stock_df.columns else None
+        else "Quantity"
+        if "Quantity" in stock_df.columns
+        else None
     )
     if not stock_col:
         return

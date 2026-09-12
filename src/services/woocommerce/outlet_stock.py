@@ -10,12 +10,14 @@ live via the WooCommerce REST API. Supports multiple storage patterns:
 4. Custom plugin tables exposed via REST (e.g., /wp-json/wc/v3/inventory)
 """
 
+from __future__ import annotations
+
 import json
 import re
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
-import streamlit as st
+from src.utils.streamlit_runtime import cache_data
 from requests.auth import HTTPBasicAuth
 
 from src.config.settings import get_woocommerce_config
@@ -75,7 +77,11 @@ def discover_outlet_meta_keys(sample_size: int = 50) -> Dict[str, List[str]]:
         res = request_with_backoff(
             "GET",
             endpoint,
-            params={"per_page": sample_size, "status": "any", "_fields": "id,meta_data"},
+            params={
+                "per_page": sample_size,
+                "status": "any",
+                "_fields": "id,meta_data",
+            },
             auth=auth,
             timeout=15,
         )
@@ -239,7 +245,10 @@ def fetch_outlet_stock_from_custom_endpoint(
             if isinstance(data[0], dict):
                 df = pd.DataFrame(data)
                 # Normalize column names
-                df.columns = [c.strip().title() if c.lower() != "sku" else "SKU" for c in df.columns]
+                df.columns = [
+                    c.strip().title() if c.lower() != "sku" else "SKU"
+                    for c in df.columns
+                ]
                 return df
 
         elif isinstance(data, dict):
@@ -324,7 +333,11 @@ def fetch_outlet_stock_from_attributes() -> Optional[pd.DataFrame]:
 
             for attr in attrs:
                 attr_name = attr.get("name", "").lower()
-                if "outlet" in attr_name or "warehouse" in attr_name or "stock" in attr_name:
+                if (
+                    "outlet" in attr_name
+                    or "warehouse" in attr_name
+                    or "stock" in attr_name
+                ):
                     for option in attr.get("options", []):
                         # Parse "Mirpur: 50" or "Wari - 20" or "Cumilla: 15 pcs"
                         match = re.match(
@@ -354,7 +367,7 @@ def fetch_outlet_stock_from_attributes() -> Optional[pd.DataFrame]:
         return None
 
 
-@st.cache_data(ttl=300, show_spinner="Fetching live outlet stock...")
+@cache_data(ttl=300, show_spinner="Fetching live outlet stock...")
 def fetch_live_outlet_stock() -> Optional[pd.DataFrame]:
     """
     Auto-detect and fetch outlet stock from WooCommerce.
@@ -384,19 +397,3 @@ def fetch_live_outlet_stock() -> Optional[pd.DataFrame]:
         return df
 
     return None
-
-
-def get_outlet_stock_summary(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Generate a summary of total stock per outlet from the outlet stock DataFrame.
-    """
-    if df is None or df.empty:
-        return pd.DataFrame()
-
-    outlet_cols = [c for c in df.columns if c not in ["SKU", "Product"]]
-    summary = {}
-
-    for col in outlet_cols:
-        summary[col] = df[col].sum()
-
-    return pd.DataFrame([summary])

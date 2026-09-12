@@ -68,12 +68,22 @@ def _phone_aliases(phone: str) -> list[str]:
     return out
 
 
+_REGISTRY_CACHE = None
+_REGISTRY_MTIME = 0
+
+
 def load_full_registry() -> dict:
+    global _REGISTRY_CACHE, _REGISTRY_MTIME
     if not os.path.exists(FULL_REGISTRY_PATH):
         return {}
     try:
+        mtime = os.path.getmtime(FULL_REGISTRY_PATH)
+        if _REGISTRY_CACHE is not None and mtime == _REGISTRY_MTIME:
+            return _REGISTRY_CACHE
         with open(FULL_REGISTRY_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+            _REGISTRY_CACHE = json.load(f)
+            _REGISTRY_MTIME = mtime
+            return _REGISTRY_CACHE
     except Exception:
         return {}
 
@@ -138,8 +148,10 @@ def update_full_registry_from_df(df: "pd.DataFrame | None") -> int:
             continue
         fs = o_dt.isoformat()
 
-        name = _norm_name(str(row.get(name_col) or "")) if name_col else ""
-        city = normalize_city_name(row.get(city_col) or "") if city_col else ""
+        raw_name = row.get(name_col)
+        name = _norm_name(str(raw_name)) if name_col and pd.notnull(raw_name) else ""
+        raw_city = row.get(city_col)
+        city = normalize_city_name(raw_city) if city_col and pd.notnull(raw_city) else ""
 
         # Determine bucket + key for THIS row.
         bucket = None
@@ -181,11 +193,48 @@ def update_full_registry_from_df(df: "pd.DataFrame | None") -> int:
     if updated > 0:
         try:
             os.makedirs(RESOURCES_DIR, exist_ok=True)
+            reg.pop("_name_city_index", None)
             with open(FULL_REGISTRY_PATH, "w", encoding="utf-8") as f:
                 json.dump(reg, f, indent=2, ensure_ascii=False)
+            global _REGISTRY_CACHE, _REGISTRY_MTIME
+            _REGISTRY_CACHE = reg
+            _REGISTRY_MTIME = os.path.getmtime(FULL_REGISTRY_PATH)
         except Exception:
             return 0
     return updated
+
+
+def _get_name_city_index(registry: dict) -> dict[str, dict]:
+    """Lazy-build and cache an O(1) index of normalized name|city -> earliest record."""
+    if "_name_city_index" in registry:
+        return registry["_name_city_index"]
+
+    idx: dict[str, dict] = {}
+    for bucket in _BUCKETS:
+        for key, rec in (registry.get(bucket) or {}).items():
+            if not isinstance(rec, dict):
+                continue
+            rn = _norm_name(rec.get("name", ""))
+            rc = _norm_text(rec.get("city", ""))
+            if rn and rc:
+                nc = f"{rn}|{rc}"
+                entry = {
+                    "bucket": bucket,
+                    "key": key,
+                    "record": rec,
+                    "method": "name_city",
+                }
+                existing = idx.get(nc)
+                if existing is None:
+                    idx[nc] = entry
+                else:
+                    fs_new = rec.get("first_seen", "")
+                    fs_old = existing["record"].get("first_seen", "")
+                    if fs_new and (not fs_old or fs_new < fs_old):
+                        idx[nc] = entry
+
+    registry["_name_city_index"] = idx
+    return idx
 
 
 def _lookup_in_bucket(reg: dict, bucket: str, key: str) -> Optional[dict]:
@@ -233,22 +282,13 @@ def find_customer(
                 rec["method"] = "phone"
                 return rec
 
-    # 3) NAME|CITY loose secondary signal
+    # 3) NAME|CITY loose secondary signal (O(1) indexed lookup)
     if name and city:
         nc = f"{name}|{_norm_text(city)}"
-        recs = []
-        for bucket in _BUCKETS:
-            for key, rec in (registry.get(bucket) or {}).items():
-                rn = _norm_name(rec.get("name", ""))
-                rc = _norm_text(rec.get("city", ""))
-                if rn and rc and f"{rn}|{rc}" == nc:
-                    recs.append({"bucket": bucket, "key": key, "record": rec})
-        if recs:
-            # pick the one seen earliest
-            recs.sort(key=lambda r: r["record"].get("first_seen", ""))
-            best = recs[0]
-            best["method"] = "name_city"
-            return best
+        nc_idx = _get_name_city_index(registry)
+        match = nc_idx.get(nc)
+        if match:
+            return dict(match)
 
     return None
 

@@ -33,33 +33,24 @@ def normalize_phone_number(value) -> str:
     return digits
 
 
-def clean_numeric_value(value, default: float = 0.0) -> float:
-    """Safely sanitizes and converts a currency or numeric string to float.
-
-    Strips currency symbols (৳, $, BDT), commas, and spaces before converting.
-    """
-    if value is None:
-        return default
-    try:
-        val_str = str(value).strip()
-        cleaned = re.sub(r"[^\d.-]", "", val_str)
-        if not cleaned or cleaned in ("-", "."):
-            return default
-        return float(cleaned)
-    except (ValueError, TypeError):
-        return default
-
-
 # --- Address Logic ---
 @lru_cache(maxsize=4096)
 def normalize_city_name(city_name):
-    """
-    Standardizes city/district names to match Pathao formats or correct spelling.
-    """
-    if not city_name:
+    """Standardizes city/district names to match Pathao formats or correct spelling."""
+    if city_name is None:
         return ""
+    if isinstance(city_name, float):
+        import math
+
+        if math.isnan(city_name):
+            return ""
+    if not isinstance(city_name, str):
+        city_name = str(city_name)
 
     c = city_name.strip()
+    if not c or c.lower() in ("nan", "none", "null"):
+        return ""
+
     c_lower = c.lower()
 
     # ISO 3166-2:BD District Mappings (standard for WooCommerce BD)

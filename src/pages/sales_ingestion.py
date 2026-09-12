@@ -198,7 +198,9 @@ def render_manual_tab():
                 order_col = (
                     "Order ID"
                     if "Order ID" in df.columns
-                    else "Order Number" if "Order Number" in df.columns else None
+                    else "Order Number"
+                    if "Order Number" in df.columns
+                    else None
                 )
                 if order_col:
                     df = df.copy()
@@ -212,7 +214,9 @@ def render_manual_tab():
                 status_col = (
                     "Order Status"
                     if "Order Status" in df.columns
-                    else "Status" if "Status" in df.columns else None
+                    else "Status"
+                    if "Status" in df.columns
+                    else None
                 )
                 if status_col:
                     df = df[

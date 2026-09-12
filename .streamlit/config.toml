@@ -1,7 +1,22 @@
 [server]
 port = 8501
 headless = true
-enableCORS = false
+enableCORS = true
+corsAllowedOrigins = [
+    "https://ops.deencommerce.com",
+    "https://order-process-automation.streamlit.app",
+    "http://localhost:8501",
+    "http://192.168.68.103:8501",
+    "http://103.7.248.247:8501",
+]
+allowedHosts = [
+    "ops.deencommerce.com",
+    "order-process-automation.streamlit.app",
+    "localhost",
+    "127.0.0.1",
+    "192.168.68.103",
+    "103.7.248.247",
+]
 enableXsrfProtection = true
 maxUploadSize = 200
 enableWebsocketCompression = true

@@ -47,6 +47,10 @@ def test_sales_categorization(product_name, expected_cat, expected_subcat):
         ("Executive Formal Shirt", "Formal"),
         ("Formal Shirt", "Formal"),
         ("Formal Shirt - M", "Formal"),
+        ("Casual Shirt", "Casual"),
+        ("Casual Shirt - Full Sleeve", "Casual"),
+        ("Full Sleeve Shirt", "FS Shirt"),
+        ("FS Shirt", "FS Shirt"),
     ],
 )
 def test_dashboard_short_category_label(product_name, expected_short_label):
@@ -76,8 +80,19 @@ def test_stock_categorization(product_name, expected_stock_cat):
         ("Executive Formal", "Formal"),
         ("Executive Formal Shirt", "Formal"),
         ("Formal Shirt", "Formal"),
+        ("Casual Shirt", "Casual"),
+        ("Casual Shirt - Full Sleeve", "Casual"),
+        ("Casual Shirt - Half Sleeve", "Casual"),
+        ("Full Sleeve Casual Shirt", "Casual"),
+        ("Full Sleeve Shirt", "FS Shirt"),
+        ("FS Shirt", "FS Shirt"),
+        ("Half Sleeve Shirt", "HS Shirt"),
+        ("HS Shirt", "HS Shirt"),
+        ("Full Sleeve T-Shirt", "FS T-Shirt"),
+        ("HS T-Shirt", "HS T-Shirt"),
     ],
 )
 def test_order_processor_get_short_sub_category(product_name, expected_type):
     item_type = get_short_sub_category(product_name)
     assert item_type == expected_type
+

@@ -61,23 +61,31 @@ def render_distribution_tab(search_q):
 
     # ── Live Outlet Stock from Custom Plugin ───────────────────────────────
     st.markdown("### 🏪 Live Outlet Stock (Auto-Discovery)")
-    st.caption("Automatically detect and pull outlet stock from your WooCommerce custom plugin.")
+    st.caption(
+        "Automatically detect and pull outlet stock from your WooCommerce custom plugin."
+    )
 
     if st.button("🔌 Connect & Fetch Outlet Stock", key="fetch_outlet_stock"):
-        with st.status("🔍 Detecting outlet stock storage method...", expanded=True) as status:
+        with st.status(
+            "🔍 Detecting outlet stock storage method...", expanded=True
+        ) as status:
             from src.services.woocommerce.outlet_stock import fetch_live_outlet_stock
 
             status.update(label="📡 Fetching outlet stock from WooCommerce...")
             outlet_df = fetch_live_outlet_stock()
 
             if outlet_df is not None and not outlet_df.empty:
-                status.update(label="✅ Outlet stock fetched successfully!", state="complete")
+                status.update(
+                    label="✅ Outlet stock fetched successfully!", state="complete"
+                )
                 st.session_state.inv_outlet_stock_df = outlet_df
                 st.toast(f"✅ Loaded {len(outlet_df)} products with outlet stock")
             else:
                 status.update(label="⚠️ No outlet stock found", state="warning")
                 st.session_state.inv_outlet_stock_df = None
-                st.warning("Could not detect outlet stock. Make sure your custom plugin is active and has data.")
+                st.warning(
+                    "Could not detect outlet stock. Make sure your custom plugin is active and has data."
+                )
 
     # Display outlet stock if available
     if st.session_state.get("inv_outlet_stock_df") is not None:
@@ -86,6 +94,7 @@ def render_distribution_tab(search_q):
 
         import io
         import datetime
+
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             outlet_df.to_excel(writer, sheet_name="Outlet Stock", index=False)
@@ -106,6 +115,13 @@ def render_distribution_tab(search_q):
         type=["xlsx", "csv"],
         key="inv_up",
         label_visibility="collapsed",
+    )
+
+    fetch_live_clicked = st.button(
+        "Pull from Live Dashboard & Auto-Analyze",
+        type="secondary",
+        use_container_width=True,
+        key="dist_live",
     )
 
     st.markdown('<div style="margin-top: -12px;"></div>', unsafe_allow_html=True)
@@ -162,7 +178,9 @@ def render_distribution_tab(search_q):
                 status_col = (
                     "Order Status"
                     if "Order Status" in df_live.columns
-                    else "Status" if "Status" in df_live.columns else None
+                    else "Status"
+                    if "Status" in df_live.columns
+                    else None
                 )
                 if status_col:
                     df_live = df_live[
@@ -192,7 +210,9 @@ def render_distribution_tab(search_q):
                     status_col = (
                         "Order Status"
                         if "Order Status" in df_live.columns
-                        else "Status" if "Status" in df_live.columns else None
+                        else "Status"
+                        if "Status" in df_live.columns
+                        else None
                     )
                     if status_col:
                         df_live = df_live[

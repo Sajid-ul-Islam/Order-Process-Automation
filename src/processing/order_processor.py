@@ -4,22 +4,50 @@ import re
 from typing import Any, Dict, List, Tuple
 
 import pandas as pd
-import streamlit as st
+from src.utils.streamlit_runtime import cache_data
 from rapidfuzz import process
 
 from src.config.constants import RESOURCES_DIR
-from src.processing.categorization import get_category_for_sales
 from src.utils.text import normalize_city_name, peek_zone_from_address
 
 # Column aliases for fallback when files use different header names
 _COLUMN_ALIASES: Dict[str, List[str]] = {
-    "Quantity": ["Quantity (- Refund)", "Qty", "Quantity (Refund)", "Item Qty", "Quantity(-Refund)"],
+    "Quantity": [
+        "Quantity (- Refund)",
+        "Qty",
+        "Quantity (Refund)",
+        "Item Qty",
+        "Quantity(-Refund)",
+    ],
     "Item Cost": ["Line Item Price", "Price", "Item Price", "Cost", "Line Total"],
-    "Order Total Amount": ["Total", "Order Total", "Total Amount", "Grand Total", "Order Amount"],
-    "Phone (Billing)": ["Phone", "Billing Phone", "Customer Phone", "Phone Number", "Mobile"],
-    "First Name (Shipping)": ["Shipping First Name", "First Name", "Recipient Name", "Customer Name"],
+    "Order Total Amount": [
+        "Total",
+        "Order Total",
+        "Total Amount",
+        "Grand Total",
+        "Order Amount",
+    ],
+    "Phone (Billing)": [
+        "Phone",
+        "Billing Phone",
+        "Customer Phone",
+        "Phone Number",
+        "Mobile",
+        "Phone (Shipping)",
+    ],
+    "First Name (Shipping)": [
+        "Shipping First Name",
+        "First Name",
+        "Recipient Name",
+        "Customer Name",
+    ],
     "Last Name (Shipping)": ["Shipping Last Name", "Last Name"],
-    "Address 1&2 (Shipping)": ["Shipping Address", "Address (Shipping)", "Address", "Delivery Address"],
+    "Address 1&2 (Shipping)": [
+        "Shipping Address",
+        "Address (Shipping)",
+        "Address",
+        "Delivery Address",
+    ],
     "City (Shipping)": ["Shipping City", "City"],
     "State Code (Shipping)": ["Shipping State", "State", "State Code"],
 }
@@ -81,12 +109,43 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
     cleans and standardizes the input dataframe columns.
     Applies column fallbacks for files with alternate header names.
+    Merges First/Last Name into Full Name (Shipping) if needed.
+    Adds empty Phone (Billing) if missing.
     """
     if df.empty:
         return df
 
     # Apply column fallbacks for alternate header names
     df = _apply_column_fallbacks(df)
+
+    # Merge First Name + Last Name into Full Name (Shipping)
+    if "Full Name (Shipping)" not in df.columns:
+        if (
+            "First Name (Shipping)" in df.columns
+            and "Last Name (Shipping)" in df.columns
+        ):
+            df["Full Name (Shipping)"] = (
+                df["First Name (Shipping)"].astype(str).str.strip()
+                + " "
+                + df["Last Name (Shipping)"].astype(str).str.strip()
+            ).str.strip()
+        elif "First Name (Shipping)" in df.columns:
+            df["Full Name (Shipping)"] = (
+                df["First Name (Shipping)"].astype(str).str.strip()
+            )
+        elif "Last Name (Shipping)" in df.columns:
+            df["Full Name (Shipping)"] = (
+                df["Last Name (Shipping)"].astype(str).str.strip()
+            )
+
+    # Add empty Phone (Billing) if missing
+    if "Phone (Billing)" not in df.columns:
+        df["Phone (Billing)"] = ""
+
+    # Normalize phone numbers to last 11 digits
+    df["Phone (Billing)"] = df["Phone (Billing)"].apply(
+        lambda x: normalize_phone(str(x))[0] if pd.notna(x) else ""
+    )
 
     # Convert numeric columns safely
     numeric_cols = ["Quantity", "Item Cost", "Order Total Amount"]
@@ -172,12 +231,30 @@ def identify_columns(df: pd.DataFrame) -> Dict[str, Any]:
     for c in df.columns:
         c_l = c.lower()
         if "name" in c_l:
-            # Prefer shipping/full name, but take any name
-            if any(k in c_l for k in ["shipping", "full", "customer", "recipient"]):
+            # Prefer Full Name first, then shipping/first/last
+            if "full" in c_l:
                 cols["name_col"] = c
                 break
+            if any(k in c_l for k in ["shipping", "customer", "recipient"]):
+                if (
+                    not cols["name_col"]
+                    or "first" in cols["name_col"].lower()
+                    or "last" in cols["name_col"].lower()
+                ):
+                    cols["name_col"] = c
+                    if "first" not in c_l and "last" not in c_l:
+                        break
             if not cols["name_col"]:
                 cols["name_col"] = c
+
+    # If name_col is still first/last only, prefer full name
+    if cols["name_col"] and (
+        "first" in cols["name_col"].lower() or "last" in cols["name_col"].lower()
+    ):
+        for c in df.columns:
+            if "full name" in c.lower():
+                cols["name_col"] = c
+                break
 
     # Recipient ID Fallback
     if not cols["name_col"]:
@@ -212,7 +289,6 @@ def identify_columns(df: pd.DataFrame) -> Dict[str, Any]:
 def get_short_sub_category(item_name: str) -> str:
     """Extracts a shortened sub-category name for Pathao ItemDesc formatting."""
     name_lower = str(item_name).lower()
-    name_lower = str(item_name).lower()
 
     if "tank top" in name_lower or "tanktop" in name_lower or "tank-top" in name_lower:
         return "TankTop"
@@ -231,12 +307,23 @@ def get_short_sub_category(item_name: str) -> str:
         or "jersey" in name_lower
     ):
         return "Active Wear"
-    if (
-        "full sleeve" in name_lower
-        or "fs t-shirt" in name_lower
-        or "fs tshirt" in name_lower
-    ):
-        return "FS T-Shirt"
+
+    # T-Shirt categorization: check t-shirt explicitly before generic sleeve keywords
+    is_tshirt = (
+        "t-shirt" in name_lower
+        or "tshirt" in name_lower
+        or "tee" in name_lower
+        or "t shirt" in name_lower
+    )
+    if is_tshirt:
+        if (
+            "full sleeve" in name_lower
+            or "fs" in name_lower
+            or "long sleeve" in name_lower
+        ):
+            return "FS T-Shirt"
+        return "HS T-Shirt"
+
     if "sweatshirt" in name_lower:
         return "Sweatshirt"
     if "sweater" in name_lower:
@@ -245,17 +332,12 @@ def get_short_sub_category(item_name: str) -> str:
         return "Hoodie"
     if "jacket" in name_lower:
         return "Jacket"
-    if (
-        "t-shirt" in name_lower
-        or "tshirt" in name_lower
-        or "tee" in name_lower
-        or "t shirt" in name_lower
-    ):
-        return "HS T-Shirt"
     if "polo" in name_lower:
         return "Polo"
     if "panjabi" in name_lower or "punjabi" in name_lower:
         return "Panjabi"
+    if "pajama" in name_lower or "payjama" in name_lower:
+        return "Pajama"
     if "oxford" in name_lower:
         return "Oxford"
     if "cuban" in name_lower:
@@ -276,13 +358,34 @@ def get_short_sub_category(item_name: str) -> str:
         return "Trouser"
     if "executive" in name_lower or "formal" in name_lower:
         return "Formal"
+
+    # Casual Shirt: Don't show generic 'Shirt =', show 'Casual ='
+    if "casual" in name_lower:
+        return "Casual"
+
+    # Full Sleeve Shirt (non-casual) -> FS Shirt
+    if (
+        "full sleeve shirt" in name_lower
+        or "fs shirt" in name_lower
+        or ("full sleeve" in name_lower and "shirt" in name_lower)
+        or (name_lower.startswith("fs ") and "shirt" in name_lower)
+    ):
+        return "FS Shirt"
+
+    # Half Sleeve Shirt (non-casual) -> HS Shirt
+    if (
+        "half sleeve shirt" in name_lower
+        or "hs shirt" in name_lower
+        or ("half sleeve" in name_lower and "shirt" in name_lower)
+        or (name_lower.startswith("hs ") and "shirt" in name_lower)
+    ):
+        return "HS Shirt"
+
     if "shirt" in name_lower:
         return "Shirt"
     if "wallet" in name_lower:
         return "Wallet"
 
-    if "t-shirt" in name_lower:
-        return "T-Shirt"
     if "belt" in name_lower:
         return "Belt"
     if "kaftan" in name_lower:
@@ -291,8 +394,6 @@ def get_short_sub_category(item_name: str) -> str:
         return "Boxer"
     if "mask" in name_lower:
         return "Mask"
-    if "polo" in name_lower:
-        return "Polo"
     if "turtleneck" in name_lower or "turtle neck" in name_lower:
         return "Turtleneck"
 
@@ -392,7 +493,7 @@ def parse_manual_item_lines(raw_text: str) -> Tuple[Dict[str, Dict[str, int]], i
         item_str = item_str.strip().rstrip(";")
         item_str = item_str.replace(" | ", " - ")
 
-        category = get_category_for_sales(item_str)
+        category = get_short_sub_category(item_str)
 
         if category not in cat_map:
             cat_map[category] = {}
@@ -875,7 +976,7 @@ def process_single_order_group(
     return parcel_records
 
 
-@st.cache_data(show_spinner="Processing orders via Pathao Intelligence Engine...")
+@cache_data(show_spinner="Processing orders via Pathao Intelligence Engine...")
 def process_orders_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
     Main Logic: Takes raw DF, returns processed DF.
@@ -907,7 +1008,9 @@ def process_orders_dataframe(df: pd.DataFrame) -> pd.DataFrame:
             for f in flag_list:
                 if f not in all_flags:
                     all_flags.append(f)
-        records = process_single_order_group(phone, group, data_cols, phone_flags=all_flags)
+        records = process_single_order_group(
+            phone, group, data_cols, phone_flags=all_flags
+        )
         processed_data.extend(records)
 
     # 4. Result DF

@@ -133,7 +133,7 @@ def _generate_sparkline_svg(
         badge_html = (
             f'<div class="metric-detail-row" style="color:var(--text-color, #000000); font-weight:700; opacity:1;">'
             f"<span>🔥 7D Peak: <b>{prefix}{max_v:,.0f}{suffix}</b></span>"
-            f"<span>📊 7D Avg: <b>{prefix}{sum(values)/len(values):,.0f}{suffix}</b></span>"
+            f"<span>📊 7D Avg: <b>{prefix}{sum(values) / len(values):,.0f}{suffix}</b></span>"
             f'<span style="color:{delta_color};">Today {arrow}{abs(delta_pct):.0f}% vs prev</span>'
             f"</div>"
         )

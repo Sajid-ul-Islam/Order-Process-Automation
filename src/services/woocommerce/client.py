@@ -1,7 +1,6 @@
 from datetime import datetime, time, timedelta
 
 import pandas as pd
-import streamlit as st
 from requests.auth import HTTPBasicAuth
 
 from src.config.constants import BD_TZ, SHIPPED_STATUSES, bd_now
@@ -9,6 +8,7 @@ from src.config.settings import get_woocommerce_config
 from src.processing.column_detection import scrub_raw_dataframe
 from src.utils.http import request_with_backoff
 from src.utils.logging import log_system_event
+from src.utils.streamlit_runtime import runtime as st
 
 # ── Data transformation helpers ──────────────────────────────────────────────
 
@@ -134,6 +134,7 @@ def _flatten_order(order: dict) -> list[dict]:
                 "Order Date": d_val,
                 "Order Date Modified": m_val,
                 "Order Status": status,
+                "Created via": str(order.get("created_via", "")).strip(),
                 "Full Name (Billing)": c_name,
                 "Phone (Billing)": bill.get("phone", ""),
                 "Billing Email": bill.get("email", ""),
@@ -201,7 +202,7 @@ def _fetch_wc_batch(url: str, params: dict, auth: HTTPBasicAuth) -> list:
     # Fetch remaining pages concurrently
     from concurrent.futures import ThreadPoolExecutor
 
-    with ThreadPoolExecutor(max_workers=min(total_pages, 8)) as executor:
+    with ThreadPoolExecutor(max_workers=min(total_pages, 4)) as executor:
         futures = [
             executor.submit(_fetch_wc_page, url, params, auth, pg)
             for pg in range(2, total_pages + 1)
@@ -229,7 +230,7 @@ def get_woocommerce_shipped_orders_count(after_iso: str, before_iso: str) -> int
         "per_page": 1,
         "after": after_iso,
         "before": before_iso,
-        "status": "shipped,completed,confirmed",
+        "status": "shipped,completed",
         "_fields": "id",
     }
 
@@ -320,7 +321,7 @@ def _get_global_open_params(cache_buster: str | None = None) -> dict:
     return _apply_cache_buster(
         {
             "per_page": 100,
-            "status": "on-hold,pending,waiting,confirmed,processing",
+            "status": "on-hold,pending,processing",
             "orderby": "date",
             "order": "desc",
         },
@@ -330,19 +331,20 @@ def _get_global_open_params(cache_buster: str | None = None) -> dict:
 
 def _get_custom_range_params(cache_buster: str | None = None) -> dict:
     """Build API params for the Custom Range sync mode."""
-    start_date = st.session_state.get("wc_sync_start_date", datetime.now().date())
+    now_bd = bd_now()
+    start_date = st.session_state.get("wc_sync_start_date", now_bd.date())
     start_time = st.session_state.get(
-        "wc_sync_start_time", (datetime.now() - timedelta(hours=12)).time()
+        "wc_sync_start_time", (now_bd - timedelta(hours=12)).time()
     )
-    end_date = st.session_state.get("wc_sync_end_date", datetime.now().date())
-    end_time = st.session_state.get("wc_sync_end_time", datetime.now().time())
+    end_date = st.session_state.get("wc_sync_end_date", now_bd.date())
+    end_time = st.session_state.get("wc_sync_end_time", now_bd.time())
 
     return _apply_cache_buster(
         {
             "per_page": 100,
             "after": f"{start_date}T{start_time.strftime('%H:%M:%S')}",
             "before": f"{end_date}T{end_time.strftime('%H:%M:%S')}",
-            "status": "processing,completed,shipped,on-hold,pending,waiting,confirmed",
+            "status": "any",
             "orderby": "date",
             "order": "desc",
         },
@@ -550,24 +552,17 @@ def _partition_operational_data(df_full):
     is_hold = status_lower.isin(["on-hold", "wc-on-hold", "hold", "wc-hold"])
     is_waiting = status_lower.isin(["pending", "waiting", "wc-pending", "wc-waiting"])
 
-    # Any order created or modified in today's shift (status changes, newly placed, dispatches)
     modified_recent = df_full["mod_dt_parsed"] >= prev_cutoff
     created_recent = df_full["dt_parsed"] >= prev_cutoff
-
-    # For the "Today" view, include ANY order created or modified within the current operational shift.
-    # This is more inclusive and catches old orders that were shipped today.
-    # Also keep orders that are still open in `processing` even if they were placed before the
-    # shift start — otherwise they would be invisible in every view (Prev only keeps shipped,
-    # Backlog only keeps on-hold/pending/waiting).
     df_live = df_full[created_recent | modified_recent | is_processing].copy()
-
     df_prev = df_full[
         (df_full["mod_dt_parsed"] >= day_before_prev)
         & (df_full["mod_dt_parsed"] < prev_cutoff)
         & is_shipped
     ].copy()
 
-    df_backlog = df_full[is_hold | is_waiting].copy()
+    # Queue is date-independent and includes all unresolved workflow states.
+    df_backlog = df_full[is_processing | is_hold | is_waiting].copy()
 
     slot_label = "Today"
 
@@ -658,7 +653,7 @@ def load_from_woocommerce(cache_buster: str | None = None):
             df_full = _apply_shipped_history(df_full)
 
         now_str = bd_now().strftime("%Y-%m-%d %H:%M:%S")
-        st.session_state["live_sync_time"] = datetime.now()
+        st.session_state["live_sync_time"] = bd_now().replace(tzinfo=None)
 
         if sync_mode == "Operational Cycle":
             df_live, df_prev, df_backlog, slot_label, slots = (
@@ -767,7 +762,9 @@ def _staleness_info(df):
     mod_col = (
         "mod_dt_parsed"
         if "mod_dt_parsed" in df.columns
-        else "Order Date Modified" if "Order Date Modified" in df.columns else None
+        else "Order Date Modified"
+        if "Order Date Modified" in df.columns
+        else None
     )
     if not mod_col:
         return None, None
@@ -790,15 +787,30 @@ def _data_looks_stale(df, max_age_min: float = WC_STALE_MAX_AGE_MIN) -> bool:
     return age_min is not None and age_min > max_age_min
 
 
+def _response_regressed(df) -> bool:
+    """Detect an older API snapshot without treating a quiet store as stale."""
+    newest, _ = _staleness_info(df)
+    if newest is None:
+        return False
+
+    previous = st.session_state.get("_wc_latest_mod_seen")
+    if previous is None or newest >= previous:
+        st.session_state["_wc_latest_mod_seen"] = newest
+        return False
+    return True
+
+
 def _should_autorefresh() -> bool:
     """Check if the refresh interval has elapsed since last sync."""
+    if st.session_state.get("_needs_background_sync"):
+        return True
     interval = st.session_state.get("wc_refresh_interval", 30)
     if interval <= 0:
         return False  # Manual mode
     last_sync = st.session_state.get("live_sync_time")
     if last_sync is None:
         return True
-    elapsed = (datetime.now() - last_sync).total_seconds()
+    elapsed = (bd_now().replace(tzinfo=None) - last_sync).total_seconds()
     return elapsed >= interval
 
 
@@ -811,6 +823,33 @@ def load_live_source(force_refresh=False):
     the refresh interval, the last fetched data is reused without an extra
     REST call — and never via an un-busted URL that could be served stale.
     """
+    # Cold-start instant bootstrap: if not force_refresh and no cached operational data in session state,
+    # load local sales snapshot immediately so UI renders in <0.3s without waiting for network.
+    if not force_refresh and st.session_state.get("wc_curr_df") is None:
+        try:
+            from src.utils.snapshots import load_sales_snapshot
+
+            df_snap = load_sales_snapshot()
+            if df_snap is not None and not df_snap.empty:
+                df_live, df_prev, df_backlog, slot_label, slots = (
+                    _partition_operational_data(df_snap)
+                )
+                st.session_state["wc_curr_df"] = scrub_raw_dataframe(df_live)
+                st.session_state["wc_prev_df"] = scrub_raw_dataframe(df_prev)
+                st.session_state["wc_backlog_df"] = scrub_raw_dataframe(df_backlog)
+                for key, val in slots.items():
+                    if val is not None:
+                        st.session_state[key] = val
+                st.session_state["wc_full_df"] = df_snap
+                desc = f"Instant_Snapshot_{len(df_snap)}_Orders"
+                st.session_state["_wc_last_sync_desc"] = desc
+                st.session_state["_wc_last_modified_at"] = "Loaded from snapshot"
+                st.session_state["_needs_background_sync"] = True
+                df_to_return = df_backlog if slot_label == "Backlog" else df_live
+                return scrub_raw_dataframe(df_to_return), desc, "Loaded from snapshot"
+        except Exception as snap_err:
+            log_system_event("WC_COLD_START_SNAPSHOT_ERROR", str(snap_err))
+
     should_fetch = force_refresh or _should_autorefresh()
     if should_fetch:
         load_from_woocommerce.clear()
@@ -820,7 +859,7 @@ def load_live_source(force_refresh=False):
         try:
             # Unique cache-buster per sync → the REST API always answers from origin.
             results = load_from_woocommerce(
-                cache_buster=str(int(datetime.now().timestamp() * 1000))
+                cache_buster=str(int(bd_now().timestamp() * 1000))
             )
         except Exception as api_err:
             log_system_event(
@@ -830,13 +869,12 @@ def load_live_source(force_refresh=False):
         # Unique-keyed entries would accumulate in st.cache_data — drop them.
         load_from_woocommerce.clear()
 
-        # ── Stale-data retry ─────────────────────────────────────────────────
-        # Backstop in case the origin itself returns cached data (e.g. a WP
-        # object cache): retry once with a fresh cache-buster.
+        # Retry only when the API moves backwards relative to data already seen.
+        # Order inactivity is normal and must not trigger a second full fetch.
         if (
             results
             and isinstance(results, dict)
-            and _data_looks_stale(results.get("df_to_return"))
+            and _response_regressed(results.get("df_to_return"))
         ):
             newest, age_min = _staleness_info(results.get("df_to_return"))
             log_system_event(
@@ -849,13 +887,13 @@ def load_live_source(force_refresh=False):
             )
             try:
                 retried = load_from_woocommerce(
-                    cache_buster=str(int(datetime.now().timestamp() * 1000))
+                    cache_buster=str(int(bd_now().timestamp() * 1000))
                 )
                 load_from_woocommerce.clear()
                 if (
                     retried
                     and isinstance(retried, dict)
-                    and not _data_looks_stale(retried.get("df_to_return"))
+                    and not _response_regressed(retried.get("df_to_return"))
                 ):
                     results = retried
                     log_system_event(
@@ -921,28 +959,31 @@ def load_live_source(force_refresh=False):
                 st.session_state[key] = val
 
         # 3. Update Sync Metadata
-        st.session_state.live_sync_time = datetime.now()
+        st.session_state["live_sync_time"] = bd_now().replace(tzinfo=None)
+        if should_fetch:
+            st.session_state.pop("_needs_background_sync", None)
 
         # 4. Update Full Context for Forecasting
         st.session_state["wc_full_df"] = df_new
         st.session_state["_wc_last_sync_desc"] = results.get("sync_desc", "")
         st.session_state["_wc_last_modified_at"] = results.get("modified_at", "")
 
-        # 5. Silent Autosave for Offline Mode Fallback
-        try:
-            from src.utils.snapshots import save_sales_snapshot
+        # 5. Silent Autosave for Offline Mode Fallback (only on fresh network fetch)
+        if should_fetch:
+            try:
+                from src.utils.snapshots import save_sales_snapshot
 
-            if df_new is not None and not df_new.empty:
-                save_sales_snapshot(df_new)
-        except Exception:
-            pass
+                if df_new is not None and not df_new.empty:
+                    save_sales_snapshot(df_new)
+            except Exception:
+                pass
 
         # 6. Return tuple for legacy unpacking
         return df_new, results["sync_desc"], results["modified_at"]
 
     # Handle legacy return if any
     if results:
-        st.session_state.live_sync_time = datetime.now()
+        st.session_state["live_sync_time"] = bd_now().replace(tzinfo=None)
         return results
 
     # Automatic Fallback: Load last saved snapshot when API is not working
@@ -950,9 +991,23 @@ def load_live_source(force_refresh=False):
 
     df_snap = load_sales_snapshot()
     if df_snap is not None and not df_snap.empty:
-        st.session_state.live_sync_time = datetime.now()
+        df_live, df_prev, df_backlog, slot_label, slots = (
+            _partition_operational_data(df_snap)
+        )
+        st.session_state["wc_curr_df"] = scrub_raw_dataframe(df_live)
+        st.session_state["wc_prev_df"] = scrub_raw_dataframe(df_prev)
+        st.session_state["wc_backlog_df"] = scrub_raw_dataframe(df_backlog)
+        for key, val in slots.items():
+            if val is not None:
+                st.session_state[key] = val
+        st.session_state["live_sync_time"] = bd_now().replace(tzinfo=None)
         st.session_state["wc_full_df"] = df_snap
-        return df_snap, "LOCAL_SNAPSHOT_FALLBACK", "API_OFFLINE"
+        df_to_return = df_backlog if slot_label == "Backlog" else df_live
+        return (
+            scrub_raw_dataframe(df_to_return),
+            "LOCAL_SNAPSHOT_FALLBACK",
+            "API_OFFLINE",
+        )
 
     raise ValueError(
         "WooCommerce REST API is offline and no local saved snapshot is available."

@@ -7,33 +7,29 @@ APP_VERSION = "v10.0"
 # Rule 3: Core actions only in bottom nav
 # Rule 4: Settings NOT in bottom nav (already in sidebar)
 PRIMARY_NAV = [
-    "📈 Live Dashboard",      # Home - far left (Rule 1)
-    "🛒 Orders & Fulfillment", # Core action 1
-    "📦 Inventory & Stock",    # Core action 2  
-    "📊 Analytics & Insights", # Core action 3
-    "🤖 Automation Tools",     # Create/Automation - center-right position
+    "📈 Live Dashboard",  # Home - far left (Rule 1)
+    "🛒 Orders & Fulfillment",  # Core action 1
+    "📦 Inventory & Stock",  # Core action 2
+    "📊 Analytics & Insights",  # Core action 3
+    "🤖 Automation Tools",  # Create/Automation - center-right position
 ]
 
 # Legacy nav items mapped to new consolidated structure
 LEGACY_NAV_MAPPING = {
-    # Live Dashboard
+    # Section: Live Dashboard
     "📈 Live Dashboard": "📈 Live Dashboard",
-    
-    # Orders & Fulfillment (consolidated)
+    # Section: Orders & Fulfillment
     "🛒 Order Tracking": "🛒 Orders & Fulfillment",
     "📦 Pathao Processor": "🛒 Orders & Fulfillment",
     "🧩 Delivery Data Parser": "🛒 Orders & Fulfillment",
-    
-    # Inventory & Stock (consolidated)
+    # Section: Inventory & Stock
     "📋 Product Listing": "📦 Inventory & Stock",
     "📦 Current Stock Analytics": "📦 Inventory & Stock",
     "📊 Inventory Distribution": "📦 Inventory & Stock",
-    
-    # Analytics & Insights (consolidated)
+    # Section: Analytics & Insights
     "📥 Sales Data Ingestion": "📊 Analytics & Insights",
     "📉 Return Analytics": "📊 Analytics & Insights",
-    
-    # Automation Tools (consolidated)
+    # Section: Automation Tools
     "💬 WhatsApp Messaging": "🤖 Automation Tools",
     "🚀 Data Pilot": "🤖 Automation Tools",
 }
@@ -212,11 +208,3 @@ CHART_THEMES = {
         ],
     },
 }
-
-
-def get_active_theme_config() -> dict:
-    """Retrieve active Chart Color Theme config from Streamlit session state."""
-    import streamlit as st
-
-    theme_name = st.session_state.get("chart_theme", "✨ Emerald Cyberpunk")
-    return CHART_THEMES.get(theme_name, CHART_THEMES["✨ Emerald Cyberpunk"])
