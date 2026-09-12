@@ -183,6 +183,16 @@ def classify_order_source(
     return "Online"
 
 
+def filter_online_orders(df: pd.DataFrame) -> pd.DataFrame:
+    """Filter DataFrame to only include online website checkout orders (exclude physical outlet/POS orders)."""
+    if df is None or df.empty:
+        return df
+    source_col = detect_source_column(df)
+    sources = df.apply(lambda r: classify_order_source(r, source_col), axis=1)
+    return df[sources == "Online"].copy()
+
+
+
 def filter_completed_orders_by_date(
     df: pd.DataFrame,
     target_date: pd.Timestamp,

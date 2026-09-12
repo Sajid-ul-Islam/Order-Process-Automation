@@ -264,8 +264,16 @@ def _render_refresh_controls(nav_mode: str, load_live_source):
         st.rerun()
 
 
-def _get_live_combined_source():
+def _get_live_combined_source(online_only: bool = True):
     """Combine operational partitions for dashboard view filtering and badge counts."""
+    manual = st.session_state.get("live_manual_override_df")
+    if manual is not None and not manual.empty:
+        if online_only:
+            from src.processing.completed_analytics import filter_online_orders
+
+            return filter_online_orders(manual)
+        return manual
+
     frames = [
         frame
         for frame in (
@@ -280,14 +288,19 @@ def _get_live_combined_source():
         return None
     combined = pd.concat(frames, ignore_index=True)
     try:
-        return combined.drop_duplicates()
+        res = combined.drop_duplicates()
     except TypeError:
         subset = [
             c
             for c in ["Order ID", "Line Item ID", "Line Item Index", "Product Name"]
             if c in combined.columns
         ]
-        return combined.drop_duplicates(subset=subset) if subset else combined
+        res = combined.drop_duplicates(subset=subset) if subset else combined
+    if res is not None and not res.empty and online_only:
+        from src.processing.completed_analytics import filter_online_orders
+
+        return filter_online_orders(res)
+    return res
 
 
 def apply_dashboard_view_selection(selected: str) -> None:
@@ -322,12 +335,25 @@ def _render_dashboard_view_selector():
         "Last Day Shipped": "🕘",
         "Queue": "📥",
     }
-    descriptions = {
-        "All Orders": "Today's placed orders + backlog unfulfilled queue (excluding hold & waiting)",
-        "Today Shipped": "Only orders shipped or completed today (00:00–23:59 BD time)",
-        "Last Day Shipped": "Only orders shipped or completed yesterday (previous BD calendar day)",
-        "Queue": "All orders currently on hold, waiting, or pending across all dates (processing excluded)",
-    }
+    today_val = bd_today()
+    from src.processing.data_processing import get_previous_working_day
+    prev_w_day = get_previous_working_day(today_val)
+    prev_day_name = prev_w_day.strftime("%A")
+
+    if today_val.weekday() == 5:
+        descriptions = {
+            "All Orders": "Today's online checkout orders + backlog unfulfilled queue (Friday included in Saturday)",
+            "Today Shipped": "Online checkout orders shipped on Friday + Saturday (off-day dispatches rolled into Saturday)",
+            "Last Day Shipped": f"Online checkout orders shipped on {prev_day_name} (last operational working day, skipping Friday)",
+            "Queue": "All online checkout orders on hold, waiting, or pending across all dates",
+        }
+    else:
+        descriptions = {
+            "All Orders": "Today's online checkout orders + backlog unfulfilled queue (excluding hold & waiting)",
+            "Today Shipped": "Online checkout orders shipped or completed today (00:00–23:59 BD time)",
+            "Last Day Shipped": f"Online checkout orders shipped on {prev_day_name} (previous working day)",
+            "Queue": "All online checkout orders on hold, waiting, or pending across all dates",
+        }
 
     current = st.session_state.get("live_dashboard_view", "All Orders")
     if current not in options:
@@ -517,6 +543,74 @@ def _render_completed_kpis_display(selected_date, source_filter, df_live):
             )
 
 
+def _render_manual_upload_override():
+    """Collapsible manual file uploader allowing users to override automatic sync with their own CSV/Excel."""
+    is_active = st.session_state.get("live_manual_override_df") is not None
+    source_name = st.session_state.get("live_manual_override_name", "Custom Upload")
+
+    expander_title = (
+        f"📁 Manual Data Upload (🟢 Active Override: {source_name})"
+        if is_active
+        else "📁 Manual Data Upload (Optional Override)"
+    )
+
+    with st.expander(expander_title, expanded=is_active):
+        if is_active:
+            col_info, col_reset = st.columns([4, 1.2], vertical_alignment="center")
+            with col_info:
+                st.success(
+                    f"🟢 **Manual Override Active:** Displaying orders from `{source_name}` (Filtered to online checkout orders only)."
+                )
+            with col_reset:
+                if st.button(
+                    "🔄 Reset to Auto Sync",
+                    key="btn_reset_manual_override",
+                    type="primary",
+                    use_container_width=True,
+                    help="Discard manual file and resume live WooCommerce API sync",
+                ):
+                    st.session_state.pop("live_manual_override_df", None)
+                    st.session_state.pop("live_manual_override_name", None)
+                    st.session_state.pop("live_df_standard", None)
+                    st.session_state.pop("live_cmp_standard", None)
+                    st.toast("⚡ Restored automatic live sync!")
+                    st.rerun()
+
+        st.caption(
+            "Upload your own order export (`.xlsx` or `.csv`) if you prefer to view manual data instead of auto-sync. "
+            "The Live Dashboard KPI cards, view badges, and charts will immediately compute on your uploaded file."
+        )
+        uploaded = st.file_uploader(
+            "Upload sales file",
+            type=["csv", "xlsx"],
+            key="live_manual_file_uploader",
+            label_visibility="collapsed",
+        )
+        if uploaded is not None:
+            current_name = st.session_state.get("live_manual_override_name")
+            if current_name != uploaded.name:
+                from src.utils.file_io import read_sales_file
+                from src.processing.data_processing import safe_coerce_datetime_naive
+
+                try:
+                    df_up = read_sales_file(uploaded, uploaded.name)
+                    if df_up is not None and not df_up.empty:
+                        # Ensure date parsing compatibility
+                        if "Order Date" in df_up.columns and "dt_parsed" not in df_up.columns:
+                            df_up["dt_parsed"] = safe_coerce_datetime_naive(df_up["Order Date"])
+                        if "Order Date Modified" in df_up.columns and "mod_dt_parsed" not in df_up.columns:
+                            df_up["mod_dt_parsed"] = safe_coerce_datetime_naive(df_up["Order Date Modified"])
+
+                        st.session_state["live_manual_override_df"] = df_up
+                        st.session_state["live_manual_override_name"] = uploaded.name
+                        st.session_state.pop("live_df_standard", None)
+                        st.session_state.pop("live_cmp_standard", None)
+                        st.toast(f"✅ Loaded {uploaded.name} ({len(df_up)} rows)")
+                        st.rerun()
+                except Exception as ex:
+                    st.error(f"⚠️ Failed to read uploaded file: {ex}")
+
+
 def render_dashboard_banner(load_live_source):
     """Render the main dashboard banner with controls.
 
@@ -534,3 +628,6 @@ def render_dashboard_banner(load_live_source):
 
     with c2:
         _render_refresh_controls(nav_mode, load_live_source)
+
+    _render_manual_upload_override()
+

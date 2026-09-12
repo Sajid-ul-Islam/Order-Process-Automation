@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pandas as pd
 import polars as pl
@@ -130,7 +130,7 @@ def filter_shipped_by_slot(df, nav_mode, is_comparison=False):
         return shipped_df[today_mask].copy()
 
     if nav_mode == "Today" and is_comparison:
-        previous_day = bd_today() - timedelta(days=1)
+        previous_day = get_previous_working_day(bd_today())
         return shipped_df[dt_effective.dt.date == previous_day].copy()
 
     # ── Step 5: PREV / COMPARISON MODE — use slot boundaries ────────────────
@@ -372,13 +372,32 @@ def filter_actual_sales(df):
     return df[status_lower.isin(actual_statuses)].copy()
 
 
+def get_previous_working_day(reference_date=None):
+    """Return the operational previous working day for comparisons.
+
+    Skips Friday (the standard weekly off-day / holiday in Bangladesh).
+    Specifically:
+    - If reference_date is Saturday (weekday 5), returns Thursday (skipping Friday).
+    - If the preliminary previous day is Friday (weekday 4), steps back to Thursday.
+    """
+    d = reference_date or bd_today()
+    if hasattr(d, "date") and callable(d.date):
+        d = d.date()
+    elif isinstance(d, datetime):
+        d = d.date()
+    candidate = d - timedelta(days=1)
+    if candidate.weekday() == 4:  # Friday is weekday 4 in Python
+        candidate -= timedelta(days=1)
+    return candidate
+
+
 def filter_live_dashboard_view(df, view: str, reference_date=None):
     """Apply the four mutually exclusive Live Dashboard visibility rules.
 
     - "All Orders" (Default): All orders placed today (excluding cancelled, hold, and waiting)
       PLUS unfulfilled processing orders from previous days.
     - "Today Shipped" / "Today": Only orders shipped or completed today (00:00-23:59 BD).
-    - "Last Day Shipped" / "Last Day": Only orders shipped or completed yesterday (previous BD calendar day).
+    - "Last Day Shipped" / "Last Day": Only orders shipped or completed on the previous operational working day (skips Friday).
     - "Queue": Orders currently on hold, waiting, or pending across all dates (processing excluded).
     """
     if df is None or df.empty:
@@ -427,7 +446,9 @@ def filter_live_dashboard_view(df, view: str, reference_date=None):
     )
 
     today = reference_date or bd_today()
-    previous_day = today - timedelta(days=1)
+    if hasattr(today, "date") and callable(today.date):
+        today = today.date()
+    previous_day = get_previous_working_day(today)
     statuses = df[status_col].astype(str).str.lower().str.strip()
     sale_statuses = {status.lower() for status in SHIPPED_STATUSES}
     queue_statuses = {status.lower() for status in ACTIVE_STATUSES}
@@ -452,8 +473,19 @@ def filter_live_dashboard_view(df, view: str, reference_date=None):
     )
 
     v = str(view).strip()
+    is_saturday = today.weekday() == 5
+    if is_saturday:
+        friday_date = today - timedelta(days=1)
+        is_today_shipped_date = (sale_date == today) | (sale_date == friday_date)
+        is_today_created_date = (created_date == today) | (created_date == friday_date)
+        queue_prior_date = friday_date
+    else:
+        is_today_shipped_date = (sale_date == today)
+        is_today_created_date = (created_date == today)
+        queue_prior_date = today
+
     if v in {"Today Shipped", "Today"}:
-        mask = is_sale & (sale_date == today)
+        mask = is_sale & is_today_shipped_date
     elif v in {"Last Day Shipped", "Last Day"}:
         mask = is_sale & (sale_date == previous_day)
     elif v == "Queue":
@@ -462,7 +494,7 @@ def filter_live_dashboard_view(df, view: str, reference_date=None):
         mask = (
             ~is_cancelled
             & ~is_hold_waiting
-            & ((created_date == today) | ((created_date < today) & is_queue))
+            & (is_today_created_date | ((created_date < queue_prior_date) & is_queue))
         )
     else:
         mask = pd.Series(False, index=df.index)
@@ -522,7 +554,9 @@ def compute_live_filter_counts(df, reference_date=None) -> dict[str, int]:
     )
 
     today = reference_date or bd_today()
-    previous_day = today - timedelta(days=1)
+    if hasattr(today, "date") and callable(today.date):
+        today = today.date()
+    previous_day = get_previous_working_day(today)
     statuses = df[status_col].astype(str).str.lower().str.strip()
     sale_statuses = {status.lower() for status in SHIPPED_STATUSES}
     queue_statuses = {status.lower() for status in ACTIVE_STATUSES}
@@ -546,14 +580,25 @@ def compute_live_filter_counts(df, reference_date=None) -> dict[str, int]:
         r"process", case=False, na=False
     )
 
+    is_saturday = today.weekday() == 5
+    if is_saturday:
+        friday_date = today - timedelta(days=1)
+        is_today_shipped_date = (sale_date == today) | (sale_date == friday_date)
+        is_today_created_date = (created_date == today) | (created_date == friday_date)
+        queue_prior_date = friday_date
+    else:
+        is_today_shipped_date = (sale_date == today)
+        is_today_created_date = (created_date == today)
+        queue_prior_date = today
+
     masks = {
-        "Today Shipped": is_sale & (sale_date == today),
+        "Today Shipped": is_sale & is_today_shipped_date,
         "Last Day Shipped": is_sale & (sale_date == previous_day),
         "Queue": is_queue & ~is_processing,
         "All Orders": (
             ~is_cancelled
             & ~is_hold_waiting
-            & ((created_date == today) | ((created_date < today) & is_queue))
+            & (is_today_created_date | ((created_date < queue_prior_date) & is_queue))
         ),
     }
 

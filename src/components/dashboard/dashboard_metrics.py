@@ -138,13 +138,18 @@ def render_operational_metrics(
             db = co_b - m_gross_bv
             cmp_label = "Today"
         else:
+            from src.config.constants import bd_today
+            from src.processing.data_processing import get_previous_working_day
+
+            prev_w_day = get_previous_working_day(bd_today())
+            prev_abbr = prev_w_day.strftime("%a")
             prefix = ""
-            suffix = " vs Prev"
+            suffix = f" vs {prev_abbr}"
             dq = m_qty - co_q
             dr = m_gross_rev - co_gross
             d_o = m_ord - co_o
             db = m_gross_bv - co_b
-            cmp_label = "Last Day"
+            cmp_label = prev_w_day.strftime("%A")
 
         pct_q = (
             ((dq / co_q) * 100)

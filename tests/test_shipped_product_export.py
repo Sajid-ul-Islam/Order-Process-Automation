@@ -216,3 +216,189 @@ def test_order_placed_any_date_shipped_target_date_exported():
     assert len(placed_day_export) == 0
 
 
+def test_kpi_card_matches_product_wise_export():
+    """Verify that KPI card metrics (Orders, Units, Revenue) match the product-wise export 100%."""
+    from src.processing.data_processing import filter_live_dashboard_view, prepare_granular_data
+
+    # Dataset with orders of varying statuses and line items
+    test_df = pd.DataFrame(
+        [
+            # Shipped Today: Order 1, Item A
+            {
+                "Order ID": 101,
+                "Order Status": "shipped",
+                "Product Name": "Panjabi Red",
+                "SKU": "PAN-RED",
+                "Quantity": 2,
+                "Item Cost": 1200.0,
+                "dt_parsed": "2026-09-12 10:00:00",
+                "mod_dt_parsed": "2026-09-12 14:00:00",
+            },
+            # Shipped Today: Order 1, Item B (same order, multi-item)
+            {
+                "Order ID": 101,
+                "Order Status": "shipped",
+                "Product Name": "Attar Oudh",
+                "SKU": "ATR-ODH",
+                "Quantity": 1,
+                "Item Cost": 800.0,
+                "dt_parsed": "2026-09-12 10:00:00",
+                "mod_dt_parsed": "2026-09-12 14:00:00",
+            },
+            # Shipped Today: Order 2 (single item)
+            {
+                "Order ID": 102,
+                "Order Status": "completed",
+                "Product Name": "Pajama Black",
+                "SKU": "PAJ-BLK",
+                "Quantity": 3,
+                "Item Cost": 500.0,
+                "dt_parsed": "2026-09-11 18:00:00",
+                "mod_dt_parsed": "2026-09-12 15:00:00",
+            },
+            # Processing: Order 3 (NOT shipped, should be excluded from both)
+            {
+                "Order ID": 103,
+                "Order Status": "processing",
+                "Product Name": "Cap White",
+                "SKU": "CAP-WHT",
+                "Quantity": 1,
+                "Item Cost": 300.0,
+                "dt_parsed": "2026-09-12 12:00:00",
+                "mod_dt_parsed": "2026-09-12 12:00:00",
+            },
+        ]
+    )
+
+    target_d = date(2026, 9, 12)
+
+    # 1. KPI View path
+    df_kpi_view = filter_live_dashboard_view(test_df, "Today Shipped", reference_date=target_d)
+    mapping = {
+        "name": "Product Name",
+        "cost": "Item Cost",
+        "qty": "Quantity",
+        "date": "dt_parsed",
+        "order_id": "Order ID",
+        "sku": "SKU",
+    }
+    std_kpi, _ = prepare_granular_data(df_kpi_view, mapping)
+    kpi_orders = std_kpi["Order ID"].nunique()
+    kpi_units = std_kpi["Quantity"].sum()
+    kpi_revenue = std_kpi["Total Amount"].sum()
+
+    # 2. Product-wise Export path
+    df_export = filter_shipped_order_items(test_df, start_date=target_d, end_date=target_d)
+    exp_orders = df_export["Order ID"].nunique()
+    exp_units = df_export["Quantity"].sum()
+    exp_revenue = (df_export["Quantity"] * df_export["Item Cost"]).sum()
+
+    # 3. Assert exact synchronization
+    assert kpi_orders == exp_orders == 2
+    assert kpi_units == exp_units == 6
+    assert kpi_revenue == exp_revenue == 4700.0
+
+
+def test_filter_online_orders_isolates_checkout():
+    """Verify filter_online_orders excludes physical outlet/POS orders and keeps checkout orders."""
+    from src.processing.completed_analytics import filter_online_orders
+
+    df = pd.DataFrame(
+        [
+            # Online COD
+            {"Order ID": 201, "Payment Method Title": "Cash on delivery", "Created via": "checkout"},
+            # Online Pay Online
+            {"Order ID": 202, "Payment Method Title": "Pay Online(bKash)", "Created via": "checkout"},
+            # Outlet Cash counter
+            {"Order ID": 203, "Payment Method Title": "Cash", "Created via": ""},
+            # Outlet Card terminal
+            {"Order ID": 204, "Payment Method Title": "UCB", "Created via": ""},
+            # Outlet suffix
+            {"Order ID": "205 c", "Payment Method Title": "Cash on delivery", "Created via": ""},
+        ]
+    )
+
+    online_df = filter_online_orders(df)
+    assert set(online_df["Order ID"]) == {201, 202}
+
+
+def test_live_dashboard_manual_override():
+    """Verify that manual upload override feeds both _get_dashboard_source and _get_live_combined_source."""
+    import streamlit as st
+    from src.pages.live_dashboard import _get_dashboard_source
+    from src.components.dashboard.live_components import _get_live_combined_source
+
+    mock_manual = pd.DataFrame(
+        [
+            {"Order ID": 901, "Payment Method Title": "Cash on delivery", "Order Status": "shipped"},
+            {"Order ID": 902, "Payment Method Title": "Cash", "Order Status": "shipped"},  # Outlet
+        ]
+    )
+
+    st.session_state["live_manual_override_df"] = mock_manual
+    try:
+        # With online_only=True (default), outlet order 902 is filtered out
+        dash_online = _get_dashboard_source(online_only=True)
+        assert list(dash_online["Order ID"]) == [901]
+
+        combined_online = _get_live_combined_source(online_only=True)
+        assert list(combined_online["Order ID"]) == [901]
+
+        # With online_only=False, both orders are retained
+        dash_all = _get_dashboard_source(online_only=False)
+        assert set(dash_all["Order ID"]) == {901, 902}
+    finally:
+        st.session_state.pop("live_manual_override_df", None)
+
+
+def test_saturday_counts_friday_and_compares_with_thursday():
+    """Verify operational rule:
+    1. get_previous_working_day on Saturday returns Thursday (skips Friday).
+    2. On Saturday, Today Shipped counts both Friday and Saturday.
+    3. On Saturday, Last Day Shipped counts Thursday.
+    """
+    from datetime import date
+    from src.processing.data_processing import (
+        get_previous_working_day,
+        filter_live_dashboard_view,
+        compute_live_filter_counts,
+    )
+
+    saturday = date(2026, 9, 12)  # Saturday
+    assert saturday.weekday() == 5
+
+    # 1. get_previous_working_day returns Thursday 2026-09-10
+    prev_day = get_previous_working_day(saturday)
+    assert prev_day == date(2026, 9, 10)
+    assert prev_day.weekday() == 3  # Thursday
+
+    # Test dataset across Thursday, Friday, and Saturday
+    df = pd.DataFrame(
+        [
+            # Thursday shipment (1 order)
+            {"Order ID": 10, "Order Status": "shipped", "dt_parsed": "2026-09-10 10:00:00", "mod_dt_parsed": "2026-09-10 12:00:00"},
+            # Friday shipment (1 order - off day dispatch)
+            {"Order ID": 11, "Order Status": "shipped", "dt_parsed": "2026-09-11 11:00:00", "mod_dt_parsed": "2026-09-11 15:00:00"},
+            # Saturday shipment (2 orders)
+            {"Order ID": 12, "Order Status": "shipped", "dt_parsed": "2026-09-12 09:00:00", "mod_dt_parsed": "2026-09-12 11:00:00"},
+            {"Order ID": 13, "Order Status": "completed", "dt_parsed": "2026-09-12 10:00:00", "mod_dt_parsed": "2026-09-12 14:00:00"},
+        ]
+    )
+
+    # 2. On Saturday, Today Shipped includes Friday (Order 11) + Saturday (Orders 12, 13) = 3 orders
+    today_shipped = filter_live_dashboard_view(df, "Today Shipped", reference_date=saturday)
+    assert set(today_shipped["Order ID"]) == {11, 12, 13}
+
+    # 3. On Saturday, Last Day Shipped includes Thursday (Order 10)
+    last_day_shipped = filter_live_dashboard_view(df, "Last Day Shipped", reference_date=saturday)
+    assert set(last_day_shipped["Order ID"]) == {10}
+
+    # 4. Count badges match
+    counts = compute_live_filter_counts(df, reference_date=saturday)
+    assert counts["Today Shipped"] == 3
+    assert counts["Last Day Shipped"] == 1
+
+
+
+
+

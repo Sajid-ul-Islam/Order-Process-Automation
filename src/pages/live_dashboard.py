@@ -17,14 +17,15 @@ from src.components.dashboard.live_components import (
     render_dashboard_banner,
 )
 from src.components.ui.widgets import render_reset_confirm
-from datetime import timedelta
 
 from src.config.constants import bd_now, bd_today
 from src.processing.column_detection import find_columns
+from src.processing.completed_analytics import filter_online_orders
 from src.processing.data_processing import (
     aggregate_data,
     apply_order_view_comparison,
     filter_live_dashboard_view,
+    get_previous_working_day,
     prepare_granular_data,
 )
 from src.services.woocommerce.client import load_live_source
@@ -32,8 +33,18 @@ from src.utils.logging import log_system_event
 from src.utils.safe_ops import safe_render
 
 
-def _get_dashboard_source(fallback=None):
-    """Combine dashboard partitions so view rules operate on one source."""
+def _get_dashboard_source(fallback=None, online_only: bool = True):
+    """Combine dashboard partitions so view rules operate on one source.
+    
+    By default, restricts data to online website checkout orders (excluding outlet/POS).
+    Supports manual upload override if user uploaded custom data.
+    """
+    manual = st.session_state.get("live_manual_override_df")
+    if manual is not None and not manual.empty:
+        if online_only:
+            return filter_online_orders(manual)
+        return manual
+
     frames = [
         frame
         for frame in (
@@ -45,17 +56,22 @@ def _get_dashboard_source(fallback=None):
         if frame is not None and not frame.empty
     ]
     if not frames:
-        return fallback
-    combined = pd.concat(frames, ignore_index=True)
-    try:
-        return combined.drop_duplicates()
-    except TypeError:
-        subset = [
-            c
-            for c in ["Order ID", "Line Item ID", "Line Item Index", "Product Name"]
-            if c in combined.columns
-        ]
-        return combined.drop_duplicates(subset=subset) if subset else combined
+        res = fallback
+    else:
+        combined = pd.concat(frames, ignore_index=True)
+        try:
+            res = combined.drop_duplicates()
+        except TypeError:
+            subset = [
+                c
+                for c in ["Order ID", "Line Item ID", "Line Item Index", "Product Name"]
+                if c in combined.columns
+            ]
+            res = combined.drop_duplicates(subset=subset) if subset else combined
+
+    if res is not None and not res.empty and online_only:
+        return filter_online_orders(res)
+    return res
 
 
 def _get_comparison_frame(
@@ -75,8 +91,9 @@ def _get_comparison_frame(
         _cmp_f = filter_live_dashboard_view(_dash_src, "Last Day Shipped")
     elif selected_view == "All Orders":
         if _dash_src is not None and not _dash_src.empty:
+            prev_work_d = get_previous_working_day(bd_today())
             _cmp_f = filter_live_dashboard_view(
-                _dash_src, "All Orders", reference_date=bd_today() - timedelta(days=1)
+                _dash_src, "All Orders", reference_date=prev_work_d
             )
         if _cmp_f is None or _cmp_f.empty:
             _cmp_raw = st.session_state.get("wc_prev_df")
@@ -93,13 +110,15 @@ def _get_comparison_frame(
                     except Exception:
                         pass
             if _cmp_raw is not None and not _cmp_raw.empty:
+                _cmp_raw = filter_online_orders(_cmp_raw)
                 _cmp_f = apply_order_view_comparison(_cmp_raw, nav_mode, order_view_mode)
     elif selected_view in {"Last Day Shipped", "Last Day"}:
         if _dash_src is not None and not _dash_src.empty:
+            prev_work_d = get_previous_working_day(bd_today())
             _cmp_f = filter_live_dashboard_view(
                 _dash_src,
                 "Last Day Shipped",
-                reference_date=bd_today() - timedelta(days=1),
+                reference_date=prev_work_d,
             )
     else:
         _cmp_raw = (
@@ -110,6 +129,7 @@ def _get_comparison_frame(
             else None
         )
         if _cmp_raw is not None and not _cmp_raw.empty:
+            _cmp_raw = filter_online_orders(_cmp_raw)
             _cmp_f = apply_order_view_comparison(_cmp_raw, nav_mode, order_view_mode)
 
     if _cmp_f is not None and not _cmp_f.empty:
@@ -710,18 +730,20 @@ def _render_dispatch_export(selected_view: str | None = None):
     from src.services.exports.excel_exporter import export_to_styled_excel
     from src.processing.data_processing import safe_coerce_datetime_naive
 
-    raw_df = _get_dashboard_source()
+    raw_df = _get_dashboard_source(online_only=False)
     if raw_df is None or raw_df.empty:
         raw_df = st.session_state.get("wc_curr_df")
     if raw_df is None or raw_df.empty:
         return
 
     today_bd = bd_today()
-    yesterday_bd = today_bd - timedelta(days=1)
+    prev_work_bd = get_previous_working_day(today_bd)
+    prev_day_name = prev_work_bd.strftime("%A")
+    prev_label = f"Previous Working Day ({prev_day_name[:3]})" if today_bd.weekday() == 5 else "Yesterday"
 
     # Determine default date based on selected_view
     if selected_view in {"Last Day Shipped", "Last Day"}:
-        default_preset = "Yesterday"
+        default_preset = prev_label
     else:
         default_preset = "Today"
 
@@ -739,7 +761,7 @@ def _render_dispatch_export(selected_view: str | None = None):
         with col_preset:
             date_preset = st.radio(
                 "Date Selection",
-                ["Today", "Yesterday", "Custom Date"],
+                ["Today", prev_label, "Custom Date"],
                 index=0 if default_preset == "Today" else 1,
                 horizontal=True,
                 key="shipped_export_date_preset",
@@ -749,15 +771,15 @@ def _render_dispatch_export(selected_view: str | None = None):
             if date_preset == "Today":
                 start_date = today_bd
                 end_date = today_bd
-                st.caption(f"🗓️ Active Day: **{today_bd.strftime('%Y-%m-%d')}**")
-            elif date_preset == "Yesterday":
-                start_date = yesterday_bd
-                end_date = yesterday_bd
-                st.caption(f"🗓️ Active Day: **{yesterday_bd.strftime('%Y-%m-%d')}**")
+                st.caption(f"🗓️ Active Day: **{today_bd.strftime('%Y-%m-%d (%A)')}**")
+            elif date_preset == prev_label:
+                start_date = prev_work_bd
+                end_date = prev_work_bd
+                st.caption(f"🗓️ Active Day: **{prev_work_bd.strftime('%Y-%m-%d (%A)')}** (Skipping Friday off-day)")
             else:
                 custom_range = st.date_input(
                     "Select Date or Range",
-                    value=(yesterday_bd, today_bd),
+                    value=(prev_work_bd, today_bd),
                     max_value=today_bd,
                     key="shipped_export_custom_range",
                 )
@@ -771,7 +793,8 @@ def _render_dispatch_export(selected_view: str | None = None):
         with col_source:
             source_filter = st.radio(
                 "Order Source",
-                ["Both", "Online", "Outlet"],
+                ["Online", "Both", "Outlet"],
+                index=0,
                 horizontal=True,
                 key="shipped_export_source_filter",
             )
