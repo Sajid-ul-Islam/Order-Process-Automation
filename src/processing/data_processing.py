@@ -480,8 +480,8 @@ def filter_live_dashboard_view(df, view: str, reference_date=None):
         is_today_created_date = (created_date == today) | (created_date == friday_date)
         queue_prior_date = friday_date
     else:
-        is_today_shipped_date = (sale_date == today)
-        is_today_created_date = (created_date == today)
+        is_today_shipped_date = sale_date == today
+        is_today_created_date = created_date == today
         queue_prior_date = today
 
     if v in {"Today Shipped", "Today"}:
@@ -587,8 +587,8 @@ def compute_live_filter_counts(df, reference_date=None) -> dict[str, int]:
         is_today_created_date = (created_date == today) | (created_date == friday_date)
         queue_prior_date = friday_date
     else:
-        is_today_shipped_date = (sale_date == today)
-        is_today_created_date = (created_date == today)
+        is_today_shipped_date = sale_date == today
+        is_today_created_date = created_date == today
         queue_prior_date = today
 
     masks = {
@@ -739,11 +739,36 @@ def prepare_granular_data(df, selected_cols):
             errors="coerce",
         ).fillna(0)
 
-        # v10.4 Standardized SKU support
+        # Standardized SKU support
+        sku_col = None
         if "sku" in selected_cols and selected_cols["sku"] in df.columns:
-            df["SKU"] = df[selected_cols["sku"]].fillna("N/A").astype(str)
+            sku_col = selected_cols["sku"]
+        elif "SKU" in df.columns:
+            sku_col = "SKU"
+        else:
+            from src.processing.column_detection import pick_column
+
+            sku_col = pick_column(df, ["SKU", "sku", "Item SKU", "Product SKU"])
+
+        if sku_col and sku_col in df.columns:
+            df["SKU"] = df[sku_col].fillna("N/A").astype(str)
         else:
             df["SKU"] = "N/A"
+
+        # Standardized Order ID support
+        if "Order ID" not in df.columns:
+            from src.processing.column_detection import (
+                ORDER_ID_COL_CANDIDATES,
+                pick_column,
+            )
+
+            cand = (
+                selected_cols.get("order_id")
+                if "order_id" in selected_cols and selected_cols["order_id"] in df.columns
+                else pick_column(df, ORDER_ID_COL_CANDIDATES)
+            )
+            if cand and cand in df.columns:
+                df["Order ID"] = df[cand]
 
         timeframe_suffix = ""
         if "date" in selected_cols and selected_cols["date"] in df.columns:
@@ -878,7 +903,16 @@ def prepare_granular_data(df, selected_cols):
 
 def aggregate_data(df, selected_cols):
     """Generates dashboard aggregates from granular standardized data using Polars."""
+    if df is None or df.empty:
+        return None, None, None, {}
+
     try:
+        if "Category" not in df.columns:
+            from src.processing.data_processing import prepare_granular_data
+            df, _ = prepare_granular_data(df, selected_cols)
+            if df is None or df.empty or "Category" not in df.columns:
+                return None, None, None, {}
+
         cols_to_fill = [
             pl.col(c).fill_nan(0).fill_null(0)
             for c in ["Quantity", "Total Amount"]
@@ -917,7 +951,7 @@ def aggregate_data(df, selected_cols):
             ).round(2)
 
         # 2. Drilldown
-        drill_keys = group_keys + ["Item Cost"]
+        drill_keys = group_keys + (["Item Cost"] if "Item Cost" in df.columns else [])
         drilldown = (
             lazy_df.group_by(drill_keys)
             .agg(
@@ -929,7 +963,7 @@ def aggregate_data(df, selected_cols):
             .collect()
             .to_pandas()
         )
-        if "Sub-Category" in drilldown.columns:
+        if "Sub-Category" in drilldown.columns and "Item Cost" in df.columns:
             drilldown.columns = [
                 "Category",
                 "Sub-Category",
@@ -937,7 +971,7 @@ def aggregate_data(df, selected_cols):
                 "Total Qty",
                 "Total Amount",
             ]
-        else:
+        elif "Item Cost" in df.columns:
             drilldown.columns = ["Category", "Price (TK)", "Total Qty", "Total Amount"]
 
         # 3. Top Items
@@ -945,18 +979,29 @@ def aggregate_data(df, selected_cols):
             pl.col("Quantity").sum().alias("Total Qty"),
             pl.col("Total Amount").sum().alias("Total Amount"),
             pl.col("Category").first().alias("Category"),
-            pl.col("Clean_Product").first().alias("Clean_Product"),
         ]
+        if "Clean_Product" in df.columns:
+            top_aggs.append(pl.col("Clean_Product").first().alias("Clean_Product"))
+        elif "Product Name" in df.columns:
+            top_aggs.append(pl.col("Product Name").first().alias("Clean_Product"))
+
         if "Sub-Category" in df.columns:
             top_aggs.append(pl.col("Sub-Category").first().alias("Sub-Category"))
 
-        top_items = (
-            lazy_df.group_by(["Product Name", "SKU"])
-            .agg(top_aggs)
-            .collect()
-            .to_pandas()
-        )
-        top_items = top_items.sort_values("Total Amount", ascending=False)
+        group_by_cols = ["Product Name"] if "Product Name" in df.columns else []
+        if "SKU" in df.columns:
+            group_by_cols.append("SKU")
+
+        if group_by_cols:
+            top_items = (
+                lazy_df.group_by(group_by_cols)
+                .agg(top_aggs)
+                .collect()
+                .to_pandas()
+            )
+            top_items = top_items.sort_values("Total Amount", ascending=False)
+        else:
+            top_items = pd.DataFrame()
 
         # 4. Basket Metrics
         basket_metrics = {
@@ -970,10 +1015,20 @@ def aggregate_data(df, selected_cols):
             group_cols.append(selected_cols["order_id"])
         elif "Order ID" in df.columns:
             group_cols.append("Order ID")
+        else:
+            from src.processing.column_detection import (
+                ORDER_ID_COL_CANDIDATES,
+                pick_column,
+            )
+
+            cand = pick_column(df, ORDER_ID_COL_CANDIDATES)
+            if cand and cand in df.columns:
+                group_cols.append(cand)
 
         # Count unique orders BEFORE adding phone to group_cols
         order_id_col = group_cols[0] if group_cols else None
-        unique_orders_count = df[order_id_col].nunique() if order_id_col else len(df)
+        unique_orders_count = int(df[order_id_col].nunique()) if order_id_col and order_id_col in df.columns else len(df)
+        basket_metrics["total_orders"] = unique_orders_count
 
         if "phone" in selected_cols and selected_cols["phone"] in df.columns:
             group_cols.append(selected_cols["phone"])
@@ -981,17 +1036,22 @@ def aggregate_data(df, selected_cols):
             group_cols.append("Phone (Billing)")
 
         if group_cols:
+            item_expr = (
+                pl.when(~pl.col("Is_Bundle_Combo"))
+                .then(1)
+                .otherwise(0)
+                .sum()
+                .alias("Item Count")
+                if "Is_Bundle_Combo" in df.columns
+                else pl.count().alias("Item Count")
+            )
             order_groups = (
                 lazy_df.group_by(group_cols)
                 .agg(
                     [
                         pl.col("Quantity").sum().alias("Quantity"),
                         pl.col("Total Amount").sum().alias("Total Amount"),
-                        pl.when(~pl.col("Is_Bundle_Combo"))
-                        .then(1)
-                        .otherwise(0)
-                        .sum()
-                        .alias("Item Count"),
+                        item_expr,
                     ]
                 )
                 .collect()
@@ -1463,3 +1523,46 @@ def detect_active_campaign(df: pd.DataFrame | None) -> dict:
         "affected_orders_pct": affected_pct,
         "badge_label": badge_label,
     }
+
+
+def aggregate_product_listing(
+    df: pd.DataFrame,
+    item_col: str,
+    qty_col: str,
+    sku_col: str | None = None,
+) -> pd.DataFrame:
+    """Aggregate orders by item name and optionally SKU for product listing export.
+
+    Sorts products first item-wise (case-insensitive alphabetical ascending),
+    then SKU-wise (case-insensitive alphabetical ascending) so that variants of
+    each product stay strictly grouped together in the export file.
+    """
+    if df is None or df.empty or item_col not in df.columns:
+        return pd.DataFrame()
+
+    group_cols = [item_col]
+    use_sku = bool(sku_col and sku_col != "None" and sku_col in df.columns)
+    if use_sku:
+        group_cols.append(sku_col)
+
+    df_copy = df.copy()
+    df_copy[qty_col] = pd.to_numeric(
+        df_copy[qty_col].astype(str).str.replace(r"[^\d.-]", "", regex=True),
+        errors="coerce",
+    ).fillna(1)
+
+    merged = df_copy.groupby(group_cols, as_index=False)[qty_col].sum()
+
+    sort_cols = [item_col]
+    if use_sku:
+        sort_cols.append(sku_col)
+
+    merged = merged.sort_values(
+        by=sort_cols,
+        ascending=True,
+        key=lambda col: col.astype(str).str.lower(),
+        na_position="last",
+    ).reset_index(drop=True)
+
+    return merged
+

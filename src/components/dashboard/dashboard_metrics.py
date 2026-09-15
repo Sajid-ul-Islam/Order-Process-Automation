@@ -11,10 +11,12 @@ import streamlit as st
 from src.components.dashboard.svg import _generate_sparkline_svg
 from src.processing.column_detection import (
     EMAIL_COL_CANDIDATES,
+    NAME_COL_CANDIDATES,
     ORDER_ID_COL_CANDIDATES,
     PHONE_COL_CANDIDATES,
     pick_column,
 )
+from src.processing.completed_analytics import has_blank_phone, is_walkin_customer
 from src.processing.data_processing import (
     aggregate_data,
     prepare_granular_data,
@@ -62,7 +64,10 @@ def render_operational_metrics(
     drill, summ, top, basket = aggregate_data(m_df, dummy_mapping)
 
     m_qty = m_df["Quantity"].sum() if "Quantity" in m_df.columns else 0
-    m_ord = basket["total_orders"] if basket else 0
+    m_ord = basket.get("total_orders", 0) if basket else 0
+    if m_ord == 0 and not m_df.empty:
+        _ord_col = pick_column(m_df, ORDER_ID_COL_CANDIDATES)
+        m_ord = int(m_df[_ord_col].nunique()) if _ord_col else len(m_df)
     m_item_rev = (
         (m_df["Quantity"] * m_df["Item Cost"]).sum()
         if "Quantity" in m_df.columns and "Item Cost" in m_df.columns
@@ -105,7 +110,10 @@ def render_operational_metrics(
             else 0.0
         )
         _, _, _, co_basket = aggregate_data(c_df, dummy_mapping)
-        co_o = co_basket["total_orders"] if co_basket else 0
+        co_o = co_basket.get("total_orders", 0) if co_basket else 0
+        if co_o == 0 and not c_df.empty:
+            _co_ord_col = pick_column(c_df, ORDER_ID_COL_CANDIDATES)
+            co_o = int(c_df[_co_ord_col].nunique()) if _co_ord_col else len(c_df)
 
         co_cb = (
             float(c_df["Cashback Discount"].sum())
@@ -123,19 +131,19 @@ def render_operational_metrics(
         dashboard_view = st.session_state.get("live_dashboard_view")
         if dashboard_view in {"Last Day Shipped", "Last Day"}:
             prefix = ""
-            suffix = " vs Prior"
+            suffix = " vs Today"
             dq = m_qty - co_q
             dr = m_gross_rev - co_gross
             d_o = m_ord - co_o
             db = m_gross_bv - co_b
-            cmp_label = "Day Prior"
+            cmp_label = "Today"
         elif nav_mode == "Prev":
-            prefix = "Today "
-            suffix = ""
-            dq = co_q - m_qty
-            dr = co_gross - m_gross_rev
-            d_o = co_o - m_ord
-            db = co_b - m_gross_bv
+            prefix = ""
+            suffix = " vs Today"
+            dq = m_qty - co_q
+            dr = m_gross_rev - co_gross
+            d_o = m_ord - co_o
+            db = m_gross_bv - co_b
             cmp_label = "Today"
         else:
             from src.config.constants import bd_today
@@ -151,26 +159,10 @@ def render_operational_metrics(
             db = m_gross_bv - co_b
             cmp_label = prev_w_day.strftime("%A")
 
-        pct_q = (
-            ((dq / co_q) * 100)
-            if co_q > 0
-            else (100.0 if dq > 0 else 0.0 if dq == 0 else -100.0)
-        )
-        pct_r = (
-            ((dr / co_gross) * 100)
-            if co_gross > 0
-            else (100.0 if dr > 0 else 0.0 if dr == 0 else -100.0)
-        )
-        pct_o = (
-            ((d_o / co_o) * 100)
-            if co_o > 0
-            else (100.0 if d_o > 0 else 0.0 if d_o == 0 else -100.0)
-        )
-        pct_b = (
-            ((db / co_b) * 100)
-            if co_b > 0
-            else (100.0 if db > 0 else 0.0 if db == 0 else -100.0)
-        )
+        pct_q = ((dq / co_q) * 100) if co_q > 0 else None
+        pct_r = ((dr / co_gross) * 100) if co_gross > 0 else None
+        pct_o = ((d_o / co_o) * 100) if co_o > 0 else None
+        pct_b = ((db / co_b) * 100) if co_b > 0 else None
 
         dq_str = f"{prefix}{dq:+,.0f}{suffix}"
         dr_str = f"{prefix}{'+' if dr >= 0 else '-'}TK {abs(dr):,.0f}{suffix}"
@@ -193,8 +185,9 @@ def render_operational_metrics(
             if pct_val is not None and not pd.isna(pct_val)
             else ""
         )
+        prev_tag = cmp_label if "cmp_label" in locals() and cmp_label else "Prev"
         prev_snippet = (
-            f' <span class="delta-prev">(Prev: {prev_val_str})</span>'
+            f' <span class="delta-prev">({prev_tag}: {prev_val_str})</span>'
             if prev_val_str
             else ""
         )
@@ -264,6 +257,7 @@ def render_operational_metrics(
     s_cust, d_cust = "", ""
     s_qty, s_rev, s_ord, s_bv = "", "", "", ""
     d_qty, d_rev, d_ord, d_bv, d_cust = "", "", "", "", ""
+    t_qty_vals, t_rev_vals, t_ord_vals, t_bv_vals = [], [], [], []
     if not m_df.empty and nav_mode != "Backlog":
         try:
             # 1. Fetch the multi-day source DataFrame from session state if available, fallback to m_df
@@ -487,6 +481,10 @@ def render_operational_metrics(
 
                         for d_key, d_grp in f_df.groupby("_day"):
                             d_uniq = d_grp.drop_duplicates(subset=[order_id_col])
+                            name_c = pick_column(d_uniq, NAME_COL_CANDIDATES)
+                            if name_c and name_c in d_uniq.columns:
+                                d_uniq = d_uniq[~d_uniq[name_c].apply(is_walkin_customer)]
+                            d_uniq = d_uniq[~d_uniq.apply(has_blank_phone, axis=1)]
                             day_map_total[d_key] = len(d_uniq)
 
                             for _, drow in d_uniq.iterrows():
@@ -640,8 +638,9 @@ def render_operational_metrics(
                     if co_new_cnt > 0
                     else (100.0 if m_new_cnt > 0 else 0.0)
                 )
+                cmp_cust_suffix = f" vs {cmp_badge_label}" if "cmp_badge_label" in locals() and cmp_badge_label else " vs Prev"
                 html_dcust = format_delta(
-                    f"{d_new:+d} New vs Prev",
+                    f"{d_new:+d} New{cmp_cust_suffix}",
                     prev_val_str=f"{co_new_cnt}N / {co_ret_cnt}R",
                     pct_val=pct_new_change,
                 )
@@ -670,9 +669,12 @@ def render_operational_metrics(
     )
 
     rendered_react = False
-    from src.components.react_kpi import is_react_kpi_available, render_react_kpi_toolbar
+    from src.components.react_kpi import (
+        is_react_kpi_available,
+        render_react_kpi_toolbar,
+    )
 
-    if is_react_kpi_available() and st.session_state.get("use_react_kpi", True):
+    if is_react_kpi_available() and st.session_state.get("use_react_kpi", False):
         try:
             from src.components.dashboard.live_components import (
                 _get_live_combined_source,
@@ -684,6 +686,11 @@ def render_operational_metrics(
             source_df = _get_live_combined_source()
             view_counts = compute_live_filter_counts(source_df)
             sync_time = st.session_state.get("live_sync_time")
+            sync_time_str = (
+                sync_time.strftime("%I:%M %p")
+                if hasattr(sync_time, "strftime")
+                else (str(sync_time) if sync_time else None)
+            )
 
             def _clean_delta(pct_val, delta_str):
                 if pct_val is not None:
@@ -742,10 +749,14 @@ def render_operational_metrics(
                 view_counts=view_counts,
                 metrics=react_metrics,
                 customer_mix=customer_mix_data,
-                sync_time=sync_time,
+                sync_time=sync_time_str,
             )
 
-            if selected_new and selected_new != dashboard_view and selected_new in views:
+            if (
+                selected_new
+                and selected_new != dashboard_view
+                and selected_new in views
+            ):
                 apply_dashboard_view_selection(selected_new)
                 st.rerun()
 

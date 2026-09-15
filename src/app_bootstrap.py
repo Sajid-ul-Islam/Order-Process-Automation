@@ -12,7 +12,7 @@ from typing import Callable, Optional
 
 import streamlit as st
 
-from src.config.constants import ERROR_LOG_FILE
+from src.config.constants import ERROR_LOG_FILE, bd_now
 from src.config.settings import is_auth_configured as auth_is_configured
 from src.config.settings import is_unauthenticated_access_allowed
 from src.config.settings import validate_runtime_configuration
@@ -220,7 +220,7 @@ def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> N
         if is_react_kpi_available():
             st.session_state.use_react_kpi = st.toggle(
                 "⚡ React UI (Modern Toolbar)",
-                value=st.session_state.get("use_react_kpi", True),
+                value=st.session_state.get("use_react_kpi", False),
                 help="Interactive React-powered KPI cards and view switcher",
             )
 
@@ -257,7 +257,8 @@ def _render_sidebar_maintenance(is_auth_on: bool, config_issues: list[str]) -> N
         # ── Force refresh button ───────────────────────────────────────────
         last_sync = st.session_state.get("live_sync_time")
         if last_sync:
-            elapsed_m = int((datetime.now() - last_sync).total_seconds() / 60)
+            now_bd = bd_now().replace(tzinfo=None)
+            elapsed_m = max(0, int((now_bd - last_sync).total_seconds() / 60))
             sync_label = (
                 f"Last sync: {elapsed_m}m ago"
                 if elapsed_m > 0
@@ -396,42 +397,51 @@ def _route_page(selected_nav: str) -> None:
 
     # === 🛒 Orders & Fulfillment (Consolidated) ===
     elif selected_nav == "🛒 Orders & Fulfillment":
-        # Get sub-feature selection from session state
-        sub_feature = st.session_state.get("orders_sub_feature", "Order Tracking")
-
-        # Render sub-feature selector if not already set
-        if "orders_sub_feature" not in st.session_state:
-            st.session_state.orders_sub_feature = "Order Tracking"
+        orders_sub_options = [
+            "Order Tracking",
+            "Product Listing",
+            "Pathao Processor",
+            "Delivery Data Parser",
+        ]
+        if (
+            "orders_sub_feature" not in st.session_state
+            or st.session_state["orders_sub_feature"] not in orders_sub_options
+        ):
+            st.session_state["orders_sub_feature"] = "Order Tracking"
+        curr_sub = st.session_state["orders_sub_feature"]
 
         with st.expander("📂 Select Feature", expanded=False):
             sub_feature = st.radio(
                 "Choose a feature:",
-                ["Order Tracking", "Pathao Processor", "Delivery Data Parser"],
-                index=[
-                    "Order Tracking",
-                    "Pathao Processor",
-                    "Delivery Data Parser",
-                ].index(st.session_state.orders_sub_feature),
+                orders_sub_options,
+                index=orders_sub_options.index(curr_sub),
                 label_visibility="collapsed",
                 horizontal=True,
             )
-            if sub_feature != st.session_state.orders_sub_feature:
-                st.session_state.orders_sub_feature = sub_feature
+            if sub_feature != curr_sub:
+                st.session_state["orders_sub_feature"] = sub_feature
                 st.rerun()
 
         # Route to appropriate sub-feature
-        if sub_feature == "Order Tracking":
+        active_sub = st.session_state.get("orders_sub_feature", "Order Tracking")
+        if active_sub == "Order Tracking":
             from src.pages.woocommerce_orders import render_woocommerce_orders_tab
 
             safe_render(
                 render_woocommerce_orders_tab,
                 fallback_msg="Order Tracking unavailable.",
             )
-        elif sub_feature == "Pathao Processor":
+        elif active_sub == "Product Listing":
+            from src.pages.product_listing import render_product_listing_tab
+
+            safe_render(
+                render_product_listing_tab, fallback_msg="Product Listing unavailable."
+            )
+        elif active_sub == "Pathao Processor":
             from src.pages.pathao_orders import render_pathao_tab
 
             safe_render(render_pathao_tab, fallback_msg="Pathao Processor unavailable.")
-        elif sub_feature == "Delivery Data Parser":
+        elif active_sub == "Delivery Data Parser":
             from src.pages.delivery_parser import render_fuzzy_parser_tab
 
             safe_render(
@@ -441,24 +451,21 @@ def _route_page(selected_nav: str) -> None:
 
     # === 📦 Inventory & Stock (Consolidated) ===
     elif selected_nav == "📦 Inventory & Stock":
-        sub_feature = st.session_state.get("inventory_sub_feature", "Product Listing")
-
-        if "inventory_sub_feature" not in st.session_state:
-            st.session_state.inventory_sub_feature = "Product Listing"
+        inventory_sub_options = [
+            "Current Stock Analytics",
+            "Inventory Distribution",
+        ]
+        if (
+            "inventory_sub_feature" not in st.session_state
+            or st.session_state.inventory_sub_feature not in inventory_sub_options
+        ):
+            st.session_state.inventory_sub_feature = "Current Stock Analytics"
 
         with st.expander("📂 Select Feature", expanded=False):
             sub_feature = st.radio(
                 "Choose a feature:",
-                [
-                    "Product Listing",
-                    "Current Stock Analytics",
-                    "Inventory Distribution",
-                ],
-                index=[
-                    "Product Listing",
-                    "Current Stock Analytics",
-                    "Inventory Distribution",
-                ].index(st.session_state.inventory_sub_feature),
+                inventory_sub_options,
+                index=inventory_sub_options.index(st.session_state.inventory_sub_feature),
                 label_visibility="collapsed",
                 horizontal=True,
             )
@@ -466,19 +473,13 @@ def _route_page(selected_nav: str) -> None:
                 st.session_state.inventory_sub_feature = sub_feature
                 st.rerun()
 
-        if sub_feature == "Product Listing":
-            from src.pages.product_listing import render_product_listing_tab
-
-            safe_render(
-                render_product_listing_tab, fallback_msg="Product Listing unavailable."
-            )
-        elif sub_feature == "Current Stock Analytics":
+        if st.session_state.inventory_sub_feature == "Current Stock Analytics":
             from src.pages.stock_analytics import render_stock_analytics_tab
 
             safe_render(
                 render_stock_analytics_tab, fallback_msg="Stock Analytics unavailable."
             )
-        elif sub_feature == "Inventory Distribution":
+        elif st.session_state.inventory_sub_feature == "Inventory Distribution":
             from src.pages.inventory_distribution import render_distribution_tab
 
             safe_render(
@@ -490,18 +491,18 @@ def _route_page(selected_nav: str) -> None:
 
     # === 📊 Analytics & Insights (Consolidated) ===
     elif selected_nav == "📊 Analytics & Insights":
-        sub_feature = st.session_state.get(
-            "analytics_sub_feature", "Sales Data Ingestion"
-        )
-
-        if "analytics_sub_feature" not in st.session_state:
+        analytics_sub_options = ["Sales Data Ingestion", "Return Analytics"]
+        if (
+            "analytics_sub_feature" not in st.session_state
+            or st.session_state.analytics_sub_feature not in analytics_sub_options
+        ):
             st.session_state.analytics_sub_feature = "Sales Data Ingestion"
 
         with st.expander("📂 Select Feature", expanded=False):
             sub_feature = st.radio(
                 "Choose a feature:",
-                ["Sales Data Ingestion", "Return Analytics"],
-                index=["Sales Data Ingestion", "Return Analytics"].index(
+                analytics_sub_options,
+                index=analytics_sub_options.index(
                     st.session_state.analytics_sub_feature
                 ),
                 label_visibility="collapsed",
@@ -511,13 +512,13 @@ def _route_page(selected_nav: str) -> None:
                 st.session_state.analytics_sub_feature = sub_feature
                 st.rerun()
 
-        if sub_feature == "Sales Data Ingestion":
+        if st.session_state.analytics_sub_feature == "Sales Data Ingestion":
             from src.pages.sales_ingestion import render_manual_tab
 
             safe_render(
                 render_manual_tab, fallback_msg="Sales Data Ingestion unavailable."
             )
-        elif sub_feature == "Return Analytics":
+        elif st.session_state.analytics_sub_feature == "Return Analytics":
             from src.pages.return_analytics import render_return_analytics_tab
 
             safe_render(
@@ -527,18 +528,18 @@ def _route_page(selected_nav: str) -> None:
 
     # === 🤖 Automation Tools (Consolidated) ===
     elif selected_nav == "🤖 Automation Tools":
-        sub_feature = st.session_state.get(
-            "automation_sub_feature", "WhatsApp Messaging"
-        )
-
-        if "automation_sub_feature" not in st.session_state:
+        automation_sub_options = ["WhatsApp Messaging", "Data Pilot"]
+        if (
+            "automation_sub_feature" not in st.session_state
+            or st.session_state.automation_sub_feature not in automation_sub_options
+        ):
             st.session_state.automation_sub_feature = "WhatsApp Messaging"
 
         with st.expander("📂 Select Feature", expanded=False):
             sub_feature = st.radio(
                 "Choose a feature:",
-                ["WhatsApp Messaging", "Data Pilot"],
-                index=["WhatsApp Messaging", "Data Pilot"].index(
+                automation_sub_options,
+                index=automation_sub_options.index(
                     st.session_state.automation_sub_feature
                 ),
                 label_visibility="collapsed",
@@ -548,11 +549,11 @@ def _route_page(selected_nav: str) -> None:
                 st.session_state.automation_sub_feature = sub_feature
                 st.rerun()
 
-        if sub_feature == "WhatsApp Messaging":
+        if st.session_state.automation_sub_feature == "WhatsApp Messaging":
             from src.pages.whatsapp_messaging import render_wp_tab
 
             safe_render(render_wp_tab, fallback_msg="WhatsApp Messaging unavailable.")
-        elif sub_feature == "Data Pilot":
+        elif st.session_state.automation_sub_feature == "Data Pilot":
             from src.pages.data_pilot import render_ai_pilot_page
 
             safe_render(render_ai_pilot_page, fallback_msg="Data Pilot unavailable.")
@@ -602,7 +603,9 @@ def run_app() -> None:
 
         def _seed_registry_bg():
             try:
-                from src.utils.customer_registry_full import update_full_registry_from_df
+                from src.utils.customer_registry_full import (
+                    update_full_registry_from_df,
+                )
                 from src.utils.snapshots import load_sales_snapshot
 
                 _snap = load_sales_snapshot()
@@ -613,13 +616,25 @@ def run_app() -> None:
 
         import threading
 
-        threading.Thread(target=_seed_registry_bg, daemon=True, name="CustomerRegistrySeed").start()
+        threading.Thread(
+            target=_seed_registry_bg, daemon=True, name="CustomerRegistrySeed"
+        ).start()
     inject_base_styles()
     _rotate_error_logs()
 
     # Clear previous header banner to ensure tool-specific display
     if "header_status_banner" not in st.session_state:
-        st.session_state.header_status_banner = ""
+        st.session_state["header_status_banner"] = ""
+
+    # ── Sub-feature Navigation Defaults ─────────────────────────────────────
+    if "orders_sub_feature" not in st.session_state:
+        st.session_state["orders_sub_feature"] = "Order Tracking"
+    if "inventory_sub_feature" not in st.session_state:
+        st.session_state["inventory_sub_feature"] = "Current Stock Analytics"
+    if "analytics_sub_feature" not in st.session_state:
+        st.session_state["analytics_sub_feature"] = "Sales Data Ingestion"
+    if "automation_sub_feature" not in st.session_state:
+        st.session_state["automation_sub_feature"] = "WhatsApp Messaging"
 
     # ── Sidebar & Mobile Navigation State ───────────────────────────────────
     default_nav = (
@@ -650,7 +665,11 @@ def run_app() -> None:
     # Handle nav override from sidebar shortcut buttons or pages
     if st.session_state.get("_nav_override"):
         override_target = st.session_state.pop("_nav_override")
-        from src.config.ui_config import LEGACY_NAV_MAPPING
+        from src.config.ui_config import LEGACY_NAV_MAPPING, LEGACY_SUBFEATURE_MAPPING
+
+        if override_target in LEGACY_SUBFEATURE_MAPPING:
+            sub_key, sub_val = LEGACY_SUBFEATURE_MAPPING[override_target]
+            st.session_state[sub_key] = sub_val
 
         mapped_target = LEGACY_NAV_MAPPING.get(override_target, override_target)
         if mapped_target in PRIMARY_NAV:

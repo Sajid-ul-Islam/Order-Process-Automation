@@ -786,17 +786,24 @@ def _render_customer_profiles_view():
             if name_col and not grp[name_col].dropna().empty
             else "Customer"
         )
+        from src.processing.completed_analytics import is_walkin_customer
+
+        if is_walkin_customer(c_name):
+            continue
         c_phone = (
             str(grp[phone_col].dropna().iloc[0])
             if phone_col and not grp[phone_col].dropna().empty
             else ""
         )
+        c_norm_phone = normalize_phone_number(c_phone)
+        if not c_norm_phone:
+            continue
+
         c_email = (
             str(grp[email_col].dropna().iloc[0])
             if email_col and not grp[email_col].dropna().empty
             else ""
         )
-        c_norm_phone = normalize_phone_number(c_phone)
 
         unique_orders = (
             grp.drop_duplicates(subset=[order_id_col])
@@ -1201,10 +1208,13 @@ def _render_bulk_updater_tab():
 
 
 def render_woocommerce_orders_tab():
-    """Renders the WooCommerce Operations & Customer Hub module with organized tabs."""
-    tab_orders, tab_customers, tab_updater = st.tabs(
+    """Renders the unified Order Tracking & Operations module with organized tabs."""
+    from src.pages.pathao_orders.tracking_tab import _render_status_tracking_tab
+
+    tab_orders, tab_pathao, tab_customers, tab_updater = st.tabs(
         [
-            "🛒 Live Orders & Tracking",
+            "🛒 Live Orders (WooCommerce)",
+            "📡 Pathao Courier Tracking",
             "👥 Customer Profiles & Order 360",
             "⚡ Bulk Status Sync & Match",
         ]
@@ -1213,8 +1223,12 @@ def render_woocommerce_orders_tab():
     with tab_orders:
         _render_live_orders_view()
 
+    with tab_pathao:
+        _render_status_tracking_tab()
+
     with tab_customers:
         _render_customer_profiles_view()
 
     with tab_updater:
         _render_bulk_updater_tab()
+

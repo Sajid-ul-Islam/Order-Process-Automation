@@ -35,7 +35,7 @@ from src.utils.safe_ops import safe_render
 
 def _get_dashboard_source(fallback=None, online_only: bool = True):
     """Combine dashboard partitions so view rules operate on one source.
-    
+
     By default, restricts data to online website checkout orders (excluding outlet/POS).
     Supports manual upload override if user uploaded custom data.
     """
@@ -111,15 +111,16 @@ def _get_comparison_frame(
                         pass
             if _cmp_raw is not None and not _cmp_raw.empty:
                 _cmp_raw = filter_online_orders(_cmp_raw)
-                _cmp_f = apply_order_view_comparison(_cmp_raw, nav_mode, order_view_mode)
+                _cmp_f = apply_order_view_comparison(
+                    _cmp_raw, nav_mode, order_view_mode
+                )
     elif selected_view in {"Last Day Shipped", "Last Day"}:
-        if _dash_src is not None and not _dash_src.empty:
-            prev_work_d = get_previous_working_day(bd_today())
-            _cmp_f = filter_live_dashboard_view(
-                _dash_src,
-                "Last Day Shipped",
-                reference_date=prev_work_d,
-            )
+        _cmp_f = filter_live_dashboard_view(_dash_src, "Today Shipped")
+        if _cmp_f is None or _cmp_f.empty:
+            _cmp_raw = st.session_state.get("wc_curr_df")
+            if _cmp_raw is not None and not _cmp_raw.empty:
+                _cmp_raw = filter_online_orders(_cmp_raw)
+                _cmp_f = filter_live_dashboard_view(_cmp_raw, "Today Shipped")
     else:
         _cmp_raw = (
             st.session_state.get("wc_prev_df")
@@ -526,15 +527,13 @@ def render_live_tab():
         try:
             import pandas as _pd
 
-            mod_col = (
-                "mod_dt_parsed"
-                if "mod_dt_parsed" in df_live.columns
-                else (
-                    "Order Date Modified"
-                    if "Order Date Modified" in df_live.columns
-                    else None
-                )
-            )
+            mod_col = None
+            if df_live is not None and not df_live.empty:
+                if "mod_dt_parsed" in df_live.columns:
+                    mod_col = "mod_dt_parsed"
+                elif "Order Date Modified" in df_live.columns:
+                    mod_col = "Order Date Modified"
+
             if df_live is not None and not df_live.empty and mod_col:
                 mods = _pd.to_datetime(
                     df_live[mod_col].astype(str).str.replace("Z", "", regex=False),
@@ -561,8 +560,8 @@ def render_live_tab():
         if new_cnt > 0:
             tot_today = (
                 len(df_live["Order ID"].unique())
-                if "Order ID" in df_live.columns
-                else len(df_live)
+                if df_live is not None and "Order ID" in df_live.columns
+                else (len(df_live) if df_live is not None else 0)
             )
             st.toast(
                 f"⚡ **{new_cnt} new WooCommerce order{'s' if new_cnt > 1 else ''} synced** from REST API (Total: {tot_today} orders)",
@@ -635,6 +634,7 @@ def render_live_tab():
         "date": auto_cols.get("date", "Order Date"),
         "order_id": auto_cols.get("order_id", "Order ID"),
         "phone": auto_cols.get("phone", "Phone"),
+        "sku": auto_cols.get("sku", "SKU"),
     }
     # Standardize data for current view
     df_standard, timeframe = prepare_granular_data(df_live, live_mapping)
@@ -647,7 +647,9 @@ def render_live_tab():
     )
 
     # ── KPI Cards (5 core metric cards + comparison deltas) ────────────────────
-    _refresh_core_metrics()
+    safe_render(
+        _refresh_core_metrics, fallback_msg="Operational KPI Metrics unavailable."
+    )
 
     # ── Operational Pipeline Summary (for All Orders view) ────────────────────
     if selected_view == "All Orders" and not df_live.empty:
@@ -656,11 +658,15 @@ def render_live_tab():
     # ── Detail & Performance Charts ─────────────────────────────────────────
     if df_standard.empty:
         if selected_view in {"Today Shipped", "Today"}:
-            st.info("🚚 **No orders shipped yet today.** Today's dispatches will appear here once fulfilled.")
+            st.info(
+                "🚚 **No orders shipped yet today.** Today's dispatches will appear here once fulfilled."
+            )
         elif selected_view in {"Last Day Shipped", "Last Day"}:
             st.info("🕘 **No shipped orders recorded** for the previous calendar day.")
         elif selected_view == "Queue":
-            st.info("📋 **Queue is clear.** There are currently no orders on hold or waiting.")
+            st.info(
+                "📋 **Queue is clear.** There are currently no orders on hold or waiting."
+            )
         else:
             st.info(f"📦 **No active orders found** for the **{selected_view}** view.")
         render_staleness_monitor()
@@ -668,57 +674,33 @@ def render_live_tab():
 
     drill, summ, top, basket = aggregate_data(df_standard, live_mapping)
     if drill is None or summ is None:
-        st.info("ℹ️ Insufficient category data available to display charts for this view.")
+        st.info(
+            "ℹ️ Insufficient category data available to display charts for this view."
+        )
         render_staleness_monitor()
         return
 
-    # A conditional view selector avoids executing hidden tab content on every
-    # Streamlit rerun.
-    if hasattr(st, "segmented_control"):
-        dashboard_view = st.segmented_control(
-            "Dashboard detail",
-            ["📋 Today", "🔍 Analysis"],
-            default="📋 Today",
-            key="live_dashboard_detail_view",
-            label_visibility="collapsed",
-        )
-    else:
-        dashboard_view = st.radio(
-            "Dashboard detail",
-            ["📋 Today", "🔍 Analysis"],
-            horizontal=True,
-            key="live_dashboard_detail_view_radio",
-            label_visibility="collapsed",
-        )
+    # ── Unified Dashboard Output (Performance views, charts, tables, briefing) ───
+    safe_render(
+        lambda: render_dashboard_output(
+            drill,
+            summ,
+            top,
+            str(timeframe) if timeframe is not None else None,
+            basket,
+            str(source_name) if source_name is not None else None,
+            str(modified_at) if modified_at is not None else None,
+            granular_df=df_standard,
+            show_core_metrics=False,
+            raw_df=df_live,
+        ),
+        fallback_msg="Dashboard rendering encountered an error.",
+    )
 
-    if dashboard_view == "📋 Today":
-        # ── Dashboard Output (charts, tables, AI briefing, export) ───────────
-        safe_render(
-            lambda: render_dashboard_output(
-                drill,
-                summ,
-                top,
-                str(timeframe) if timeframe is not None else None,
-                basket,
-                str(source_name) if source_name is not None else None,
-                str(modified_at) if modified_at is not None else None,
-                granular_df=df_standard,
-                show_core_metrics=False,
-            ),
-            fallback_msg="Dashboard rendering encountered an error.",
-        )
+    # ── Product-Wise Shipped & Completed Orders Export ───────────────────
+    _render_dispatch_export(selected_view)
 
-        # ── Product-Wise Shipped & Completed Orders Export ───────────────────
-        _render_dispatch_export(selected_view)
-    else:
-        # ── Market Basket & Cross-Selling Intelligence ───────────────────────
-        from src.components.dashboard.market_basket_view import (
-            render_market_basket_analysis_section,
-        )
-
-        render_market_basket_analysis_section(df_standard, raw_df=df_live)
-
-    # ── Staleness monitor stays visible below both tabs ──────────────────────
+    # ── Staleness monitor stays visible below ────────────────────────────
     render_staleness_monitor()
 
 
@@ -739,7 +721,11 @@ def _render_dispatch_export(selected_view: str | None = None):
     today_bd = bd_today()
     prev_work_bd = get_previous_working_day(today_bd)
     prev_day_name = prev_work_bd.strftime("%A")
-    prev_label = f"Previous Working Day ({prev_day_name[:3]})" if today_bd.weekday() == 5 else "Yesterday"
+    prev_label = (
+        f"Previous Working Day ({prev_day_name[:3]})"
+        if today_bd.weekday() == 5
+        else "Yesterday"
+    )
 
     # Determine default date based on selected_view
     if selected_view in {"Last Day Shipped", "Last Day"}:
@@ -750,7 +736,9 @@ def _render_dispatch_export(selected_view: str | None = None):
     st.divider()
     with st.expander(
         "📦 Daily Shipped & Completed Orders (Product-Wise Export)",
-        expanded=(selected_view in {"Today Shipped", "Today", "Last Day Shipped", "Last Day"}),
+        expanded=(
+            selected_view in {"Today Shipped", "Today", "Last Day Shipped", "Last Day"}
+        ),
     ):
         st.caption(
             "Export product line items for orders shipped or completed on any selected date. "
@@ -775,7 +763,9 @@ def _render_dispatch_export(selected_view: str | None = None):
             elif date_preset == prev_label:
                 start_date = prev_work_bd
                 end_date = prev_work_bd
-                st.caption(f"🗓️ Active Day: **{prev_work_bd.strftime('%Y-%m-%d (%A)')}** (Skipping Friday off-day)")
+                st.caption(
+                    f"🗓️ Active Day: **{prev_work_bd.strftime('%Y-%m-%d (%A)')}** (Skipping Friday off-day)"
+                )
             else:
                 custom_range = st.date_input(
                     "Select Date or Range",
@@ -784,11 +774,20 @@ def _render_dispatch_export(selected_view: str | None = None):
                     key="shipped_export_custom_range",
                 )
                 if isinstance(custom_range, (list, tuple)):
-                    start_date = custom_range[0]
-                    end_date = custom_range[-1] if len(custom_range) > 1 else custom_range[0]
-                else:
+                    if len(custom_range) > 0:
+                        start_date = custom_range[0]
+                        end_date = (
+                            custom_range[-1] if len(custom_range) > 1 else custom_range[0]
+                        )
+                    else:
+                        start_date = today_bd
+                        end_date = today_bd
+                elif custom_range:
                     start_date = custom_range
                     end_date = custom_range
+                else:
+                    start_date = today_bd
+                    end_date = today_bd
 
         with col_source:
             source_filter = st.radio(
@@ -814,7 +813,9 @@ def _render_dispatch_export(selected_view: str | None = None):
         )
 
         if filtered_items.empty:
-            st.info(f"ℹ️ No shipped or completed items found for **{date_label}** ({source_filter} orders).")
+            st.info(
+                f"ℹ️ No shipped or completed items found for **{date_label}** ({source_filter} orders)."
+            )
             return
 
         export_df = filtered_items.copy()
@@ -846,13 +847,17 @@ def _render_dispatch_export(selected_view: str | None = None):
 
         # Ensure numeric Quantity and Cost
         if qty_col:
-            export_df[qty_col] = pd.to_numeric(export_df[qty_col], errors="coerce").fillna(1).astype(int)
+            export_df[qty_col] = (
+                pd.to_numeric(export_df[qty_col], errors="coerce").fillna(1).astype(int)
+            )
         else:
             export_df["Quantity"] = 1
             qty_col = "Quantity"
 
         if cost_col:
-            export_df[cost_col] = pd.to_numeric(export_df[cost_col], errors="coerce").fillna(0.0)
+            export_df[cost_col] = pd.to_numeric(
+                export_df[cost_col], errors="coerce"
+            ).fillna(0.0)
         else:
             export_df["Item Cost"] = 0.0
             cost_col = "Item Cost"
@@ -906,29 +911,49 @@ def _render_dispatch_export(selected_view: str | None = None):
 
         # Build column ordering
         export_cols = [
-            field_mapping[k]
-            for k in field_mapping
-            if k and k in export_df.columns
+            field_mapping[k] for k in field_mapping if k and k in export_df.columns
         ]
 
         # Rename to clean target headers
         clean_df = export_df.rename(
-            columns={k: v for k, v in field_mapping.items() if k and k in export_df.columns}
+            columns={
+                k: v for k, v in field_mapping.items() if k and k in export_df.columns
+            }
         )
 
         # Sort chronologically by Order ID / Shipped Date
-        sort_candidates = [c for c in ["Shipped Date", "Order Placed", "Order ID"] if c in clean_df.columns]
+        sort_candidates = [
+            c
+            for c in ["Shipped Date", "Order Placed", "Order ID"]
+            if c in clean_df.columns
+        ]
         if sort_candidates:
-            clean_df = clean_df.sort_values(by=sort_candidates, ascending=False, na_position="last").reset_index(drop=True)
+            clean_df = clean_df.sort_values(
+                by=sort_candidates, ascending=False, na_position="last"
+            ).reset_index(drop=True)
 
         final_cols = [c for c in export_cols if c in clean_df.columns]
         display_df = clean_df[final_cols].copy()
 
         # Summary KPIs
-        total_items = int(display_df["Quantity"].sum()) if "Quantity" in display_df.columns else len(display_df)
-        total_orders = int(display_df["Order ID"].nunique()) if "Order ID" in display_df.columns else len(display_df)
-        total_rev = float(display_df["Line Total"].sum()) if "Line Total" in display_df.columns else 0.0
-        unique_skus = int(display_df["SKU"].nunique()) if "SKU" in display_df.columns else 0
+        total_items = (
+            int(display_df["Quantity"].sum())
+            if "Quantity" in display_df.columns
+            else len(display_df)
+        )
+        total_orders = (
+            int(display_df["Order ID"].nunique())
+            if "Order ID" in display_df.columns
+            else len(display_df)
+        )
+        total_rev = (
+            float(display_df["Line Total"].sum())
+            if "Line Total" in display_df.columns
+            else 0.0
+        )
+        unique_skus = (
+            int(display_df["SKU"].nunique()) if "SKU" in display_df.columns else 0
+        )
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("📦 Units Shipped", f"{total_items:,}")
@@ -947,7 +972,9 @@ def _render_dispatch_export(selected_view: str | None = None):
             mask = pd.Series(False, index=view_df.index)
             for c in ["Order ID", "Product Name", "SKU", "Customer", "Phone", "City"]:
                 if c in view_df.columns:
-                    mask = mask | view_df[c].astype(str).str.contains(search_q, case=False, na=False)
+                    mask = mask | view_df[c].astype(str).str.contains(
+                        search_q, case=False, na=False
+                    )
             view_df = view_df[mask]
 
         st.dataframe(
@@ -976,7 +1003,9 @@ def _render_dispatch_export(selected_view: str | None = None):
             try:
                 excel_bytes = export_to_styled_excel(
                     {f"Shipped_{file_tag}"[:31]: display_df},
-                    group_by_col="Order ID" if "Order ID" in display_df.columns else None,
+                    group_by_col="Order ID"
+                    if "Order ID" in display_df.columns
+                    else None,
                 )
                 st.download_button(
                     label=f"⬇️ Download Excel (.xlsx) — {len(display_df)} items",
